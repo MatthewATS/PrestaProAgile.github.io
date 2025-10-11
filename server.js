@@ -30,19 +30,20 @@ app.get('/api/loans', async (req, res) => {
 });
 
 // GUARDAR UN NUEVO PRÉSTAMO
+// GUARDAR UN NUEVO PRÉSTAMO
 app.post('/api/loans', async (req, res) => {
   try {
     const newLoan = req.body;
     
-    // La sintaxis de los parámetros cambia de $1, $2 a ?
+    // Cambiamos 'id' por 'dni' en la consulta
     const query = `
-      INSERT INTO loans (id, client, monto, interes, fecha, plazo, status)
+      INSERT INTO loans (dni, client, monto, interes, fecha, plazo, status)
       VALUES (?, ?, ?, ?, ?, ?, ?);
     `;
     
     const values = [
-      newLoan.id,
-      JSON.stringify(newLoan.client), // Guardamos el objeto cliente como un string JSON
+      newLoan.client.dni, // <-- Usamos el DNI del cliente como clave primaria
+      JSON.stringify(newLoan.client),
       newLoan.monto,
       newLoan.interes,
       newLoan.fecha,
@@ -50,10 +51,7 @@ app.post('/api/loans', async (req, res) => {
       newLoan.status
     ];
     
-    // Ejecutamos la consulta
     await pool.query(query, values);
-    
-    // Devolvemos el préstamo recién creado
     res.status(201).json(newLoan);
 
   } catch (err) {
