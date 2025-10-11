@@ -1,5 +1,5 @@
 // --- VARIABLES GLOBALES ---
-let loans = [];
+let loans = []; // Esta variable ahora será una caché de los datos del servidor
 let clients = new Set();
 let currentLoanForDetails = null;
 
@@ -64,12 +64,11 @@ window.addEventListener('click', (event) => {
     if (event.target === detailsModal) closeModal(detailsModal);
 });
 
-loanForm.addEventListener('submit', function(event) {
+loanForm.addEventListener('submit', async function(event) {
     event.preventDefault();
     const newLoan = {
-        id: Date.now(),
+        dni: document.getElementById('dni').value,
         client: {
-            dni: document.getElementById('dni').value,
             nombres: document.getElementById('nombres').value,
             apellidos: document.getElementById('apellidos').value,
         },
@@ -79,12 +78,29 @@ loanForm.addEventListener('submit', function(event) {
         plazo: parseInt(document.getElementById('plazo').value),
         status: 'Activo'
     };
-    loans.push(newLoan);
-    clients.add(newLoan.client.dni);
-    renderHistoryTable();
-    updateDashboard();
-    loanForm.reset();
-    closeModal(loanModal);
+
+    try {
+        const response = await fetch('/api/loans', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(newLoan),
+        });
+
+        if (!response.ok) {
+            throw new Error('Error al guardar el préstamo en el servidor');
+        }
+
+        // Si se guarda correctamente, recargamos la lista desde la base de datos
+        await fetchAndRenderLoans();
+        loanForm.reset();
+        closeModal(loanModal);
+
+    } catch (error) {
+        console.error(error);
+        alert('No se pudo guardar el préstamo. Inténtalo de nuevo.');
+    }
 });
 
 historyTableBody.addEventListener('click', function(event) {
@@ -280,6 +296,26 @@ function descargarPDF(doc, fileName) {
     console.log('PDF descargado:', fileName);
 }
 
-// --- Renderizado Inicial ---
-renderHistoryTable();
-updateDashboard();
+async function fetchAndRenderLoans() {
+    try {
+        const response = await fetch('/api/loans');
+        if (!response.ok) {
+            throw new Error('Error al cargar los préstamos');
+        }
+        loans = await response.json(); // Actualizamos la variable local con datos de la BD
+
+        // Limpiamos y recalculamos el set de clientes
+        clients.clear();
+        loans.forEach(loan => clients.add(loan.client.dni));
+
+        renderHistoryTable();
+        updateDashboard();
+    } catch (error) {
+        console.error(error);
+        historyTableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: red;">Error al cargar los datos.</td></tr>`;
+    }
+}
+
+// --- Carga Inicial de Datos desde el Servidor ---
+fetchAndRenderLoans();
+
