@@ -1,31 +1,28 @@
 const express = require('express');
 const path = require('path');
-const { Pool } = require('pg');
+const mysql = require('mysql2/promise'); // Importamos mysql2
 const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middlewares
-app.use(cors()); // Permite peticiones desde otros orígenes
-app.use(express.json()); // Permite al servidor entender JSON
-app.use(express.static(path.join(__dirname, 'public'))); // Sirve tus archivos HTML, CSS, JS
+app.use(cors());
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Conexión a la base de datos de Railway
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
-});
+// --- Conexión a la base de datos MySQL de Railway ---
+// Creamos un "pool" de conexiones que gestiona las conexiones de forma eficiente.
+// La variable DATABASE_URL es proporcionada por Railway.
+const pool = mysql.createPool(process.env.DATABASE_URL);
 
 // --- RUTAS DE LA API ---
 
 // OBTENER TODOS LOS PRÉSTAMOS
 app.get('/api/loans', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM loans ORDER BY fecha DESC');
-    res.json(result.rows);
+    const [rows] = await pool.query('SELECT * FROM loans ORDER BY fecha DESC');
+    res.json(rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error al obtener los préstamos' });
@@ -36,23 +33,29 @@ app.get('/api/loans', async (req, res) => {
 app.post('/api/loans', async (req, res) => {
   try {
     const newLoan = req.body;
-    // El cliente se guardará como un objeto JSON en la base de datos
+    
+    // La sintaxis de los parámetros cambia de $1, $2 a ?
     const query = `
       INSERT INTO loans (id, client, monto, interes, fecha, plazo, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING *;
+      VALUES (?, ?, ?, ?, ?, ?, ?);
     `;
+    
     const values = [
       newLoan.id,
-      newLoan.client, // client es un objeto JSON
+      JSON.stringify(newLoan.client), // Guardamos el objeto cliente como un string JSON
       newLoan.monto,
       newLoan.interes,
       newLoan.fecha,
       newLoan.plazo,
       newLoan.status
     ];
-    const result = await pool.query(query, values);
-    res.status(201).json(result.rows[0]);
+    
+    // Ejecutamos la consulta
+    await pool.query(query, values);
+    
+    // Devolvemos el préstamo recién creado
+    res.status(201).json(newLoan);
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error al guardar el préstamo' });
