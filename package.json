@@ -1,14 +1,14 @@
 {
   "name": "prestapro-backend",
   "version": "1.0.0",
-  "description": "Backend para la aplicación PrestaPro",
+  "description": "Backend para la aplicación PrestaPro con MySQL",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "pg": "^8.11.3",
+    "mysql2": "^3.6.5",
     "cors": "^2.8.5"
   }
 }
