@@ -1,0 +1,319 @@
+:root {
+    --primary-color: #005DFF;
+    --primary-light: #E6F0FF;
+    --secondary-color: #0D244F;
+    --text-color: #344054;
+    --light-gray: #F2F4F7;
+    --border-color: #D0D5DD;
+    --white: #FFFFFF;
+    --success-color: #12B76A;
+    --font-family: 'Poppins', sans-serif;
+}
+
+body {
+    font-family: var(--font-family);
+    background-color: var(--light-gray);
+    color: var(--text-color);
+    margin: 0;
+}
+
+.main-header {
+    background-color: var(--white);
+    padding: 15px 40px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.main-header h1 {
+    color: var(--primary-color);
+    font-size: 24px;
+    margin: 0;
+}
+
+.container {
+    padding: 30px 40px;
+}
+
+.card {
+    background: var(--white);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+}
+
+.card-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.card-header h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--secondary-color);
+    margin: 0;
+}
+
+.button {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.button-primary {
+    background-color: var(--primary-color);
+    color: var(--white);
+}
+
+.button-primary:hover {
+    background-color: #0045B8;
+    transform: translateY(-2px);
+}
+
+.button-secondary {
+    background-color: #F2F4F7;
+    color: #344054;
+    border: 1px solid #D0D5DD;
+}
+
+.button-secondary:hover {
+    background-color: #E4E7EC;
+}
+
+.dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 24px;
+    margin-bottom: 30px;
+}
+
+.stat-card {
+    background-color: var(--white);
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+}
+
+.stat-card h3 {
+    margin: 0 0 8px 0;
+    color: #667085;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.stat-card .value {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--secondary-color);
+}
+
+.table-container {
+    overflow-x: auto;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.main-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.main-table th, .main-table td {
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: middle;
+}
+
+.main-table th {
+    background-color: #F9FAFB;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #667085;
+}
+
+.main-table td {
+    font-size: 14px;
+}
+
+.status {
+    padding: 4px 10px;
+    border-radius: 16px;
+    font-size: 12px;
+    font-weight: 500;
+    text-align: center;
+}
+
+.status-active {
+    background-color: var(--primary-light);
+    color: var(--primary-color);
+}
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(13, 36, 79, 0.6);
+    z-index: 100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(5px);
+}
+
+.modal-content {
+    background: var(--white);
+    border-radius: 16px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+    animation: slideIn 0.4s ease-out;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.modal-header h2 {
+    font-size: 20px;
+    color: var(--secondary-color);
+    margin: 0;
+}
+
+.close-button {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #98A2B3;
+}
+
+.modal-body {
+    padding: 24px;
+    overflow-y: auto;
+}
+
+.modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border-color);
+    background-color: #F9FAFB;
+    flex-shrink: 0;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+@keyframes slideIn {
+    from { transform: translateY(-30px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+fieldset {
+    border: none;
+    padding: 0;
+    margin: 0 0 24px 0;
+}
+
+legend {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--secondary-color);
+    margin-bottom: 16px;
+}
+
+.form-row {
+    display: flex;
+    gap: 20px;
+}
+
+.form-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 6px;
+}
+
+input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 16px;
+    box-sizing: border-box;
+}
+
+.submit-button {
+    width: 100%;
+    padding: 12px;
+    background: var(--primary-color);
+    color: var(--white);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    margin-top: 10px;
+}
+
+.summary-info {
+    padding: 16px;
+    background-color: var(--primary-light);
+    border-radius: 8px;
+    margin-bottom: 24px;
+    border: 1px solid var(--primary-color);
+    font-size: 14px;
+}
+
+.summary-info p { margin: 0 0 8px 0; }
+.summary-info p:last-child { margin-bottom: 0; }
+
+.printable {
+    flex-grow: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+@media print {
+    body * { visibility: hidden; }
+    .printable, .printable * { visibility: visible; }
+    .printable {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        overflow-y: visible;
+    }
+    #detailsModal .modal-content {
+        border: none;
+        box-shadow: none;
+        max-height: none;
+    }
+    #detailsModal .modal-footer, #detailsModal .close-button {
+        display: none;
+    }
+}
