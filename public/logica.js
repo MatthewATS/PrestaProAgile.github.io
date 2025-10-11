@@ -1,4 +1,5 @@
 // --- VARIABLES GLOBALES ---
+const API_URL = 'prestaproagilegithubio-production.up.railway.app'
 let loans = []; // Esta variable ahora será una caché de los datos del servidor
 let clients = new Set();
 let currentLoanForDetails = null;
@@ -80,7 +81,7 @@ loanForm.addEventListener('submit', async function(event) {
     };
 
     try {
-        const response = await fetch('/api/loans', {
+        const response = await fetch(`${API_URL}/api/loans`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -297,7 +298,7 @@ function descargarPDF(doc, fileName) {
 
 async function fetchAndRenderLoans() {
     try {
-        const response = await fetch('/api/loans');
+        const response = await fetch(`${API_URL}/api/loans`);
         if (!response.ok) {
             throw new Error('Error al cargar los préstamos');
         }
@@ -317,5 +318,6 @@ async function fetchAndRenderLoans() {
 
 // --- Carga Inicial de Datos desde el Servidor ---
 fetchAndRenderLoans();
+
 
 
