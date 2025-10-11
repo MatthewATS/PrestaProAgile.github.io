@@ -67,8 +67,8 @@ window.addEventListener('click', (event) => {
 loanForm.addEventListener('submit', async function(event) {
     event.preventDefault();
     const newLoan = {
-        dni: document.getElementById('dni').value,
         client: {
+            dni: document.getElementById('dni').value,
             nombres: document.getElementById('nombres').value,
             apellidos: document.getElementById('apellidos').value,
         },
@@ -92,7 +92,6 @@ loanForm.addEventListener('submit', async function(event) {
             throw new Error('Error al guardar el préstamo en el servidor');
         }
 
-        // Si se guarda correctamente, recargamos la lista desde la base de datos
         await fetchAndRenderLoans();
         loanForm.reset();
         closeModal(loanModal);
@@ -105,8 +104,8 @@ loanForm.addEventListener('submit', async function(event) {
 
 historyTableBody.addEventListener('click', function(event) {
     if (event.target.classList.contains('view-details-btn')) {
-        const loanId = parseInt(event.target.getAttribute('data-loan-id'));
-        const loan = loans.find(l => l.id === loanId);
+        const loanDNI = event.target.getAttribute('data-loan-dni');
+        const loan = loans.find(l => l.client.dni === loanDNI);
         if (loan) populateDetailsModal(loan);
     }
 });
@@ -126,7 +125,7 @@ function renderHistoryTable() {
             <td>${new Date(loan.fecha.replace(/-/g, '/')).toLocaleDateString('es-PE')}</td>
             <td>${loan.plazo} meses</td>
             <td><span class="status status-active">${loan.status}</span></td>
-            <td><button class="button button-secondary view-details-btn" data-loan-id="${loan.id}">Ver Detalles</button></td>
+            <td><button class="button button-secondary view-details-btn" data-loan-dni="${loan.client.dni}">Ver Detalles</button></td>
         `;
         historyTableBody.appendChild(row);
     });
@@ -318,4 +317,5 @@ async function fetchAndRenderLoans() {
 
 // --- Carga Inicial de Datos desde el Servidor ---
 fetchAndRenderLoans();
+
 
