@@ -18,9 +18,7 @@ const pool = mysql.createPool(process.env.DATABASE_URL);
 
 app.get('/api/loans', async (req, res) => {
   try {
-    console.log("INTENTO: Obteniendo préstamos desde /api/loans");
     const [rows] = await pool.query('SELECT * FROM loans ORDER BY fecha DESC');
-    console.log("ÉXITO: Préstamos obtenidos.");
     res.json(rows);
   } catch (err) {
     console.error("ERROR en GET /api/loans:", err);
@@ -42,14 +40,6 @@ app.post('/api/loans', async (req, res) => {
     console.error("ERROR en POST /api/loans:", err);
     res.status(500).json({ error: 'Error al guardar el préstamo' });
   }
-});
-
-// --- RUTA DE DIAGNÓSTICO "ATRAPA-TODO" ---
-// Esta ruta debe ir AL FINAL, justo antes de app.listen.
-// Atrapa cualquier petición que no coincida con las rutas de arriba.
-app.use((req, res) => {
-  console.log(`RUTA NO ENCONTRADA: Se recibió una petición a: ${req.method} ${req.path}`);
-  res.status(404).send({ error: 'Ruta no encontrada en el servidor. Verifica la URL.' });
 });
 
 // Iniciar el servidor
