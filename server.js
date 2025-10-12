@@ -55,6 +55,22 @@ app.post('/api/loans', async (req, res) => {
     res.status(500).json({ error: 'Error al guardar el préstamo' });
   }
 });
+// ... aquí termina tu código de app.post('/api/loans', ...)
+
+// ---- INICIO DEL CÓDIGO DE DIAGNÓSTICO ----
+console.log('--- RUTAS REGISTRADAS ---');
+app._router.stack.forEach(function(r){
+  if (r.route && r.route.path){
+    console.log(r.route.path)
+  }
+});
+console.log('-------------------------');
+// ---- FIN DEL CÓDIGO DE DIAGNÓSTICO ----
+
+// Iniciar el servidor
+app.listen(PORT, () => {
+  console.log(`Servidor escuchando en el puerto ${PORT}`);
+});
 
 // Iniciar el servidor
 app.listen(PORT, () => {
