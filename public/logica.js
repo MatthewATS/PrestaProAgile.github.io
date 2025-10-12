@@ -137,7 +137,7 @@ function populateDetailsModal(loan) {
     const { monthlyPayment, schedule } = calculateSchedule(loan);
     document.getElementById('scheduleSummary').innerHTML = `
         <p><strong>Cliente:</strong> ${loan.client.nombres} ${loan.client.apellidos}</p>
-        <p><strong>Monto:</strong> S/ ${loan.monto.toFixed(2)} | <strong>Interés:</strong> ${loan.interes}% | <strong>Plazo:</strong> ${loan.plazo} meses</p>
+        <p><strong>Monto:</strong> S/ ${parseFloat(loan.monto).toFixed(2)} | <strong>Interés:</strong> ${loan.interes}% | <strong>Plazo:</strong> ${loan.plazo} meses</p>
         <p><strong>Cuota Mensual Fija: S/ ${monthlyPayment.toFixed(2)}</strong></p>
     `;
     const scheduleTableBody = document.getElementById('scheduleTableBody');
@@ -318,6 +318,7 @@ async function fetchAndRenderLoans() {
 
 // --- Carga Inicial de Datos desde el Servidor ---
 fetchAndRenderLoans();
+
 
 
 
