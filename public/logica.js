@@ -1,5 +1,5 @@
 // --- VARIABLES GLOBALES ---
-const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app/';
+const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
 let loans = []; // Esta variable ahora será una caché de los datos del servidor
 let clients = new Set();
 let currentLoanForDetails = null;
@@ -318,6 +318,7 @@ async function fetchAndRenderLoans() {
 
 // --- Carga Inicial de Datos desde el Servidor ---
 fetchAndRenderLoans();
+
 
 
 
