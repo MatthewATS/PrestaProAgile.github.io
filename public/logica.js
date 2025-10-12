@@ -123,7 +123,7 @@ function renderHistoryTable() {
         row.innerHTML = `
             <td>${loan.client.nombres} ${loan.client.apellidos}</td>
             <td>S/ ${parseFloat(loan.monto).toFixed(2)}</td>
-            <td>${new Date(loan.fecha.replace(/-/g, '/')).toLocaleDateString('es-PE')}</td>
+            <td>${new Date(loan.fecha).toLocaleDateString('es-PE')}</td>
             <td>${loan.plazo} meses</td>
             <td><span class="status status-active">${loan.status}</span></td>
             <td><button class="button button-secondary view-details-btn" data-loan-dni="${loan.client.dni}">Ver Detalles</button></td>
@@ -318,6 +318,7 @@ async function fetchAndRenderLoans() {
 
 // --- Carga Inicial de Datos desde el Servidor ---
 fetchAndRenderLoans();
+
 
 
 
