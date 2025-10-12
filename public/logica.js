@@ -209,7 +209,7 @@ function compartirPDF() {
         doc.setTextColor(52, 64, 84);
         doc.text(`Nombre: ${loan.client.nombres} ${loan.client.apellidos}`, 14, 52);
         doc.text(`DNI: ${loan.client.dni}`, 14, 58);
-        doc.text(`Fecha: ${new Date(loan.fecha.replace(/-/g, '/')).toLocaleDateString('es-PE')}`, 14, 64);
+        doc.text(`Fecha: ${new Date(loan.fecha).toLocaleDateString('es-PE')}`, 14, 64);
 
         // INFORMACIÓN DEL PRÉSTAMO
         doc.setFontSize(12);
@@ -218,7 +218,7 @@ function compartirPDF() {
 
         doc.setFontSize(11);
         doc.setTextColor(52, 64, 84);
-        doc.text(`Monto Prestado: S/ ${loan.monto.toFixed(2)}`, 14, 82);
+        doc.text(`Monto Prestado: S/ ${parseFloat(loan.monto).toFixed(2)}`, 14, 82);
         doc.text(`Interés Mensual: ${loan.interes}%`, 14, 88);
         doc.text(`Plazo: ${loan.plazo} meses`, 14, 94);
         doc.text(`Cuota Mensual Fija: S/ ${monthlyPayment.toFixed(2)}`, 14, 100);
@@ -318,6 +318,7 @@ async function fetchAndRenderLoans() {
 
 // --- Carga Inicial de Datos desde el Servidor ---
 fetchAndRenderLoans();
+
 
 
 
