@@ -154,8 +154,8 @@ function updateDashboard() {
 }
 
 function calculateSchedule(loan) {
-    const monthlyInterestRate = loan.interes / 100;
-    const monthlyPayment = (loan.monto * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
+   const monthlyInterestRate = parseFloat(loan.interes) / 100;
+   const monthlyPayment = (parseFloat(loan.monto) * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
     const schedule = [];
     const startDate = new Date(loan.fecha.replace(/-/g, '/'));
     for (let i = 1; i <= loan.plazo; i++) {
@@ -318,6 +318,7 @@ async function fetchAndRenderLoans() {
 
 // --- Carga Inicial de Datos desde el Servidor ---
 fetchAndRenderLoans();
+
 
 
 
