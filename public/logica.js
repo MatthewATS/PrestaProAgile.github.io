@@ -147,7 +147,7 @@ function populateDetailsModal(loan) {
 }
 
 function updateDashboard() {
-    const totalLoaned = loans.reduce((sum, loan) => sum + loan.monto, 0);
+    const totalLoaned = loans.reduce((sum, loan) => sum + parseFloat(loan.monto), 0);
     document.getElementById('totalLoaned').textContent = `S/ ${totalLoaned.toFixed(2)}`;
     document.getElementById('activeLoans').textContent = loans.filter(loan => loan.status === 'Activo').length;
     document.getElementById('totalClients').textContent = clients.size;
@@ -318,6 +318,7 @@ async function fetchAndRenderLoans() {
 
 // --- Carga Inicial de Datos desde el Servidor ---
 fetchAndRenderLoans();
+
 
 
 
