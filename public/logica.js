@@ -1,4 +1,11 @@
 // --- VARIABLES GLOBALES ---
+alert('--- SCRIPT NUEVO CARGADO ---');
+console.log('--- VERSIÓN DEFINITIVA DEL SCRIPT ESTÁ CORRIENDO ---');
+
+// --- VARIABLES GLOBALES ---
+const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
+
+// ... el resto de tu código ...
 // CORRECCIÓN FINAL: API_URL debe estar VACÍO para que funcione correctamente en Railway.
 const API_URL = 'prestaproagilegithubio-production-be75.up.railway.app';
 
@@ -293,5 +300,6 @@ function descargarPDF(doc, fileName) {
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
+
 
 
