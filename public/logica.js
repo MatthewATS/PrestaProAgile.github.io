@@ -1,8 +1,8 @@
 // --- VARIABLES GLOBALES ---
 const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
-// API para consulta de DNI (usa un servicio gratuito)
 const DNI_API_URL = 'https://dniruc.apisperu.com/api/v1/dni/';
-const DNI_API_TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6ImdpYW5jYXJsb3M5NTE3NUBnbWFpbC5jb20ifQ.sN3_2i3a-4b92g-J1j6aDa_L22U2-v_8aISt23b-uOk'; // Token de prueba para la API pública
+// ▼▼▼ ¡IMPORTANTE! REEMPLAZA ESTA LÍNEA CON TU PROPIO TOKEN ▼▼▼
+const DNI_API_TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6Im1hdHRoZXd0YW5kYXlwYW4wMDdAZ21haWwuY29tIn0.N_GBdyXAljx7Qrl9h-8wX96smNwGu0Hcah-t4jKloH0'; 
 
 let loans = [];
 let clients = new Set();
@@ -62,6 +62,7 @@ const closeModal = (modal) => {
         nombresInput.readOnly = false;
         apellidosInput.readOnly = false;
         dniStatus.textContent = '';
+        dniStatus.style.color = '';
     }
     if (modal.id === 'detailsModal') {
         currentLoanForDetails = null;
@@ -80,40 +81,65 @@ window.addEventListener('click', (event) => {
     if (event.target === detailsModal) closeModal(detailsModal);
 });
 
-// --- LÓGICA DE CONSULTA DE DNI ---
+// --- LÓGICA DE CONSULTA DE DNI (VERSIÓN MEJORADA) ---
 dniInput.addEventListener('blur', async () => {
     const dni = dniInput.value;
-    if (dni.length === 8) {
-        dniStatus.textContent = 'Buscando...';
-        dniStatus.style.color = '#667085';
-        try {
-            const response = await fetch(`${DNI_API_URL}${dni}?token=${DNI_API_TOKEN}`);
-            if (!response.ok) throw new Error('DNI no encontrado o error en la API.');
-            const data = await response.json();
-            
-            if (data.nombres && data.apellidoPaterno) {
-                nombresInput.value = data.nombres;
-                apellidosInput.value = `${data.apellidoPaterno} ${data.apellidoMaterno}`;
-                nombresInput.readOnly = true;
-                apellidosInput.readOnly = true;
-                dniStatus.textContent = 'Cliente encontrado.';
-                dniStatus.style.color = 'var(--success-color)';
-            } else {
-                throw new Error('El DNI no devolvió datos válidos.');
-            }
+    if (dni.length !== 8) {
+        dniStatus.textContent = '';
+        return;
+    }
 
-        } catch (error) {
-            console.error("Error al consultar DNI:", error);
-            dniStatus.textContent = 'DNI no encontrado. Por favor, ingrese los datos manualmente.';
-            dniStatus.style.color = 'red';
-            nombresInput.value = '';
-            apellidosInput.value = '';
+    if (DNI_API_TOKEN === 'TU_NUEVO_TOKEN_PERSONAL_AQUI') {
+        dniStatus.textContent = 'Error: Debes configurar tu token de API en logica.js';
+        dniStatus.style.color = 'red';
+        return;
+    }
+
+    dniStatus.textContent = 'Buscando...';
+    dniStatus.style.color = '#667085';
+    nombresInput.readOnly = true;
+    apellidosInput.readOnly = true;
+
+    try {
+        const response = await fetch(`${DNI_API_URL}${dni}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${DNI_API_TOKEN}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.nombres) {
+            nombresInput.value = data.nombres;
+            apellidosInput.value = `${data.apellidoPaterno} ${data.apellidoMaterno}`;
+            dniStatus.textContent = '✅ Cliente encontrado.';
+            dniStatus.style.color = 'var(--success-color)';
+        } else {
+             // Manejar errores específicos de la API
+            let errorMessage = 'DNI no encontrado. Ingrese los datos manualmente.';
+            if (response.status === 401 || response.status === 403) {
+                errorMessage = 'Error: Token de API inválido o expirado.';
+            } else if (data.message) {
+                errorMessage = data.message; // Mensaje de error de la propia API
+            }
+            throw new Error(errorMessage);
+        }
+
+    } catch (error) {
+        console.error("Error al consultar DNI:", error);
+        dniStatus.textContent = `❌ ${error.message}`;
+        dniStatus.style.color = 'red';
+        nombresInput.value = '';
+        apellidosInput.value = '';
+    } finally {
+        // Habilitar la edición manual si la búsqueda falla
+        if (!nombresInput.value) {
             nombresInput.readOnly = false;
             apellidosInput.readOnly = false;
             nombresInput.focus();
         }
-    } else {
-        dniStatus.textContent = '';
     }
 });
 
@@ -180,8 +206,8 @@ historyTableBody.addEventListener('click', function(event) {
     }
 });
 
+// --- FUNCIONES PRINCIPALES (sin cambios) ---
 
-// --- FUNCIONES PRINCIPALES ---
 function renderHistoryTable() {
     historyTableBody.innerHTML = '';
     if (loans.length === 0) {
@@ -190,9 +216,8 @@ function renderHistoryTable() {
     }
     loans.forEach(loan => {
         const row = document.createElement('tr');
-        // El backend ahora devuelve los datos del cliente anidados.
-        const clientName = loan.nombres || loan.client.nombres;
-        const clientLastName = loan.apellidos || loan.client.apellidos;
+        const clientName = loan.nombres || (loan.client && loan.client.nombres);
+        const clientLastName = loan.apellidos || (loan.client && loan.client.apellidos);
         row.innerHTML = `
             <td>${clientName} ${clientLastName}</td>
             <td>S/ ${parseFloat(loan.monto).toFixed(2)}</td>
@@ -208,8 +233,8 @@ function renderHistoryTable() {
 function populateDetailsModal(loan) {
     currentLoanForDetails = loan;
     const { monthlyPayment, schedule } = calculateSchedule(loan);
-    const clientName = loan.nombres || loan.client.nombres;
-    const clientLastName = loan.apellidos || loan.client.apellidos;
+    const clientName = loan.nombres || (loan.client && loan.client.nombres);
+    const clientLastName = loan.apellidos || (loan.client && loan.client.apellidos);
 
     document.getElementById('scheduleSummary').innerHTML = `
         <p><strong>Cliente:</strong> ${clientName} ${clientLastName}</p>
@@ -232,8 +257,9 @@ function updateDashboard() {
 function calculateSchedule(loan) {
    const monthlyInterestRate = parseFloat(loan.interes) / 100;
    const principal = parseFloat(loan.monto);
-   if (monthlyInterestRate === 0) { // Evita división por cero si el interés es 0
-       return { monthlyPayment: principal / loan.plazo, schedule: [] };
+   if (monthlyInterestRate === 0) {
+       const monthlyPayment = loan.plazo > 0 ? principal / loan.plazo : 0;
+       return { monthlyPayment, schedule: [] };
    }
    const monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
    const schedule = [];
@@ -251,9 +277,7 @@ function calculateSchedule(loan) {
 }
 
 
-// --- FUNCIÓN DE COMPARTIR PDF ---
 function compartirPDF() {
-    console.log('Función compartirPDF ejecutándose...');
     if (!currentLoanForDetails) {
         alert("No hay información del préstamo para compartir.");
         return;
@@ -269,11 +293,10 @@ function compartirPDF() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         
-        const clientName = loan.nombres || loan.client.nombres;
-        const clientLastName = loan.apellidos || loan.client.apellidos;
-        const clientDNI = loan.dni || loan.client.dni;
+        const clientName = loan.nombres || (loan.client && loan.client.nombres);
+        const clientLastName = loan.apellidos || (loan.client && loan.client.apellidos);
+        const clientDNI = loan.dni || (loan.client && loan.client.dni);
 
-        // TÍTULO
         doc.setFontSize(22);
         doc.setTextColor(0, 93, 255);
         doc.text("PRESTAPRO", 105, 20, { align: 'center' });
@@ -281,7 +304,6 @@ function compartirPDF() {
         doc.setTextColor(52, 64, 84);
         doc.text("Cronograma de Pagos", 105, 30, { align: 'center' });
 
-        // INFORMACIÓN DEL CLIENTE
         doc.setFontSize(12);
         doc.setTextColor(100, 100, 100);
         doc.text("DATOS DEL CLIENTE", 14, 45);
@@ -291,7 +313,6 @@ function compartirPDF() {
         doc.text(`DNI: ${clientDNI}`, 14, 58);
         doc.text(`Fecha de Préstamo: ${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}`, 14, 64);
 
-        // INFORMACIÓN DEL PRÉSTAMO
         doc.setFontSize(12);
         doc.setTextColor(100, 100, 100);
         doc.text("DATOS DEL PRÉSTAMO", 14, 75);
@@ -302,7 +323,6 @@ function compartirPDF() {
         doc.text(`Plazo: ${loan.plazo} meses`, 14, 94);
         doc.text(`Cuota Mensual Fija: S/ ${monthlyPayment.toFixed(2)}`, 14, 100);
 
-        // TABLA
         const tableData = schedule.map(item => [item.cuota.toString(), item.fecha, `S/ ${item.monto}`]);
         doc.autoTable({
             head: [['N° Cuota', 'Fecha de Vencimiento', 'Monto a Pagar']],
@@ -314,14 +334,12 @@ function compartirPDF() {
             columnStyles: { 0: { halign: 'center' }, 2: { halign: 'right' } }
         });
 
-        // PIE DE PÁGINA
         const finalY = doc.lastAutoTable.finalY || 250;
         doc.setFontSize(8);
         doc.setTextColor(150, 150, 150);
         doc.text('Generado por PrestaPro', 105, finalY + 10, { align: 'center' });
         doc.text(new Date().toLocaleString('es-PE'), 105, finalY + 15, { align: 'center' });
 
-        // INTENTAR COMPARTIR O DESCARGAR
         const fileName = `Cronograma_${clientLastName}_${clientDNI}.pdf`;
         const pdfBlob = doc.output('blob');
         
@@ -358,7 +376,7 @@ async function fetchAndRenderLoans() {
         loans = await response.json();
 
         clients.clear();
-        loans.forEach(loan => clients.add(loan.dni || loan.client.dni));
+        loans.forEach(loan => clients.add(loan.dni || (loan.client && loan.client.dni)));
 
         renderHistoryTable();
         updateDashboard();
