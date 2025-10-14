@@ -1,5 +1,5 @@
 // --- VARIABLES GLOBALES ---
-const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app'; // Se usa la ruta relativa, no es necesaria la URL completa.
+const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app'; // Se usa la ruta relativa, no es necesaria la URL completa
 
 let loans = [];
 let clients = new Set();
@@ -368,4 +368,5 @@ async function fetchAndRenderLoans() {
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
+
 
