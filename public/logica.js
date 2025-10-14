@@ -380,3 +380,4 @@ async function fetchAndRenderLoans() {
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
+
