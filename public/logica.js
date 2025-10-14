@@ -1,6 +1,6 @@
 // --- VARIABLES GLOBALES ---
 // CORRECCIÓN FINAL: API_URL debe estar VACÍO para que funcione correctamente en Railway.
-const API_URL = 'prestaproagilegithubio-production-be75.up.railway.app';
+const API_URL = '';
 
 let loans = [];
 let clients = new Set();
@@ -293,3 +293,4 @@ function descargarPDF(doc, fileName) {
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
+
