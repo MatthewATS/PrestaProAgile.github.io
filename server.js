@@ -86,7 +86,7 @@ app.get('/api/dni/:dni', async (req, res) => {
   }
 
   try {
-    // ▼▼▼ CORRECCIÓN APLICADA AQUÍ ▼▼▼
+    // ▼▼▼ CORRECCIÓN APLICADA AQUÍ ('apisperu.com' en lugar de 'apisperperu.com') ▼▼▼
     const apiResponse = await fetch(`https://dniruc.apisperu.com/api/v1/dni/${dni}`, {
       method: 'GET',
       headers: {
