@@ -1,8 +1,9 @@
 // --- VARIABLES GLOBALES ---
 const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
 const DNI_API_URL = 'https://dniruc.apisperu.com/api/v1/dni/';
-// ▼▼▼ ¡IMPORTANTE! REEMPLAZA ESTA LÍNEA CON TU PROPIO TOKEN ▼▼▼
-const DNI_API_TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6Im1hdHRoZXd0YW5kYXlwYW4wMDdAZ21haWwuY29tIn0.N_GBdyXAljx7Qrl9h-8wX96smNwGu0Hcah-t4jKloH0'; 
+
+// ▼▼▼ CORRECCIÓN: Se eliminó un carácter invisible al final del token. ▼▼▼
+const DNI_API_TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6Im1hdHRoZXd0YW5kYXlwYW4wMDdAZ21haWwuY29tIn0.N_GBdyXAljx7Qrl9h-8wX96smNwGu0Hcah-t4jKloH0';
 
 let loans = [];
 let clients = new Set();
@@ -89,12 +90,6 @@ dniInput.addEventListener('blur', async () => {
         return;
     }
 
-    if (DNI_API_TOKEN === 'TU_NUEVO_TOKEN_PERSONAL_AQUI') {
-        dniStatus.textContent = 'Error: Debes configurar tu token de API en logica.js';
-        dniStatus.style.color = 'red';
-        return;
-    }
-
     dniStatus.textContent = 'Buscando...';
     dniStatus.style.color = '#667085';
     nombresInput.readOnly = true;
@@ -117,12 +112,11 @@ dniInput.addEventListener('blur', async () => {
             dniStatus.textContent = '✅ Cliente encontrado.';
             dniStatus.style.color = 'var(--success-color)';
         } else {
-             // Manejar errores específicos de la API
             let errorMessage = 'DNI no encontrado. Ingrese los datos manualmente.';
             if (response.status === 401 || response.status === 403) {
                 errorMessage = 'Error: Token de API inválido o expirado.';
-            } else if (data.message) {
-                errorMessage = data.message; // Mensaje de error de la propia API
+            } else if (data && data.message) {
+                errorMessage = data.message;
             }
             throw new Error(errorMessage);
         }
@@ -134,7 +128,6 @@ dniInput.addEventListener('blur', async () => {
         nombresInput.value = '';
         apellidosInput.value = '';
     } finally {
-        // Habilitar la edición manual si la búsqueda falla
         if (!nombresInput.value) {
             nombresInput.readOnly = false;
             apellidosInput.readOnly = false;
@@ -147,7 +140,6 @@ dniInput.addEventListener('blur', async () => {
 loanForm.addEventListener('submit', async function(event) {
     event.preventDefault();
 
-    // Validaciones de reglas financieras
     const monto = parseFloat(document.getElementById('monto').value);
     const interes = parseFloat(document.getElementById('interes').value);
     const plazo = parseInt(document.getElementById('plazo').value);
@@ -388,4 +380,3 @@ async function fetchAndRenderLoans() {
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
-
