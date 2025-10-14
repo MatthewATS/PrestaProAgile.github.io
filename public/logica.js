@@ -1,4 +1,5 @@
 // --- VARIABLES GLOBALES ---
+console.log('--- ¡VERSIÓN 20.0 CARGADA CORRECTAMENTE! ---');
 const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app'; // Se usa la ruta relativa, no es necesaria la URL completa
 
 let loans = [];
@@ -368,5 +369,6 @@ async function fetchAndRenderLoans() {
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
+
 
 
