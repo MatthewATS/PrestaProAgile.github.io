@@ -86,7 +86,8 @@ app.get('/api/dni/:dni', async (req, res) => {
   }
 
   try {
-    const apiResponse = await fetch(`https://dniruc.apisperperu.com/api/v1/dni/${dni}`, {
+    // ▼▼▼ CORRECCIÓN APLICADA AQUÍ ▼▼▼
+    const apiResponse = await fetch(`https://dniruc.apisperu.com/api/v1/dni/${dni}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -104,23 +105,19 @@ app.get('/api/dni/:dni', async (req, res) => {
 // --- FUNCIÓN PARA INICIAR EL SERVIDOR ---
 const startServer = async () => {
   try {
-    // Intenta hacer una conexión simple a la base de datos para verificar que todo esté bien.
     const connection = await pool.getConnection();
     console.log('✅ Conexión a la base de datos establecida con éxito.');
     connection.release();
 
-    // Si la conexión es exitosa, inicia el servidor.
     app.listen(PORT, () => {
       console.log(`🚀 Servidor escuchando en el puerto ${PORT}`);
     });
 
   } catch (err) {
-    // Si la conexión falla, muestra un error claro y detiene el proceso.
     console.error('❌ No se pudo conectar a la base de datos. Verifica la variable de entorno DATABASE_URL.');
     console.error(err.message);
-    process.exit(1); // Detiene la aplicación con un código de error.
+    process.exit(1);
   }
 };
 
-// Llama a la función para iniciar el servidor.
 startServer();
