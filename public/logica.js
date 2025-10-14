@@ -1,9 +1,5 @@
 // --- VARIABLES GLOBALES ---
-const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
-const DNI_API_URL = 'https://dniruc.apisperu.com/api/v1/dni/';
-
-// ▼▼▼ CORRECCIÓN: Se eliminó un carácter invisible al final del token. ▼▼▼
-const DNI_API_TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6Im1hdHRoZXd0YW5kYXlwYW4wMDdAZ21haWwuY29tIn0.N_GBdyXAljx7Qrl9h-8wX96smNwGu0Hcah-t4jKloH0';
+const API_URL = ''; // Se usa la ruta relativa, no es necesaria la URL completa.
 
 let loans = [];
 let clients = new Set();
@@ -48,7 +44,7 @@ loanForm.innerHTML = `
     <button type="submit" class="submit-button">Guardar Préstamo</button>
 `;
 
-// --- REFERENCIAS A CAMPOS DEL FORMULARIO (DESPUÉS DE CREARLOS) ---
+// --- REFERENCIAS A CAMPOS DEL FORMULARIO ---
 const dniInput = document.getElementById('dni');
 const nombresInput = document.getElementById('nombres');
 const apellidosInput = document.getElementById('apellidos');
@@ -82,7 +78,7 @@ window.addEventListener('click', (event) => {
     if (event.target === detailsModal) closeModal(detailsModal);
 });
 
-// --- LÓGICA DE CONSULTA DE DNI (VERSIÓN MEJORADA) ---
+// --- LÓGICA DE CONSULTA DE DNI (A TRAVÉS DE NUESTRO PROPIO SERVIDOR) ---
 dniInput.addEventListener('blur', async () => {
     const dni = dniInput.value;
     if (dni.length !== 8) {
@@ -96,29 +92,20 @@ dniInput.addEventListener('blur', async () => {
     apellidosInput.readOnly = true;
 
     try {
-        const response = await fetch(`${DNI_API_URL}${dni}`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${DNI_API_TOKEN}`,
-                'Content-Type': 'application/json',
-            },
-        });
+        // Ahora la llamada es a nuestra propia ruta /api/dni/, que actúa como intermediario.
+        const response = await fetch(`/api/dni/${dni}`);
 
         const data = await response.json();
 
+        // Si la respuesta del servidor es exitosa (200 OK) y contiene nombres, rellenamos los campos.
         if (response.ok && data.nombres) {
             nombresInput.value = data.nombres;
             apellidosInput.value = `${data.apellidoPaterno} ${data.apellidoMaterno}`;
             dniStatus.textContent = '✅ Cliente encontrado.';
             dniStatus.style.color = 'var(--success-color)';
         } else {
-            let errorMessage = 'DNI no encontrado. Ingrese los datos manualmente.';
-            if (response.status === 401 || response.status === 403) {
-                errorMessage = 'Error: Token de API inválido o expirado.';
-            } else if (data && data.message) {
-                errorMessage = data.message;
-            }
-            throw new Error(errorMessage);
+            // Si nuestro servidor devuelve un error, lo mostramos.
+            throw new Error(data.message || 'No se encontraron resultados.');
         }
 
     } catch (error) {
@@ -128,6 +115,7 @@ dniInput.addEventListener('blur', async () => {
         nombresInput.value = '';
         apellidosInput.value = '';
     } finally {
+        // Habilitamos la edición manual si la búsqueda falla.
         if (!nombresInput.value) {
             nombresInput.readOnly = false;
             apellidosInput.readOnly = false;
@@ -171,7 +159,7 @@ loanForm.addEventListener('submit', async function(event) {
     };
 
     try {
-        const response = await fetch(`${API_URL}/api/loans`, {
+        const response = await fetch(`/api/loans`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(newLoan),
@@ -198,7 +186,7 @@ historyTableBody.addEventListener('click', function(event) {
     }
 });
 
-// --- FUNCIONES PRINCIPALES (sin cambios) ---
+// --- FUNCIONES PRINCIPALES ---
 
 function renderHistoryTable() {
     historyTableBody.innerHTML = '';
@@ -361,7 +349,7 @@ function descargarPDF(doc, fileName) {
 
 async function fetchAndRenderLoans() {
     try {
-        const response = await fetch(`${API_URL}/api/loans`);
+        const response = await fetch(`/api/loans`);
         if (!response.ok) {
             throw new Error('Error al cargar los préstamos');
         }
@@ -380,4 +368,3 @@ async function fetchAndRenderLoans() {
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
-
