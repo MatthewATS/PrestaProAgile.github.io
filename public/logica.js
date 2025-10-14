@@ -1,7 +1,4 @@
 // --- VARIABLES GLOBALES ---
-alert('--- SCRIPT NUEVO CARGADO ---');
-console.log('--- VERSIÓN DEFINITIVA DEL SCRIPT ESTÁ CORRIENDO ---');
-
 // --- VARIABLES GLOBALES ---
 const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
 
@@ -300,6 +297,7 @@ function descargarPDF(doc, fileName) {
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
+
 
 
 
