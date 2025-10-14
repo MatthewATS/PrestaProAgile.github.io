@@ -9,8 +9,6 @@ const PORT = process.env.PORT || 3000;
 // Middlewares
 app.use(cors());
 app.use(express.json());
-// Asegúrate de que tu `front.html` y otros archivos estén en una carpeta 'public'
-// Si no es así, puedes borrar la siguiente línea.
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Conexión a la base de datos
@@ -19,7 +17,7 @@ const pool = mysql.createPool(process.env.DATABASE_URL);
 
 // --- RUTAS DE LA API ---
 
-// GET /api/loans - Obtiene todos los préstamos con la información del cliente (versión optimizada)
+// GET /api/loans
 app.get('/api/loans', async (req, res) => {
   try {
     const query = `
@@ -38,7 +36,7 @@ app.get('/api/loans', async (req, res) => {
   }
 });
 
-// POST /api/loans - Crea préstamos de forma optimizada (sin repetir clientes)
+// POST /api/loans
 app.post('/api/loans', async (req, res) => {
   const connection = await pool.getConnection();
   try {
@@ -78,7 +76,7 @@ app.post('/api/loans', async (req, res) => {
   }
 });
 
-// RUTA PROXY PARA DNI (para evitar el error "Failed to fetch")
+// RUTA PROXY PARA DNI
 app.get('/api/dni/:dni', async (req, res) => {
   const { dni } = req.params;
   const token = process.env.DNI_API_TOKEN;
@@ -88,7 +86,7 @@ app.get('/api/dni/:dni', async (req, res) => {
   }
 
   try {
-    const apiResponse = await fetch(`https://dniruc.apisperu.com/api/v1/dni/${dni}`, {
+    const apiResponse = await fetch(`https://dniruc.apisperperu.com/api/v1/dni/${dni}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -106,24 +104,23 @@ app.get('/api/dni/:dni', async (req, res) => {
 // --- FUNCIÓN PARA INICIAR EL SERVIDOR ---
 const startServer = async () => {
   try {
-    // 1. Intenta conectarse a la base de datos ANTES de iniciar el servidor.
+    // Intenta hacer una conexión simple a la base de datos para verificar que todo esté bien.
     const connection = await pool.getConnection();
     console.log('✅ Conexión a la base de datos establecida con éxito.');
     connection.release();
 
-    // 2. Si la conexión es exitosa, inicia el servidor para aceptar peticiones.
+    // Si la conexión es exitosa, inicia el servidor.
     app.listen(PORT, () => {
       console.log(`🚀 Servidor escuchando en el puerto ${PORT}`);
     });
 
   } catch (err) {
-    // 3. Si la conexión falla, muestra un error claro y la aplicación se detiene.
-    // Esto evita que el servidor se quede "colgado" y te da un error inmediato en los logs.
-    console.error('❌ ERROR FATAL: No se pudo conectar a la base de datos.');
+    // Si la conexión falla, muestra un error claro y detiene el proceso.
+    console.error('❌ No se pudo conectar a la base de datos. Verifica la variable de entorno DATABASE_URL.');
     console.error(err.message);
     process.exit(1); // Detiene la aplicación con un código de error.
   }
 };
 
-// Llama a la función para iniciar el servidor de forma segura.
+// Llama a la función para iniciar el servidor.
 startServer();
