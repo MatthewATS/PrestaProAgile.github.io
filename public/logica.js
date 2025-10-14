@@ -1,6 +1,5 @@
 // --- VARIABLES GLOBALES ---
-// ▼▼▼ CORRECCIÓN APLICADA AQUÍ: Se debe dejar vacío para que use rutas relativas ▼▼▼
-const API_URL = '';
+const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
 
 let loans = [];
 let clients = new Set();
@@ -79,7 +78,7 @@ window.addEventListener('click', (event) => {
     if (event.target === detailsModal) closeModal(detailsModal);
 });
 
-// --- LÓGICA DE CONSULTA DE DNI (A TRAVÉS DE NUESTRO PROPIO SERVIDOR) ---
+// --- LÓGICA DE CONSULTA DE DNI ---
 dniInput.addEventListener('blur', async () => {
     const dni = dniInput.value;
     if (dni.length !== 8) {
@@ -185,6 +184,25 @@ historyTableBody.addEventListener('click', function(event) {
 
 // --- FUNCIONES PRINCIPALES ---
 
+async function fetchAndRenderLoans() {
+    try {
+        const response = await fetch(`${API_URL}/api/loans`);
+        if (!response.ok) {
+            throw new Error('Error al cargar los préstamos');
+        }
+        loans = await response.json();
+
+        clients.clear();
+        loans.forEach(loan => clients.add(loan.dni || (loan.client && loan.client.dni)));
+
+        renderHistoryTable();
+        updateDashboard();
+    } catch (error) {
+        console.error(error);
+        historyTableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: red;">Error al cargar los datos.</td></tr>`;
+    }
+}
+
 function renderHistoryTable() {
     historyTableBody.innerHTML = '';
     if (loans.length === 0) {
@@ -215,4 +233,134 @@ function populateDetailsModal(loan) {
 
     document.getElementById('scheduleSummary').innerHTML = `
         <p><strong>Cliente:</strong> ${clientName} ${clientLastName}</p>
-        <p><strong>Monto:</strong> S/ ${parseFloat(loan.monto).toFixed(2)} | <strong>Interés:</strong> ${loan.interes}% | <strong>Plazo:</strong> ${loan.plazo} meses
+        <p><strong>Monto:</strong> S/ ${parseFloat(loan.monto).toFixed(2)} | <strong>Interés:</strong> ${loan.interes}% | <strong>Plazo:</strong> ${loan.plazo} meses</p>
+        <p><strong>Cuota Mensual Fija: S/ ${monthlyPayment.toFixed(2)}</strong></p>
+    `;
+    const scheduleTableBody = document.getElementById('scheduleTableBody');
+    scheduleTableBody.innerHTML = schedule.map(item => `
+        <tr><td>${item.cuota}</td><td>${item.fecha}</td><td>S/ ${item.monto}</td></tr>`).join('');
+    openModal(detailsModal);
+}
+
+function updateDashboard() {
+    const totalLoaned = loans.reduce((sum, loan) => sum + parseFloat(loan.monto), 0);
+    document.getElementById('totalLoaned').textContent = `S/ ${totalLoaned.toFixed(2)}`;
+    document.getElementById('activeLoans').textContent = loans.filter(loan => loan.status === 'Activo').length;
+    document.getElementById('totalClients').textContent = clients.size;
+}
+
+function calculateSchedule(loan) {
+   const monthlyInterestRate = parseFloat(loan.interes) / 100;
+   const principal = parseFloat(loan.monto);
+   if (monthlyInterestRate === 0) {
+       const monthlyPayment = loan.plazo > 0 ? principal / loan.plazo : 0;
+       return { monthlyPayment, schedule: [] };
+   }
+   const monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
+   const schedule = [];
+   const startDate = new Date(loan.fecha);
+    for (let i = 1; i <= loan.plazo; i++) {
+        const paymentDate = new Date(startDate);
+        paymentDate.setUTCMonth(paymentDate.getUTCMonth() + i);
+        schedule.push({
+            cuota: i,
+            fecha: paymentDate.toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }),
+            monto: monthlyPayment.toFixed(2)
+        });
+    }
+    return { monthlyPayment, schedule };
+}
+
+
+function compartirPDF() {
+    if (!currentLoanForDetails) {
+        alert("No hay información del préstamo para compartir.");
+        return;
+    }
+    if (typeof window.jspdf === 'undefined') {
+        alert("Error: La librería jsPDF no se cargó correctamente.");
+        return;
+    }
+
+    try {
+        const loan = currentLoanForDetails;
+        const { monthlyPayment, schedule } = calculateSchedule(loan);
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        const clientName = loan.nombres || (loan.client && loan.client.nombres);
+        const clientLastName = loan.apellidos || (loan.client && loan.client.apellidos);
+        const clientDNI = loan.dni || (loan.client && loan.client.dni);
+
+        doc.setFontSize(22);
+        doc.setTextColor(0, 93, 255);
+        doc.text("PRESTAPRO", 105, 20, { align: 'center' });
+        doc.setFontSize(16);
+        doc.setTextColor(52, 64, 84);
+        doc.text("Cronograma de Pagos", 105, 30, { align: 'center' });
+
+        doc.setFontSize(12);
+        doc.setTextColor(100, 100, 100);
+        doc.text("DATOS DEL CLIENTE", 14, 45);
+        doc.setFontSize(11);
+        doc.setTextColor(52, 64, 84);
+        doc.text(`Nombre: ${clientName} ${clientLastName}`, 14, 52);
+        doc.text(`DNI: ${clientDNI}`, 14, 58);
+        doc.text(`Fecha de Préstamo: ${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}`, 14, 64);
+
+        doc.setFontSize(12);
+        doc.setTextColor(100, 100, 100);
+        doc.text("DATOS DEL PRÉSTAMO", 14, 75);
+        doc.setFontSize(11);
+        doc.setTextColor(52, 64, 84);
+        doc.text(`Monto Prestado: S/ ${parseFloat(loan.monto).toFixed(2)}`, 14, 82);
+        doc.text(`Interés Mensual: ${loan.interes}%`, 14, 88);
+        doc.text(`Plazo: ${loan.plazo} meses`, 14, 94);
+        doc.text(`Cuota Mensual Fija: S/ ${monthlyPayment.toFixed(2)}`, 14, 100);
+
+        const tableData = schedule.map(item => [item.cuota.toString(), item.fecha, `S/ ${item.monto}`]);
+        doc.autoTable({
+            head: [['N° Cuota', 'Fecha de Vencimiento', 'Monto a Pagar']],
+            body: tableData,
+            startY: 110,
+            theme: 'grid',
+            headStyles: { fillColor: [0, 93, 255], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center', fontSize: 11 },
+            bodyStyles: { fontSize: 10 },
+            columnStyles: { 0: { halign: 'center' }, 2: { halign: 'right' } }
+        });
+
+        const finalY = doc.lastAutoTable.finalY || 250;
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        doc.text('Generado por PrestaPro', 105, finalY + 10, { align: 'center' });
+        doc.text(new Date().toLocaleString('es-PE'), 105, finalY + 15, { align: 'center' });
+
+        const fileName = `Cronograma_${clientLastName}_${clientDNI}.pdf`;
+        const pdfBlob = doc.output('blob');
+        
+        if (navigator.share) {
+            const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+            navigator.share({
+                files: [file],
+                title: 'Cronograma de Pagos',
+                text: `Cronograma de pagos de ${clientName} ${clientLastName}`
+            }).catch((error) => {
+                console.log('Error al compartir, iniciando descarga:', error);
+                descargarPDF(doc, fileName);
+            });
+        } else {
+            descargarPDF(doc, fileName);
+        }
+    } catch (error) {
+        console.error('Error al generar PDF:', error);
+        alert('Hubo un error al generar el PDF. Por favor, intenta nuevamente.');
+    }
+}
+
+function descargarPDF(doc, fileName) {
+    doc.save(fileName);
+    console.log('PDF descargado:', fileName);
+}
+
+// --- Carga Inicial ---
+document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
