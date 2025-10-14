@@ -11,9 +11,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Conexión a la base de datos (asegúrate que tu variable de entorno DATABASE_URL esté configurada)
-// Para desarrollo local, puedes reemplazarlo con tus credenciales:
-// const pool = mysql.createPool({ host: 'localhost', user: 'root', database: 'prestapro', password: 'tu_password' });
+// Conexión a la base de datos
 const pool = mysql.createPool(process.env.DATABASE_URL);
 
 
@@ -89,6 +87,40 @@ app.post('/api/loans', async (req, res) => {
     connection.release();
   }
 });
+
+// --- NUEVA RUTA PROXY PARA LA CONSULTA DE DNI ---
+// Esta ruta recibe la solicitud desde nuestro frontend y la reenvía a la API externa.
+app.get('/api/dni/:dni', async (req, res) => {
+  const { dni } = req.params;
+  // Es una mejor práctica guardar el token en variables de entorno para mayor seguridad.
+  const token = process.env.DNI_API_TOKEN;
+
+  if (!token) {
+    // Si olvidamos configurar el token en el servidor, enviamos un error claro.
+    return res.status(500).json({ message: 'El token de la API de DNI no está configurado en el servidor.' });
+  }
+
+  try {
+    // Usamos 'fetch' para llamar a la API externa desde nuestro servidor.
+    const apiResponse = await fetch(`https://dniruc.apisperu.com/api/v1/dni/${dni}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const data = await apiResponse.json();
+
+    // Reenviamos la respuesta de la API (sea de éxito o de error) a nuestro frontend.
+    res.status(apiResponse.status).json(data);
+
+  } catch (error) {
+    console.error("Error en el proxy de DNI:", error);
+    res.status(500).json({ message: 'Error interno al consultar la API de DNI.' });
+  }
+});
+
 
 // Iniciar el servidor
 app.listen(PORT, () => {
