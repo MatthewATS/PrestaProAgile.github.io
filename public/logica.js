@@ -1,6 +1,5 @@
 // --- VARIABLES GLOBALES ---
 const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
-const VALOR_UIT = 5150; // Valor de la UIT para 2025
 let loans = [];
 let clients = new Set();
 let currentLoanForDetails = null;
@@ -41,12 +40,6 @@ loanForm.innerHTML = `
             <div class="form-group"><label for="plazo">Plazo (Meses)</label><input type="number" id="plazo" placeholder="Ej: 12" required min="1" max="60"></div>
         </div>
     </fieldset>
-    <div class="form-group" id="declaracionJuradaContainer" style="display: none; background-color: #E6F0FF; padding: 15px; border-radius: 8px; margin-top: 15px;">
-        <label for="declaracionJurada" style="display: flex; align-items: center; gap: 10px;">
-            <input type="checkbox" id="declaracionJurada" required style="width: auto;">
-            <span style="font-weight: 500;">Declaro bajo juramento el origen lícito del dinero.</span>
-        </label>
-    </div>
     <button type="submit" class="submit-button">Guardar Préstamo</button>
 `;
 
@@ -55,10 +48,6 @@ const dniInput = document.getElementById('dni');
 const nombresInput = document.getElementById('nombres');
 const apellidosInput = document.getElementById('apellidos');
 const dniStatus = document.getElementById('dni-status');
-const montoInput = document.getElementById('monto');
-const declaracionContainer = document.getElementById('declaracionJuradaContainer');
-const declaracionCheckbox = document.getElementById('declaracionJurada');
-
 
 // --- MANEJO DE MODALES ---
 const openModal = (modal) => modal.style.display = 'flex';
@@ -70,8 +59,6 @@ const closeModal = (modal) => {
         apellidosInput.readOnly = false;
         dniStatus.textContent = '';
         dniStatus.style.color = '';
-        // Ocultar el campo de declaración jurada al cerrar
-        declaracionContainer.style.display = 'none';
     }
     if (modal.id === 'detailsModal') {
         currentLoanForDetails = null;
@@ -89,21 +76,6 @@ window.addEventListener('click', (event) => {
     if (event.target === loanModal) closeModal(loanModal);
     if (event.target === detailsModal) closeModal(detailsModal);
 });
-
-
-// CAMBIO 2: Lógica para mostrar/ocultar la declaración jurada
-montoInput.addEventListener('input', function() {
-    const monto = parseFloat(this.value);
-    if (monto > VALOR_UIT) {
-        declaracionContainer.style.display = 'block';
-        declaracionCheckbox.required = true;
-    } else {
-        declaracionContainer.style.display = 'none';
-        declaracionCheckbox.required = false;
-        declaracionCheckbox.checked = false;
-    }
-});
-
 
 // --- LÓGICA DE CONSULTA DE DNI ---
 dniInput.addEventListener('blur', async () => {
@@ -149,25 +121,17 @@ dniInput.addEventListener('blur', async () => {
 loanForm.addEventListener('submit', async function(event) {
     event.preventDefault();
 
-    // CAMBIO 3: Validación de la declaración jurada al enviar
-    const monto = parseFloat(document.getElementById('monto').value);
-    if (monto > VALOR_UIT && !declaracionCheckbox.checked) {
-        alert('Para montos mayores a una UIT, debe marcar la declaración jurada.');
-        return; // Detiene el envío del formulario
-    }
-
     const newLoanData = {
         client: {
             dni: dniInput.value,
             nombres: nombresInput.value,
             apellidos: apellidosInput.value,
         },
-        monto: monto,
+        monto: parseFloat(document.getElementById('monto').value),
         interes: parseFloat(document.getElementById('interes').value),
         fecha: document.getElementById('fecha').value,
         plazo: parseInt(document.getElementById('plazo').value),
-        status: 'Activo',
-        declaracion_jurada: declaracionCheckbox.checked // Se envía el estado
+        status: 'Activo'
     };
 
     try {
@@ -223,18 +187,11 @@ function renderHistoryTable() {
 function populateDetailsModal(loan) {
     currentLoanForDetails = loan;
     const { monthlyPayment, schedule } = calculateSchedule(loan);
-    let summaryHTML = `
+    document.getElementById('scheduleSummary').innerHTML = `
         <p><strong>Cliente:</strong> ${loan.nombres} ${loan.apellidos}</p>
         <p><strong>Monto:</strong> S/ ${parseFloat(loan.monto).toFixed(2)} | <strong>Interés:</strong> ${loan.interes}% | <strong>Plazo:</strong> ${loan.plazo} meses</p>
         <p><strong>Cuota Mensual Fija: S/ ${monthlyPayment.toFixed(2)}</strong></p>
     `;
-
-    // CAMBIO 4: Mostrar si se presentó declaración jurada en los detalles
-    if (loan.declaracion_jurada) {
-        summaryHTML += `<p style="color: #005DFF;"><strong>✓ Se presentó declaración jurada.</strong></p>`;
-    }
-    document.getElementById('scheduleSummary').innerHTML = summaryHTML;
-
     const scheduleTableBody = document.getElementById('scheduleTableBody');
     scheduleTableBody.innerHTML = schedule.map(item => `
         <tr><td>${item.cuota}</td><td>${item.fecha}</td><td>S/ ${item.monto}</td></tr>`).join('');
@@ -301,18 +258,10 @@ function compartirPDF() {
         doc.text(`Interés Mensual: ${loan.interes}%`, 14, 88);
         doc.text(`Plazo: ${loan.plazo} meses`, 14, 94);
         doc.text(`Cuota Mensual Fija: S/ ${monthlyPayment.toFixed(2)}`, 14, 100);
-        let startY = 110;
-        if (loan.declaracion_jurada) {
-            doc.setFont(undefined, 'bold');
-            doc.setTextColor(0, 93, 255);
-            doc.text("✓ Se presentó declaración jurada de origen de fondos.", 14, 106);
-            doc.setFont(undefined, 'normal');
-            startY = 115; // Ajustamos la posición de la tabla
-        }
         const tableData = schedule.map(item => [item.cuota.toString(), item.fecha, `S/ ${item.monto}`]);
         doc.autoTable({
             head: [['N° Cuota', 'Fecha de Vencimiento', 'Monto a Pagar']],
-            body: tableData, startY: startY, theme: 'grid',
+            body: tableData, startY: 110, theme: 'grid',
             headStyles: { fillColor: [0, 93, 255], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center', fontSize: 11 },
             bodyStyles: { fontSize: 10 },
             columnStyles: { 0: { halign: 'center' }, 2: { halign: 'right' } }
