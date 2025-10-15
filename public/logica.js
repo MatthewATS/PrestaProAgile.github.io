@@ -21,6 +21,7 @@ const closePaymentModalBtn = document.getElementById('closePaymentModalBtn');
 const paymentForm = document.getElementById('paymentForm');
 const paymentModalTitle = document.getElementById('paymentModalTitle');
 const paymentLoanIdInput = document.getElementById('paymentLoanId');
+const paymentAmountInput = document.getElementById('payment_amount'); // Obtenemos el input de monto
 // Elementos del DOM para Confirmación de Eliminación
 const deleteConfirmationModal = document.getElementById('deleteConfirmationModal');
 const closeDeleteModalBtn = document.getElementById('closeDeleteModalBtn');
@@ -104,6 +105,16 @@ const hibridoCheck = document.getElementById('hibrido_check');
 const hibridoOptions = document.getElementById('hibrido_options');
 const mesesSoloInteresInput = document.getElementById('meses_solo_interes');
 const interesInput = document.getElementById('interes'); 
+
+// --- ¡NUEVO LISTENER AÑADIDO! ---
+// Este listener se asegura de que el valor nunca exceda el máximo permitido
+paymentAmountInput.addEventListener('input', () => {
+    const maxValue = parseFloat(paymentAmountInput.max);
+    if (parseFloat(paymentAmountInput.value) > maxValue) {
+        paymentAmountInput.value = maxValue.toFixed(2);
+    }
+});
+
 
 dniInput.addEventListener('input', () => { dniInput.value = dniInput.value.replace(/[^0-9]/g, ''); });
 
@@ -274,11 +285,17 @@ paymentForm.addEventListener('submit', async function(event) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(paymentData)
         });
-        if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.error || `Error ${response.status}`); }
+        if (!response.ok) { 
+            const errorData = await response.json();
+            // Mostramos el error específico del backend
+            throw new Error(errorData.error || `Error ${response.status}`); 
+        }
         await fetchAndRenderLoans();
         showSuccessAnimation('¡Pago Registrado!');
         closeModal(paymentModal);
-    } catch (error) { alert(`No se pudo registrar el pago: ${error.message}`); }
+    } catch (error) { 
+        alert(`No se pudo registrar el pago: ${error.message}`); 
+    }
 });
 
 deleteConfirmationForm.addEventListener('submit', function(event) {
@@ -432,7 +449,6 @@ function updateDashboard() {
     document.getElementById('totalClients').textContent = clients.size;
 }
 
-// --- EVENT LISTENER DE LA TABLA (MODIFICADO) ---
 historyTableBody.addEventListener('click', function(event) {
     const target = event.target.closest('button');
     if (!target) return;
@@ -447,15 +463,11 @@ historyTableBody.addEventListener('click', function(event) {
         const loanId = target.getAttribute('data-loan-id');
         const loan = loans.find(l => l.id == loanId);
         if (loan) {
-            // Se calcula el saldo restante
             const remainingBalance = loan.total_due - loan.total_paid;
-            const paymentAmountInput = document.getElementById('payment_amount');
             
-            // Se establece el valor máximo y el valor por defecto del input
             paymentAmountInput.max = remainingBalance > 0 ? remainingBalance.toFixed(2) : '0.01';
             paymentAmountInput.value = remainingBalance > 0 ? remainingBalance.toFixed(2) : '';
 
-            // Se completan los otros campos de la modal
             paymentModalTitle.textContent = `Registrar Pago para ${loan.apellidos}`;
             paymentLoanIdInput.value = loan.id;
             document.getElementById('payment_date').valueAsDate = new Date();
