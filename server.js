@@ -124,7 +124,9 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
         const loan = loanRows[0];
 
         const [totalPaidRows] = await connection.query('SELECT SUM(payment_amount) as totalPaid FROM payments WHERE loan_id = ?', [loanId]);
-        const totalPaid = totalPaidRows[0].totalPaid || 0;
+        // ===== ¡CORRECCIÓN IMPORTANTE AQUÍ! =====
+        // Nos aseguramos de que `totalPaid` sea un número para evitar errores de concatenación.
+        const totalPaid = parseFloat(totalPaidRows[0].totalPaid || 0);
 
         const monthlyInterestRate = parseFloat(loan.interes) / 100;
         let totalDue;
@@ -148,10 +150,9 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
 
         await connection.query('INSERT INTO payments (loan_id, payment_amount, payment_date) VALUES (?, ?, ?)', [loanId, payment_amount, payment_date]);
 
+        // `totalPaid` ya es un número, por lo que la suma es correcta.
         const newTotalPaid = totalPaid + parseFloat(payment_amount);
 
-        // ===== ¡VERIFICACIÓN CORREGIDA! =====
-        // Se redondea el total adeudado a 2 decimales para una comparación precisa.
         const roundedTotalDue = Math.round(totalDue * 100) / 100;
         if (newTotalPaid >= roundedTotalDue) {
             await connection.query("UPDATE loans SET status = 'Pagado' WHERE id = ?", [loanId]);
