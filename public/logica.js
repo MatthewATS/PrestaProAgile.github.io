@@ -61,7 +61,7 @@ const declaracionContainer = document.getElementById('declaracion-container');
 const declaracionCheckbox = document.getElementById('declaracion_jurada');
 const submitButton = loanForm.querySelector('button[type="submit"]');
 
-// --- NUEVA FUNCIÓN AUXILIAR MEJORADA ---
+// --- FUNCIÓN AUXILIAR ---
 /**
  * Habilita o deshabilita todos los campos del formulario excepto el campo de DNI.
  * @param {boolean} isEnabled - true para habilitar, false para deshabilitar.
@@ -124,68 +124,67 @@ window.addEventListener('click', (event) => {
     if (event.target === detailsModal) closeModal(detailsModal);
 });
 
-// --- LÓGICA DE CONSULTA DE DNI MEJORADA ---
-
-// Se activa mientras el usuario escribe para desbloquear el formulario si corrige el DNI
-dniInput.addEventListener('input', () => {
-    if (dniInput.value.length < 8) {
-        toggleFormFields(true);
-        dniStatus.textContent = '';
-        nombresInput.readOnly = false;
-        apellidosInput.readOnly = false;
-    }
-});
-
-// Se activa cuando el usuario sale del campo, para hacer la validación final
+// --- LÓGICA DE CONSULTA DE DNI (CORREGIDA Y SIMPLIFICADA) ---
 dniInput.addEventListener('blur', async () => {
     const dni = dniInput.value;
 
+    // Caso 1: DNI está vacío o incompleto.
     if (dni.length !== 8) {
-        return; // No hacer nada si el DNI no es válido
-    }
-
-    const hasActiveLoan = loans.some(loan => loan.dni === dni && loan.status === 'Activo');
-    if (hasActiveLoan) {
-        dniStatus.textContent = '⚠️ Este cliente ya tiene un préstamo activo.';
-        dniStatus.style.color = 'orange';
-        toggleFormFields(false); // Deshabilitar todos los campos
+        dniStatus.textContent = '';
+        toggleFormFields(true); // Asegurarse de que el formulario esté habilitado.
+        nombresInput.readOnly = false;
+        apellidosInput.readOnly = false;
         return;
     }
-    
-    // Si no tiene préstamo activo, el formulario ya está habilitado por el evento 'input'
-    // Procedemos a buscar en la API externa
-    dniStatus.textContent = 'Buscando...';
-    dniStatus.style.color = '#667085';
-    nombresInput.readOnly = true;
-    apellidosInput.readOnly = true;
 
-    try {
-        const response = await fetch(`${API_URL}/api/dni/${dni}`);
-        const data = await response.json();
+    // Caso 2: DNI tiene 8 dígitos.
+    const hasActiveLoan = loans.some(loan => loan.dni === dni && loan.status === 'Activo');
 
-        if (response.ok && data.nombres) {
-            nombresInput.value = data.nombres;
-            apellidosInput.value = `${data.apellidoPaterno} ${data.apellidoMaterno}`;
-            dniStatus.textContent = '✅ Cliente encontrado y sin préstamos activos.';
-            dniStatus.style.color = 'var(--success-color)';
-        } else {
-            throw new Error(data.message || 'No se encontraron resultados.');
-        }
-    } catch (error) {
-        console.error("Error al consultar DNI:", error);
-        dniStatus.textContent = `❌ ${error.message}`;
-        dniStatus.style.color = 'red';
+    if (hasActiveLoan) {
+        // Subcaso 2a: Cliente tiene un préstamo activo.
+        dniStatus.textContent = '⚠️ Este cliente ya tiene un préstamo activo.';
+        dniStatus.style.color = 'orange';
+        toggleFormFields(false); // **BLOQUEAR FORMULARIO**
+        // Limpiar campos para evitar confusiones
         nombresInput.value = '';
         apellidosInput.value = '';
-    } finally {
-        if (!nombresInput.value) {
-            nombresInput.readOnly = false;
-            apellidosInput.readOnly = false;
-            nombresInput.focus();
+        montoInput.value = '';
+        return;
+    } else {
+        // Subcaso 2b: Cliente NO tiene préstamo activo.
+        toggleFormFields(true); // Asegurarse de que el formulario esté habilitado.
+        dniStatus.textContent = 'Buscando...';
+        dniStatus.style.color = '#667085';
+        nombresInput.readOnly = true;
+        apellidosInput.readOnly = true;
+        
+        try {
+            const response = await fetch(`${API_URL}/api/dni/${dni}`);
+            const data = await response.json();
+
+            if (response.ok && data.nombres) {
+                nombresInput.value = data.nombres;
+                apellidosInput.value = `${data.apellidoPaterno} ${data.apellidoMaterno}`;
+                dniStatus.textContent = '✅ Cliente encontrado y sin préstamos activos.';
+                dniStatus.style.color = 'var(--success-color)';
+            } else {
+                throw new Error(data.message || 'No se encontraron resultados.');
+            }
+        } catch (error) {
+            console.error("Error al consultar DNI:", error);
+            dniStatus.textContent = `❌ ${error.message}`;
+            dniStatus.style.color = 'red';
+            nombresInput.value = '';
+            apellidosInput.value = '';
+        } finally {
+            if (!nombresInput.value) {
+                nombresInput.readOnly = false;
+                apellidosInput.readOnly = false;
+                nombresInput.focus();
+            }
         }
     }
 });
-
 
 // --- LÓGICA DE ENVÍO DE FORMULARIO ---
 loanForm.addEventListener('submit', async function(event) {
