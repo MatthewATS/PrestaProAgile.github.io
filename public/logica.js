@@ -121,7 +121,7 @@ const closeModal = (modal) => {
 addLoanBtn.addEventListener('click', () => openModal(loanModal));
 closeModalBtn.addEventListener('click', () => closeModal(loanModal));
 closeDetailsModalBtn.addEventListener('click', () => closeModal(detailsModal));
-printScheduleBtn.addEventListener('click', () => window.print());
+printScheduleBtn.addEventListener('click', printSchedule); // Llama a la nueva función
 shareBtn.addEventListener('click', compartirPDF);
 
 window.addEventListener('click', (event) => {
@@ -246,7 +246,6 @@ function renderHistoryTable() {
     }
     loans.forEach(loan => {
         const row = document.createElement('tr');
-        // Se añade una etiqueta (PEP) si el cliente está marcado
         row.innerHTML = `
             <td>${loan.nombres} ${loan.apellidos} ${loan.is_pep ? '<strong style="color: #D92D20;">(PEP)</strong>' : ''}</td>
             <td>S/ ${parseFloat(loan.monto).toFixed(2)}</td>
@@ -259,7 +258,6 @@ function renderHistoryTable() {
     });
 }
 
-// CORREGIDA
 function populateDetailsModal(loan) {
     currentLoanForDetails = loan;
     const { monthlyPayment, schedule } = calculateSchedule(loan);
@@ -290,7 +288,6 @@ function populateDetailsModal(loan) {
     }
 
     const scheduleTableBody = document.getElementById('scheduleTableBody');
-    // Se restaura el contenido de la tabla que faltaba
     scheduleTableBody.innerHTML = schedule.map(item => `
         <tr><td>${item.cuota}</td><td>${item.fecha}</td><td>S/ ${item.monto}</td></tr>`).join('');
     
@@ -336,7 +333,67 @@ function calculateSchedule(loan) {
     return { monthlyPayment, schedule };
 }
 
-// CORREGIDA
+// --- NUEVA FUNCIÓN DE IMPRESIÓN A PRUEBA DE ERRORES ---
+function printSchedule() {
+    const printableContent = document.querySelector('#detailsModal .printable').innerHTML;
+    
+    // 1. Crear un iframe oculto
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    // 2. Escribir el contenido y los estilos en el iframe
+    const iframeDoc = iframe.contentWindow.document;
+    iframeDoc.open();
+    iframeDoc.write(`
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+            <title>Cronograma de Pagos</title>
+            <link rel="stylesheet" href="diseño.css">
+            <style>
+                /* Estilos específicos para asegurar la paginación correcta */
+                @media print {
+                    body { 
+                        margin: 25px; 
+                        font-family: 'Poppins', sans-serif;
+                    }
+                    .summary-info, .declaracion-title {
+                        page-break-after: avoid;
+                    }
+                    .table-container {
+                        page-break-before: auto;
+                    }
+                    table {
+                        width: 100%;
+                    }
+                    tr {
+                        page-break-inside: avoid;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            ${printableContent}
+        </body>
+        </html>
+    `);
+    iframeDoc.close();
+
+    // 3. Esperar a que el contenido (especialmente los estilos) se cargue y luego imprimir
+    iframe.onload = function() {
+        setTimeout(function() {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+            // 4. Eliminar el iframe después de un tiempo
+            setTimeout(() => document.body.removeChild(iframe), 1000);
+        }, 250); 
+    };
+}
+
 function compartirPDF() {
     if (!currentLoanForDetails) { alert("No hay información del préstamo para compartir."); return; }
     if (typeof window.jspdf === 'undefined') { alert("Error: La librería jsPDF no se cargó correctamente."); return; }
@@ -412,3 +469,4 @@ function descargarPDF(doc, fileName) {
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
+
