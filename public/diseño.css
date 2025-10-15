@@ -297,7 +297,12 @@ input {
     margin-top: 10px;
 }
 
-/* --- ¡NUEVA CLASE DE BOTÓN! --- */
+/* --- ESTILO DE FOCO AÑADIDO --- */
+.submit-button:focus {
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(0, 93, 255, 0.3); /* Resplandor azul */
+}
+
 .submit-button-danger {
     width: 100%;
     padding: 12px;
@@ -314,6 +319,12 @@ input {
 
 .submit-button-danger:hover {
     background-color: #B42318;
+}
+
+/* --- ESTILO DE FOCO AÑADIDO PARA EL BOTÓN DE PELIGRO --- */
+.submit-button-danger:focus {
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(217, 45, 32, 0.3); /* Resplandor rojo */
 }
 
 .summary-info {
@@ -381,7 +392,6 @@ input {
     margin: 2px 0;
 }
 
-/* ======== ESTILOS PARA LA ANIMACIÓN DE ÉXITO ======== */
 .animation-container {
     position: fixed;
     top: 0;
@@ -459,7 +469,6 @@ input {
         box-shadow: inset 0px 0px 0px 50px var(--white);
     }
 }
-/* ==================================================== */
 
 .status-paid {
     background-color: #ECFDF3;
