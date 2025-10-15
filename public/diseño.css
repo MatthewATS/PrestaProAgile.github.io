@@ -172,6 +172,11 @@ body {
     backdrop-filter: blur(5px);
 }
 
+.modal .table-container {
+    max-height: none;
+    overflow-y: visible;
+}
+
 .modal-content {
     background: var(--white);
     border-radius: 16px;
@@ -344,3 +349,4 @@ input {
 .declaracion-signature p {
     margin: 2px 0;
 }
+
