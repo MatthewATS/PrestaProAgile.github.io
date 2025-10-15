@@ -15,12 +15,21 @@ const detailsModal = document.getElementById('detailsModal');
 const closeDetailsModalBtn = document.getElementById('closeDetailsModalBtn');
 const printScheduleBtn = document.getElementById('printScheduleBtn');
 const shareBtn = document.getElementById('shareBtn');
-// --- NUEVOS ELEMENTOS DEL DOM PARA PAGOS ---
+// Elementos del DOM para Pagos
 const paymentModal = document.getElementById('paymentModal');
 const closePaymentModalBtn = document.getElementById('closePaymentModalBtn');
 const paymentForm = document.getElementById('paymentForm');
 const paymentModalTitle = document.getElementById('paymentModalTitle');
 const paymentLoanIdInput = document.getElementById('paymentLoanId');
+// --- ¡NUEVOS ELEMENTOS DEL DOM PARA CONFIRMACIÓN DE ELIMINACIÓN! ---
+const deleteConfirmationModal = document.getElementById('deleteConfirmationModal');
+const closeDeleteModalBtn = document.getElementById('closeDeleteModalBtn');
+const deleteConfirmationForm = document.getElementById('deleteConfirmationForm');
+const deleteLoanIdInput = document.getElementById('deleteLoanId');
+const deleteConfirmationTextInput = document.getElementById('delete_confirmation_text');
+const deleteModalTitle = document.getElementById('deleteModalTitle');
+const deleteErrorMessage = document.getElementById('delete-error-message');
+
 
 // --- CARGA DINÁMICA DEL FORMULARIO DE PRÉSTAMO ---
 loanForm.innerHTML = `
@@ -148,19 +157,28 @@ const closeModal = (modal) => {
     }
     if (modal.id === 'detailsModal') currentLoanForDetails = null;
     if (modal.id === 'paymentModal') paymentForm.reset();
+    // --- ¡AÑADIDO! Limpiar el formulario de eliminación al cerrar ---
+    if (modal.id === 'deleteConfirmationModal') {
+        deleteConfirmationForm.reset();
+        deleteErrorMessage.style.display = 'none';
+    }
 };
 
 addLoanBtn.addEventListener('click', () => openModal(loanModal));
 closeModalBtn.addEventListener('click', () => closeModal(loanModal));
 closeDetailsModalBtn.addEventListener('click', () => closeModal(detailsModal));
-closePaymentModalBtn.addEventListener('click', () => closeModal(paymentModal)); // Cerrar modal de pago
+closePaymentModalBtn.addEventListener('click', () => closeModal(paymentModal));
+// --- ¡AÑADIDO! Evento para el botón de cerrar de la nueva modal ---
+closeDeleteModalBtn.addEventListener('click', () => closeModal(deleteConfirmationModal));
 printScheduleBtn.addEventListener('click', printSchedule);
 shareBtn.addEventListener('click', compartirPDF);
 
 window.addEventListener('click', (event) => {
     if (event.target === loanModal) closeModal(loanModal);
     if (event.target === detailsModal) closeModal(detailsModal);
-    if (event.target === paymentModal) closeModal(paymentModal); // Cerrar modal de pago
+    if (event.target === paymentModal) closeModal(paymentModal);
+    // --- ¡AÑADIDO! Cerrar la nueva modal si se hace clic afuera ---
+    if (event.target === deleteConfirmationModal) closeModal(deleteConfirmationModal);
 });
 
 function toggleFormLock(locked) {
@@ -268,10 +286,29 @@ paymentForm.addEventListener('submit', async function(event) {
     } catch (error) { alert(`No se pudo registrar el pago: ${error.message}`); }
 });
 
+// --- ¡NUEVO LISTENER PARA EL FORMULARIO DE CONFIRMACIÓN DE ELIMINACIÓN! ---
+deleteConfirmationForm.addEventListener('submit', function(event) {
+    event.preventDefault();
+    const loanId = deleteLoanIdInput.value;
+    const confirmationText = 'ELIMINAR';
+
+    if (deleteConfirmationTextInput.value.trim() === confirmationText) {
+        deleteErrorMessage.style.display = 'none';
+        deleteLoan(loanId);
+        closeModal(deleteConfirmationModal);
+    } else {
+        deleteErrorMessage.style.display = 'block';
+        deleteConfirmationTextInput.focus();
+    }
+});
+
 function showSuccessAnimation(message) {
     document.getElementById('successText').textContent = message;
     document.getElementById('successAnimation').style.display = 'flex';
-    setTimeout(() => { document.getElementById('successAnimation').style.display = 'none'; closeModal(loanModal); }, 2500);
+    setTimeout(() => {
+        document.getElementById('successAnimation').style.display = 'none';
+        closeModal(loanModal);
+    }, 2500);
 }
 
 async function fetchAndRenderLoans() {
@@ -286,11 +323,6 @@ async function fetchAndRenderLoans() {
     }
 }
 
-// =================================================================================
-// ===== SECCIÓN CORREGIDA 1: RENDERIZADO DE LA TABLA ==============================
-// =================================================================================
-// Me aseguro de que el botón Eliminar esté aquí. Si no lo veías, era por un
-// problema de caché del navegador. Este código es el correcto.
 function renderHistoryTable() {
     historyTableBody.innerHTML = '';
     if (loans.length === 0) { 
@@ -330,10 +362,6 @@ function renderHistoryTable() {
     });
 }
 
-// =================================================================================
-// ===== SECCIÓN CORREGIDA 2: VENTANA DE DETALLES ==================================
-// =================================================================================
-// He reemplazado el "..." con el contenido HTML completo de la declaración jurada.
 function populateDetailsModal(loan) {
     currentLoanForDetails = loan;
     const { payments, schedule } = calculateSchedule(loan);
@@ -410,6 +438,7 @@ function updateDashboard() {
     document.getElementById('totalClients').textContent = clients.size;
 }
 
+// --- EVENT LISTENER DE LA TABLA (MODIFICADO) ---
 historyTableBody.addEventListener('click', function(event) {
     const target = event.target.closest('button');
     if (!target) return;
@@ -431,20 +460,14 @@ historyTableBody.addEventListener('click', function(event) {
         }
     }
 
+    // --- ¡LÓGICA ACTUALIZADA! AHORA ABRE LA VENTANA MODAL ---
     if (target.classList.contains('delete-loan-btn')) {
         const loanId = target.getAttribute('data-loan-id');
         const loan = loans.find(l => l.id == loanId);
         if (loan) {
-            const confirmationText = 'ELIMINAR';
-            const userInput = prompt(
-                `Esta acción es irreversible.\nPara confirmar la eliminación del préstamo de ${loan.nombres} ${loan.apellidos}, escribe la siguiente palabra: ${confirmationText}`
-            );
-
-            if (userInput === confirmationText) {
-                deleteLoan(loanId);
-            } else if (userInput !== null) {
-                alert('La palabra no coincide. La eliminación ha sido cancelada.');
-            }
+            deleteLoanIdInput.value = loan.id;
+            deleteModalTitle.textContent = `Eliminar Préstamo de ${loan.apellidos}`;
+            openModal(deleteConfirmationModal);
         }
     }
 });
@@ -459,8 +482,12 @@ async function deleteLoan(loanId) {
             const errorData = await response.json();
             throw new Error(errorData.error || 'Error en el servidor');
         }
+        
+        // Usamos la animación de éxito para notificar
+        document.getElementById('successText').textContent = "¡Préstamo Eliminado!";
+        document.getElementById('successAnimation').style.display = 'flex';
+        setTimeout(() => { document.getElementById('successAnimation').style.display = 'none'; }, 2500);
 
-        alert('¡Préstamo eliminado con éxito!');
         fetchAndRenderLoans();
     } catch (error) {
         alert(`No se pudo eliminar el préstamo: ${error.message}`);
