@@ -334,11 +334,15 @@ function calculateSchedule(loan) {
 }
 
 // --- FUNCIÓN DE IMPRESIÓN DEFINITIVA (CORREGIDA) ---
+// --- FUNCIÓN DE IMPRESIÓN CORREGIDA ---
 function printSchedule() {
     const printableContent = document.querySelector('#detailsModal .printable').innerHTML;
     
     const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
     document.body.appendChild(iframe);
 
     const iframeDoc = iframe.contentWindow.document;
@@ -347,53 +351,135 @@ function printSchedule() {
         <!DOCTYPE html>
         <html lang="es">
         <head>
+            <meta charset="UTF-8">
             <title>Cronograma de Pagos</title>
-            <link rel="stylesheet" href="diseño.css">
             <link rel="preconnect" href="https://fonts.googleapis.com">
             <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
             <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
             <style>
-                /* --- Estilos Definitivos para Impresión Limpia --- */
-
-                /* 1. Reseteo Agresivo: Se eliminan TODOS los márgenes y paddings del documento.
-                   Esto es la clave para evitar que el navegador genere una página en blanco. */
                 @page {
-                    margin: 0;
-                }
-                html, body {
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    font-family: 'Poppins', sans-serif;
-                }
-
-                /* 2. Contenedor Controlado: Creamos márgenes "virtuales" usando padding
-                   dentro de un contenedor principal. Esto es más estable que usar 'margin' en el body. */
-                .print-container {
-                    padding: 20mm;
-                }
-
-                /* Se oculta el botón 'x' que se copia accidentalmente del modal */
-                .close-button {
-                    display: none;
+                    margin: 15mm;
+                    size: A4;
                 }
                 
-                /* 3. Mejoras de Paginación para la tabla */
+                * {
+                    box-sizing: border-box;
+                }
+                
+                html, body {
+                    margin: 0;
+                    padding: 0;
+                    font-family: 'Poppins', sans-serif;
+                    font-size: 12px;
+                    line-height: 1.4;
+                    color: #344054;
+                }
+
+                .modal-header {
+                    padding: 0 0 15px 0;
+                    border-bottom: 2px solid #D0D5DD;
+                    margin-bottom: 20px;
+                }
+
+                .modal-header h2 {
+                    font-size: 18px;
+                    color: #0D244F;
+                    margin: 0;
+                }
+
+                .close-button {
+                    display: none !important;
+                }
+
+                .summary-info {
+                    padding: 15px;
+                    background-color: #E6F0FF;
+                    border-radius: 8px;
+                    margin-bottom: 20px;
+                    border: 1px solid #005DFF;
+                    page-break-inside: avoid;
+                }
+
+                .summary-info p {
+                    margin: 5px 0;
+                    font-size: 11px;
+                }
+
+                #declaracionJuradaSection {
+                    margin: 20px 0;
+                    padding: 15px;
+                    border: 1px solid #D0D5DD;
+                    border-radius: 8px;
+                    page-break-inside: avoid;
+                }
+
+                .declaracion-title {
+                    text-align: center;
+                    font-size: 14px;
+                    font-weight: bold;
+                    text-transform: uppercase;
+                    margin-bottom: 15px;
+                    color: #0D244F;
+                }
+
+                .declaracion-body {
+                    font-size: 10px;
+                    line-height: 1.6;
+                    text-align: justify;
+                    margin-bottom: 25px;
+                }
+
+                .declaracion-signature {
+                    margin-top: 30px;
+                    text-align: center;
+                    font-size: 10px;
+                }
+
+                .declaracion-signature p {
+                    margin: 3px 0;
+                }
+
+                .table-container {
+                    width: 100%;
+                    overflow: visible;
+                }
+
                 table {
                     width: 100%;
                     border-collapse: collapse;
+                    margin-top: 10px;
                 }
+
                 thead {
-                    display: table-header-group; /* Repite el encabezado de la tabla en cada nueva página */
+                    display: table-header-group;
                 }
-                tr, .summary-info {
-                    page-break-inside: avoid !important; /* Evita que estos elementos se corten */
+
+                th, td {
+                    padding: 10px;
+                    text-align: left;
+                    border: 1px solid #D0D5DD;
+                    font-size: 11px;
+                }
+
+                th {
+                    background-color: #F9FAFB;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    color: #667085;
+                    font-size: 10px;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                }
+
+                tbody tr:nth-child(even) {
+                    background-color: #FAFBFC;
                 }
             </style>
         </head>
         <body>
-            <div class="print-container">
-                ${printableContent}
-            </div>
+            ${printableContent}
         </body>
         </html>
     `);
@@ -403,8 +489,10 @@ function printSchedule() {
         setTimeout(function() {
             iframe.contentWindow.focus();
             iframe.contentWindow.print();
-            document.body.removeChild(iframe);
-        }, 350); // Un poco más de tiempo para asegurar la carga completa de estilos
+            setTimeout(() => {
+                document.body.removeChild(iframe);
+            }, 100);
+        }, 500);
     };
 }
 
@@ -486,4 +574,5 @@ document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
+
 
