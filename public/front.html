@@ -4,24 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PrestaPro | Sistema de Préstamos</title>
-
     <link rel="stylesheet" href="diseño.css">
-
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-    <!-- Librerías para PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
-
 <header class="main-header">
     <h1>PrestaPro 💰</h1>
     <button class="button button-primary" id="addLoanBtn">+ Añadir Nuevo Préstamo</button>
 </header>
-
 <main class="container">
     <div class="dashboard">
         <div class="stat-card"><h3>Monto Total Prestado</h3><div class="value" id="totalLoaned">S/ 0.00</div></div>
@@ -40,23 +34,25 @@
         </div>
     </div>
 </main>
-
 <div id="loanModal" class="modal">
     <div class="modal-content">
         <div class="modal-header"><h2>Registrar Nuevo Préstamo</h2><button class="close-button" id="closeModalBtn">&times;</button></div>
         <div class="modal-body"><form id="loanForm"></form></div>
     </div>
 </div>
-
 <div id="detailsModal" class="modal">
     <div class="modal-content">
         <div class="printable">
             <div class="modal-header">
-                <h2>🗓️ Cronograma de Pagos</h2>
+                <h2>🗓️ Cronograma y Detalles</h2>
                 <button class="close-button" id="closeDetailsModalBtn">&times;</button>
             </div>
             <div class="modal-body">
                 <div id="scheduleSummary" class="summary-info"></div>
+
+                <div id="declaracionJuradaSection" style="display: none; margin-bottom: 25px; border: 1px solid #D0D5DD; padding: 20px; border-radius: 8px;">
+                    </div>
+
                 <div class="table-container" style="max-height: none; overflow-y: visible;">
                     <table id="scheduleTable" class="main-table">
                         <thead><tr><th>Cuota</th><th>Fecha de Vencimiento</th><th>Monto</th></tr></thead>
@@ -71,27 +67,6 @@
         </div>
     </div>
 </div>
-
-<script src="logica.js?version=21"></script>
+<script src="logica.js?version=22"></script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
