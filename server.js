@@ -7,11 +7,17 @@ const PORT = process.env.PORT || 3000;
 
 // --- Middlewares ---
 
-// CAMBIO 1: CORS más flexible para aceptar variaciones en la URL de origen
-const allowedOrigins = ['https://matthewhs.github.io', 'https://matthewhs.github.io/'];
+// CAMBIO: Corregido el nombre de usuario de 'matthews' a 'matthewhs'
+const allowedOrigins = ['https://matthewhs.github.io'];
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+    // Permitir solicitudes sin origen (como las de Postman o apps móviles)
+    if (!origin) return callback(null, true);
+    
+    // Si el origen termina con un slash '/', quitarlo para la comparación
+    const normalizedOrigin = origin.endsWith('/') ? origin.slice(0, -1) : origin;
+
+    if (allowedOrigins.indexOf(normalizedOrigin) !== -1) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -19,6 +25,7 @@ const corsOptions = {
   },
   optionsSuccessStatus: 200
 };
+
 app.use(cors(corsOptions));
 app.use(express.json());
 
@@ -42,8 +49,6 @@ async function startServer() {
         const [loans] = await pool.query(sqlQuery);
         res.json(loans);
       } catch (err) {
-        // CAMBIO 2: Registro de error más detallado
-        // Esto te dirá exactamente por qué falló la consulta SQL en los logs de Railway.
         console.error("❌ ERROR en la consulta SQL [GET /api/loans]:", err.message);
         res.status(500).json({ error: 'Error interno del servidor al obtener los préstamos.', details: err.message });
       }
