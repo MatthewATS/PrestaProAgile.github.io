@@ -14,7 +14,7 @@ const pool = mysql.createPool(process.env.DATABASE_URL);
 
 // --- RUTAS DE LA API ---
 
-// GET /api/loans (MODIFICADO)
+// GET /api/loans
 app.get('/api/loans', async (req, res) => {
   try {
     const query = `
@@ -34,7 +34,7 @@ app.get('/api/loans', async (req, res) => {
 });
 
 
-// POST /api/loans (MODIFICADO)
+// POST /api/loans (CORREGIDO Y CON MEJOR MANEJO DE ERRORES)
 app.post('/api/loans', async (req, res) => {
   const connection = await pool.getConnection();
   try {
@@ -43,7 +43,7 @@ app.post('/api/loans', async (req, res) => {
     const { client, monto, interes, fecha, plazo, status, declaracion_jurada = false } = req.body;
     const { dni, nombres, apellidos, is_pep = false } = client;
 
-    // Validación de préstamo activo (sin cambios)
+    // Validación de préstamo activo
     const searchActiveLoanQuery = `
       SELECT l.id FROM loans l JOIN clients c ON l.client_id = c.id
       WHERE c.dni = ? AND l.status = 'Activo' LIMIT 1;`;
@@ -54,16 +54,18 @@ app.post('/api/loans', async (req, res) => {
       return res.status(409).json({ error: 'El cliente ya tiene un préstamo activo.' });
     }
 
-    // Lógica para crear o actualizar cliente
+    // Lógica MEJORADA para crear o actualizar cliente
     let [existingClient] = await connection.query('SELECT id FROM clients WHERE dni = ?', [dni]);
     let clientId;
 
     if (existingClient.length > 0) {
-      // Si el cliente existe, actualizamos su estado PEP
       clientId = existingClient[0].id;
-      await connection.query('UPDATE clients SET is_pep = ? WHERE id = ?', [is_pep, clientId]);
+      // Ahora también actualiza nombres y apellidos, por si la API de DNI los corrigió
+      await connection.query(
+        'UPDATE clients SET nombres = ?, apellidos = ?, is_pep = ? WHERE id = ?', 
+        [nombres, apellidos, is_pep, clientId]
+      );
     } else {
-      // Si el cliente es nuevo, lo insertamos con su estado PEP
       const [result] = await connection.query(
         'INSERT INTO clients (dni, nombres, apellidos, is_pep) VALUES (?, ?, ?, ?)',
         [dni, nombres, apellidos, is_pep]
@@ -83,14 +85,62 @@ app.post('/api/loans', async (req, res) => {
 
   } catch (err) {
     await connection.rollback();
-    console.error("ERROR en POST /api/loans:", err);
-    res.status(500).json({ error: 'Error al guardar el préstamo' });
+    
+    // MEJORA IMPORTANTE: Log detallado del error de la base de datos
+    console.error("----------- ERROR DE BASE DE DATOS -----------");
+    console.error(`Ocurrió un error al intentar guardar un préstamo para el DNI: ${req.body.client.dni}`);
+    console.error("Mensaje del error de MySQL:", err.message); // <-- ESTO TE DIRÁ EL PROBLEMA EXACTO
+    console.error("--------------------------------------------");
+    
+    res.status(500).json({ error: 'Error interno al guardar en la base de datos.' });
   } finally {
     connection.release();
   }
 });
 
-// ... (El resto del archivo server.js no necesita cambios) ...
-app.get('/api/dni/:dni', async (req, res) => { /* ... sin cambios ... */ });
-const startServer = async () => { /* ... sin cambios ... */ };
+
+// RUTA PROXY PARA DNI
+app.get('/api/dni/:dni', async (req, res) => {
+  const { dni } = req.params;
+  const token = process.env.DNI_API_TOKEN;
+
+  if (!token) {
+    return res.status(500).json({ message: 'El token de la API de DNI no está configurado en el servidor.' });
+  }
+
+  try {
+    const apiResponse = await fetch(`https://dniruc.apisperu.com/api/v1/dni/${dni}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    const data = await apiResponse.json();
+    res.status(apiResponse.status).json(data);
+  } catch (error) {
+    console.error("Error en el proxy de DNI:", error);
+    res.status(500).json({ message: 'Error interno al consultar la API de DNI.' });
+  }
+});
+
+
+// FUNCIÓN PARA INICIAR EL SERVIDOR
+const startServer = async () => {
+  try {
+    const connection = await pool.getConnection();
+    console.log('✅ Conexión a la base de datos establecida con éxito.');
+    connection.release();
+
+    app.listen(PORT, () => {
+      console.log(`🚀 Servidor escuchando en el puerto ${PORT}`);
+    });
+
+  } catch (err) {
+    console.error('❌ No se pudo conectar a la base de datos. Verifica la variable de entorno DATABASE_URL.');
+    console.error(err.message);
+    process.exit(1);
+  }
+};
+
 startServer();
