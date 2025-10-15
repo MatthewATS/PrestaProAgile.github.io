@@ -55,6 +55,7 @@ loanForm.innerHTML = `
             <div id="hibrido_options" style="display: none;">
                 <label for="meses_solo_interes">N° de meses de "solo interés"</label>
                 <input type="number" id="meses_solo_interes" placeholder="Ej: 3" min="1">
+                <small id="hibrido-info" style="margin-top: 8px; display: block; color: #667085; font-size: 12px;"></small>
             </div>
         </div>
 
@@ -82,6 +83,27 @@ const submitButton = loanForm.querySelector('button[type="submit"]');
 const hibridoCheck = document.getElementById('hibrido_check');
 const hibridoOptions = document.getElementById('hibrido_options');
 const mesesSoloInteresInput = document.getElementById('meses_solo_interes');
+const interesInput = document.getElementById('interes'); // Referencia añadida
+
+// --- FUNCIÓN PARA ACTUALIZAR INFO DINÁMICA DE "SOLO INTERÉS" ---
+function updateHibridoInfo() {
+    const infoEl = document.getElementById('hibrido-info');
+    if (!hibridoCheck.checked) {
+        infoEl.textContent = '';
+        return;
+    }
+
+    const monto = parseFloat(montoInput.value) || 0;
+    const interes = parseFloat(interesInput.value) || 0;
+    const meses = parseInt(mesesSoloInteresInput.value) || 0;
+
+    if (monto > 0 && interes > 0 && meses > 0) {
+        const pagoSoloInteres = monto * (interes / 100);
+        infoEl.textContent = `Durante los primeros ${meses} mes(es), el cliente pagará una cuota mensual de S/ ${pagoSoloInteres.toFixed(2)} (solo intereses). El capital se amortizará después.`;
+    } else {
+        infoEl.textContent = '';
+    }
+}
 
 // --- LÓGICA PARA MOSTRAR/OCULTAR OPCIONES HÍBRIDAS ---
 hibridoCheck.addEventListener('change', () => {
@@ -95,7 +117,9 @@ hibridoCheck.addEventListener('change', () => {
         mesesSoloInteresInput.required = false;
         mesesSoloInteresInput.value = '';
     }
+    updateHibridoInfo(); // Actualiza la info al cambiar el check
 });
+
 document.getElementById('plazo').addEventListener('input', () => {
     const plazo = parseInt(document.getElementById('plazo').value, 10) || 1;
     mesesSoloInteresInput.max = plazo - 1;
@@ -103,7 +127,7 @@ document.getElementById('plazo').addEventListener('input', () => {
 
 // --- FUNCIÓN AUXILIAR ---
 function toggleFormFields(isEnabled) {
-    const fieldsToToggle = [nombresInput, apellidosInput, montoInput, document.getElementById('fecha'), document.getElementById('interes'), document.getElementById('plazo'), isPepCheckbox, declaracionCheckbox, submitButton, hibridoCheck, mesesSoloInteresInput];
+    const fieldsToToggle = [nombresInput, apellidosInput, montoInput, document.getElementById('fecha'), interesInput, document.getElementById('plazo'), isPepCheckbox, declaracionCheckbox, submitButton, hibridoCheck, mesesSoloInteresInput];
     fieldsToToggle.forEach(field => { if (field) field.disabled = !isEnabled; });
 }
 
@@ -130,8 +154,15 @@ function updateDeclaracionVisibility() {
     }
 }
 
-montoInput.addEventListener('input', updateDeclaracionVisibility);
+// --- EVENT LISTENERS PARA ACTUALIZACIONES DINÁMICAS ---
+montoInput.addEventListener('input', () => {
+    updateDeclaracionVisibility();
+    updateHibridoInfo();
+});
 isPepCheckbox.addEventListener('change', updateDeclaracionVisibility);
+interesInput.addEventListener('input', updateHibridoInfo);
+mesesSoloInteresInput.addEventListener('input', updateHibridoInfo);
+
 
 // --- MANEJO DE MODALES ---
 const openModal = (modal) => modal.style.display = 'flex';
@@ -143,6 +174,7 @@ const closeModal = (modal) => {
         apellidosInput.readOnly = false;
         dniStatus.textContent = '';
         hibridoOptions.style.display = 'none';
+        document.getElementById('hibrido-info').textContent = ''; // Limpia la info al cerrar
         updateDeclaracionVisibility();
         toggleFormFields(true);
     }
@@ -151,7 +183,7 @@ const closeModal = (modal) => {
     }
 };
 
-// --- EVENT LISTENERS ---
+// --- EVENT LISTENERS GENERALES ---
 addLoanBtn.addEventListener('click', () => openModal(loanModal));
 closeModalBtn.addEventListener('click', () => closeModal(loanModal));
 closeDetailsModalBtn.addEventListener('click', () => closeModal(detailsModal));
@@ -234,7 +266,7 @@ loanForm.addEventListener('submit', async function(event) {
             is_pep: isPepCheckbox.checked
         },
         monto: parseFloat(montoInput.value),
-        interes: parseFloat(document.getElementById('interes').value),
+        interes: parseFloat(interesInput.value),
         fecha: document.getElementById('fecha').value,
         plazo: parseInt(document.getElementById('plazo').value),
         status: 'Activo',
