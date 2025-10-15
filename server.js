@@ -7,20 +7,21 @@ const PORT = process.env.PORT || 3000;
 
 // --- Middlewares ---
 
-// CAMBIO: Corregido el nombre de usuario de 'matthews' a 'matthewhs'
+// Configuración final y correcta de CORS
 const allowedOrigins = ['https://matthewhs.github.io'];
 const corsOptions = {
   origin: function (origin, callback) {
-    // Permitir solicitudes sin origen (como las de Postman o apps móviles)
+    // Permitir solicitudes sin origen (como Postman, apps móviles, etc.)
     if (!origin) return callback(null, true);
     
-    // Si el origen termina con un slash '/', quitarlo para la comparación
+    // Normalizar el origen quitando el slash final si existe
     const normalizedOrigin = origin.endsWith('/') ? origin.slice(0, -1) : origin;
 
     if (allowedOrigins.indexOf(normalizedOrigin) !== -1) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      // Si el origen no está permitido, rechazar la solicitud
+      callback(new Error(`El origen ${origin} no está permitido por CORS.`));
     }
   },
   optionsSuccessStatus: 200
@@ -29,17 +30,19 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
-
 let pool;
 
+// Función para iniciar la aplicación
 async function startServer() {
   try {
     if (!process.env.DATABASE_URL) {
       throw new Error('La variable de entorno DATABASE_URL no está definida.');
     }
     pool = mysql.createPool(process.env.DATABASE_URL);
-    await pool.getConnection();
+    // Realizar una conexión de prueba para validar las credenciales
+    const connection = await pool.getConnection();
     console.log('✅ Conexión a la base de datos exitosa.');
+    connection.release(); // Liberar la conexión de prueba
 
     // --- RUTAS DE LA API ---
 
@@ -86,4 +89,5 @@ async function startServer() {
   }
 }
 
+// Iniciar la aplicación
 startServer();
