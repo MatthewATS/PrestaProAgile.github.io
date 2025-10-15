@@ -172,11 +172,6 @@ body {
     backdrop-filter: blur(5px);
 }
 
-.modal .table-container {
-    max-height: none;
-    overflow-y: visible;
-}
-
 .modal-content {
     background: var(--white);
     border-radius: 16px;
@@ -303,55 +298,23 @@ input {
     min-height: 0;
 }
 
-/* Pega este bloque completo al final de tu archivo diseño.css, reemplazando el @media print anterior */
-
 @media print {
-    /* Oculta todo en la página por defecto */
-    body * {
-        visibility: hidden;
-    }
-
-    /* Hace visible solo la sección imprimible y sus contenidos */
-    .printable, .printable * {
-        visibility: visible;
-    }
-
-    /* --- REGLAS AGRESIVAS PARA RESETEAR EL MODAL --- */
-    /* Resetea la posición y el tamaño del modal para que se comporte como un documento normal */
-    .modal, .printable {
-        position: static !important;
-        left: auto !important;
-        top: auto !important;
-        width: 100% !important;
-        height: auto !important;
-        overflow: visible !important;
-        display: block !important;
-    }
-
-    /* Elimina sombras, bordes y fondos del contenido del modal */
-    .modal-content {
-        box-shadow: none !important;
-        border: none !important;
-        padding: 0 !important;
-        margin: 0 !important;
-    }
-    
-    .modal-body {
-        padding: 0 !important;
-        margin: 0 !important;
-    }
-
-    /* Oculta los botones que no deben aparecer en el papel */
-    .main-header, .dashboard, .card-header, .modal-footer, #addLoanBtn, .view-details-btn, #closeDetailsModalBtn, .close-button {
-        display: none !important;
-    }
-
-    /* Asegura que el título del cronograma sí se vea */
-    .modal-header h2 {
-        visibility: visible;
+    body * { visibility: hidden; }
+    .printable, .printable * { visibility: visible; }
+    .printable {
+        position: absolute;
+        left: 0;
+        top: 0;
         width: 100%;
-        text-align: center;
-        margin-bottom: 20px;
+        overflow-y: visible;
+    }
+    #detailsModal .modal-content {
+        border: none;
+        box-shadow: none;
+        max-height: none;
+    }
+    #detailsModal .modal-footer, #detailsModal .close-button {
+        display: none;
     }
 }
 
@@ -381,5 +344,3 @@ input {
 .declaracion-signature p {
     margin: 2px 0;
 }
-
-
