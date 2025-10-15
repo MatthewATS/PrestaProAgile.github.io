@@ -73,7 +73,6 @@ montoInput.addEventListener('input', () => {
     }
 });
 
-
 // --- MANEJO DE MODALES ---
 const openModal = (modal) => modal.style.display = 'flex';
 const closeModal = (modal) => {
@@ -84,7 +83,6 @@ const closeModal = (modal) => {
         apellidosInput.readOnly = false;
         dniStatus.textContent = '';
         dniStatus.style.color = '';
-        // Ocultar el campo de declaración al cerrar
         declaracionContainer.style.display = 'none';
         declaracionCheckbox.required = false;
     }
@@ -149,7 +147,6 @@ dniInput.addEventListener('blur', async () => {
 loanForm.addEventListener('submit', async function(event) {
     event.preventDefault();
     
-    // NUEVO: Se obtiene el valor del checkbox
     const newLoanData = {
         client: {
             dni: dniInput.value,
@@ -161,7 +158,7 @@ loanForm.addEventListener('submit', async function(event) {
         fecha: document.getElementById('fecha').value,
         plazo: parseInt(document.getElementById('plazo').value),
         status: 'Activo',
-        declaracion_jurada: declaracionCheckbox.checked // <-- AÑADIDO
+        declaracion_jurada: declaracionCheckbox.checked
     };
 
     try {
@@ -217,14 +214,39 @@ function renderHistoryTable() {
 function populateDetailsModal(loan) {
     currentLoanForDetails = loan;
     const { monthlyPayment, schedule } = calculateSchedule(loan);
+    const declaracionSection = document.getElementById('declaracionJuradaSection');
+
+    // Resumen del préstamo
     document.getElementById('scheduleSummary').innerHTML = `
         <p><strong>Cliente:</strong> ${loan.nombres} ${loan.apellidos}</p>
         <p><strong>Monto:</strong> S/ ${parseFloat(loan.monto).toFixed(2)} | <strong>Interés:</strong> ${loan.interes}% | <strong>Plazo:</strong> ${loan.plazo} meses</p>
         <p><strong>Cuota Mensual Fija: S/ ${monthlyPayment.toFixed(2)}</strong></p>
     `;
+
+    // Lógica para la declaración jurada
+    if (parseFloat(loan.monto) > VALOR_UIT) {
+        declaracionSection.style.display = 'block';
+        declaracionSection.innerHTML = `
+            <h3 class="declaracion-title">Declaración Jurada de Origen de Fondos</h3>
+            <p class="declaracion-body">
+                Yo, <strong>${loan.nombres} ${loan.apellidos}</strong>, identificado(a) con DNI N° <strong>${loan.dni}</strong>, declaro bajo juramento que los fondos y/o bienes utilizados en la operación de préstamo de <strong>S/ ${parseFloat(loan.monto).toFixed(2)}</strong> otorgado en la fecha ${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}, provienen de actividades lícitas y no están vinculados con el lavado de activos, financiamiento del terrorismo ni cualquier otra actividad ilegal contemplada en la legislación peruana.
+            </p>
+            <div class="declaracion-signature">
+                <p>_________________________</p>
+                <p><strong>${loan.nombres} ${loan.apellidos}</strong></p>
+                <p>DNI: ${loan.dni}</p>
+            </div>
+        `;
+    } else {
+        declaracionSection.style.display = 'none';
+        declaracionSection.innerHTML = '';
+    }
+
+    // Tabla de cronograma
     const scheduleTableBody = document.getElementById('scheduleTableBody');
     scheduleTableBody.innerHTML = schedule.map(item => `
         <tr><td>${item.cuota}</td><td>${item.fecha}</td><td>S/ ${item.monto}</td></tr>`).join('');
+    
     openModal(detailsModal);
 }
 
@@ -275,36 +297,67 @@ function compartirPDF() {
         const { monthlyPayment, schedule } = calculateSchedule(loan);
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
+        let finalY = 0; // Variable para controlar la posición vertical
+
+        // --- ENCABEZADO ---
         doc.setFontSize(22); doc.setTextColor(0, 93, 255); doc.text("PRESTAPRO", 105, 20, { align: 'center' });
-        doc.setFontSize(16); doc.setTextColor(52, 64, 84); doc.text("Cronograma de Pagos", 105, 30, { align: 'center' });
-        doc.setFontSize(12); doc.setTextColor(100, 100, 100); doc.text("DATOS DEL CLIENTE", 14, 45);
+        doc.setFontSize(16); doc.setTextColor(52, 64, 84); doc.text("Detalles del Préstamo", 105, 30, { align: 'center' });
+        
+        // --- DATOS DEL CLIENTE Y PRÉSTAMO ---
+        doc.setFontSize(12); doc.setTextColor(100, 100, 100); doc.text("DATOS GENERALES", 14, 45);
         doc.setFontSize(11); doc.setTextColor(52, 64, 84);
-        doc.text(`Nombre: ${loan.nombres} ${loan.apellidos}`, 14, 52);
-        doc.text(`DNI: ${loan.dni}`, 14, 58);
-        doc.text(`Fecha de Préstamo: ${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}`, 14, 64);
-        doc.setFontSize(12); doc.setTextColor(100, 100, 100); doc.text("DATOS DEL PRÉSTAMO", 14, 75);
-        doc.setFontSize(11); doc.setTextColor(52, 64, 84);
-        doc.text(`Monto Prestado: S/ ${parseFloat(loan.monto).toFixed(2)}`, 14, 82);
-        doc.text(`Interés Mensual: ${loan.interes}%`, 14, 88);
-        doc.text(`Plazo: ${loan.plazo} meses`, 14, 94);
-        doc.text(`Cuota Mensual Fija: S/ ${monthlyPayment.toFixed(2)}`, 14, 100);
+        doc.text(`Cliente: ${loan.nombres} ${loan.apellidos}`, 14, 52);
+        doc.text(`DNI: ${loan.dni}`, 105, 52);
+        doc.text(`Monto Prestado: S/ ${parseFloat(loan.monto).toFixed(2)}`, 14, 58);
+        doc.text(`Fecha de Préstamo: ${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}`, 105, 58);
+        doc.text(`Interés Mensual: ${loan.interes}%`, 14, 64);
+        doc.text(`Plazo: ${loan.plazo} meses`, 105, 64);
+        doc.text(`Cuota Mensual Fija: S/ ${monthlyPayment.toFixed(2)}`, 14, 70);
+
+        finalY = 80;
+
+        // --- DECLARACIÓN JURADA (SI APLICA) ---
+        if (parseFloat(loan.monto) > VALOR_UIT) {
+            doc.setFontSize(14); doc.setTextColor(52, 64, 84); doc.text("Declaración Jurada de Origen de Fondos", 105, finalY, { align: 'center' });
+            finalY += 10;
+            
+            const textoDeclaracion = `Yo, ${loan.nombres} ${loan.apellidos}, identificado(a) con DNI N° ${loan.dni}, declaro bajo juramento que los fondos y/o bienes utilizados en la operación de préstamo de S/ ${parseFloat(loan.monto).toFixed(2)} provienen de actividades lícitas y no están vinculados con el lavado de activos ni cualquier otra actividad ilegal.`;
+            
+            doc.setFontSize(10); doc.setTextColor(100, 100, 100);
+            const splitText = doc.splitTextToSize(textoDeclaracion, 180); // Ancho del texto
+            doc.text(splitText, 14, finalY);
+            finalY += (splitText.length * 5) + 20; // Ajustar Y después del texto
+            
+            doc.text("_________________________", 105, finalY, { align: 'center' });
+            finalY += 5;
+            doc.text(`${loan.nombres} ${loan.apellidos}`, 105, finalY, { align: 'center' });
+            finalY += 15;
+        }
+
+        // --- CRONOGRAMA DE PAGOS ---
+        doc.setFontSize(14); doc.setTextColor(52, 64, 84); doc.text("Cronograma de Pagos", 105, finalY, { align: 'center' });
+        
         const tableData = schedule.map(item => [item.cuota.toString(), item.fecha, `S/ ${item.monto}`]);
         doc.autoTable({
             head: [['N° Cuota', 'Fecha de Vencimiento', 'Monto a Pagar']],
-            body: tableData, startY: 110, theme: 'grid',
+            body: tableData, startY: finalY + 5, theme: 'grid',
             headStyles: { fillColor: [0, 93, 255], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center', fontSize: 11 },
             bodyStyles: { fontSize: 10 },
             columnStyles: { 0: { halign: 'center' }, 2: { halign: 'right' } }
         });
-        const finalY = doc.lastAutoTable.finalY || 250;
+        
+        // --- PIE DE PÁGINA ---
+        const pageFinalY = doc.lastAutoTable.finalY || 250;
         doc.setFontSize(8); doc.setTextColor(150, 150, 150);
-        doc.text('Generado por PrestaPro', 105, finalY + 10, { align: 'center' });
-        doc.text(new Date().toLocaleString('es-PE'), 105, finalY + 15, { align: 'center' });
-        const fileName = `Cronograma_${loan.apellidos}_${loan.dni}.pdf`;
+        doc.text('Generado por PrestaPro', 105, pageFinalY + 10, { align: 'center' });
+        doc.text(new Date().toLocaleString('es-PE'), 105, pageFinalY + 15, { align: 'center' });
+
+        // --- COMPARTIR O DESCARGAR ---
+        const fileName = `Detalles_${loan.apellidos}_${loan.dni}.pdf`;
         const pdfBlob = doc.output('blob');
         if (navigator.share) {
             const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-            navigator.share({ files: [file], title: 'Cronograma de Pagos', text: `Cronograma de pagos de ${loan.nombres} ${loan.apellidos}`})
+            navigator.share({ files: [file], title: 'Detalles del Préstamo', text: `Detalles del préstamo de ${loan.nombres} ${loan.apellidos}`})
             .catch((error) => { console.log('Error al compartir, iniciando descarga:', error); descargarPDF(doc, fileName); });
         } else { descargarPDF(doc, fileName); }
     } catch (error) { console.error('Error al generar PDF:', error); alert('Hubo un error al generar el PDF.'); }
