@@ -22,7 +22,7 @@ loanForm.innerHTML = `
         <legend>👤 Información del Cliente</legend>
         <div class="form-group">
             <label for="dni">DNI</label>
-            <input type="text" id="dni" placeholder="Ingresa 8 dígitos y presiona Tab" required pattern="\\d{8}" maxlength="8">
+            <input type="text" id="dni" placeholder="Ingresa 8 dígitos y presiona Tab" required pattern="\\d{8}" maxlength="8" inputmode="numeric">
             <small id="dni-status" style="margin-top: 5px; display: block;"></small>
         </div>
         <div class="form-row">
@@ -83,7 +83,12 @@ const submitButton = loanForm.querySelector('button[type="submit"]');
 const hibridoCheck = document.getElementById('hibrido_check');
 const hibridoOptions = document.getElementById('hibrido_options');
 const mesesSoloInteresInput = document.getElementById('meses_solo_interes');
-const interesInput = document.getElementById('interes'); // Referencia añadida
+const interesInput = document.getElementById('interes'); 
+
+// --- NUEVO: FILTRO PARA PERMITIR SOLO NÚMEROS EN DNI ---
+dniInput.addEventListener('input', () => {
+    dniInput.value = dniInput.value.replace(/[^0-9]/g, '');
+});
 
 // --- FUNCIÓN PARA ACTUALIZAR INFO DINÁMICA DE "SOLO INTERÉS" ---
 function updateHibridoInfo() {
@@ -117,7 +122,7 @@ hibridoCheck.addEventListener('change', () => {
         mesesSoloInteresInput.required = false;
         mesesSoloInteresInput.value = '';
     }
-    updateHibridoInfo(); // Actualiza la info al cambiar el check
+    updateHibridoInfo(); 
 });
 
 document.getElementById('plazo').addEventListener('input', () => {
@@ -174,7 +179,7 @@ const closeModal = (modal) => {
         apellidosInput.readOnly = false;
         dniStatus.textContent = '';
         hibridoOptions.style.display = 'none';
-        document.getElementById('hibrido-info').textContent = ''; // Limpia la info al cerrar
+        document.getElementById('hibrido-info').textContent = '';
         updateDeclaracionVisibility();
         toggleFormFields(true);
     }
