@@ -31,7 +31,7 @@ const deleteModalTitle = document.getElementById('deleteModalTitle');
 const deleteErrorMessage = document.getElementById('delete-error-message');
 
 
-// --- CARGA DINÁMICA DEL FORMULARIO DE PRÉSTAMO (MODIFICADO) ---
+// --- CARGA DINÁMICA DEL FORMULARIO DE PRÉSTAMO ---
 loanForm.innerHTML = `
     <fieldset>
         <legend>👤 Información del Cliente</legend>
@@ -195,10 +195,8 @@ function toggleFormLock(locked) {
     });
 }
 
-// --- VERIFICACIÓN DE DNI (MODIFICADO) ---
 dniInput.addEventListener('blur', async () => {
     toggleFormLock(false);
-    // Limpiamos los campos de nombre y apellido cada vez que se busca un nuevo DNI
     nombresInput.value = '';
     apellidosInput.value = '';
     
