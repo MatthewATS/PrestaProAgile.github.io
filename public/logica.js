@@ -1,5 +1,4 @@
 // --- VARIABLES GLOBALES ---
-// --- VARIABLES GLOBALES ---
 const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
 
 // ... el resto de tu código ...
@@ -297,6 +296,7 @@ function descargarPDF(doc, fileName) {
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
+
 
 
 
