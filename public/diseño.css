@@ -424,3 +424,32 @@ input {
     }
 }
 /* ==================================================== */
+
+/* ... (todo tu CSS existente) ... */
+
+/* NUEVO: Estilo para el estado "Pagado" */
+.status-paid {
+    background-color: #ECFDF3; /* Verde claro */
+    color: #027A48;      /* Verde oscuro */
+}
+
+/* NUEVO: Estilos para la barra de progreso de pago */
+.progress-bar-container {
+    width: 100%;
+    background-color: #E4E7EC;
+    border-radius: 10px;
+    height: 8px;
+    margin-top: 4px;
+}
+
+.progress-bar {
+    height: 100%;
+    background-color: var(--success-color);
+    border-radius: 10px;
+    transition: width 0.5s ease-in-out;
+}
+
+.progress-text {
+    font-size: 12px;
+    color: #667085;
+}
