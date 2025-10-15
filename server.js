@@ -128,7 +128,7 @@ app.post('/api/loans', async (req, res) => {
   }
 });
 
-// --- NUEVA RUTA PARA REGISTRAR PAGOS ---
+// --- RUTA PARA REGISTRAR PAGOS ---
 app.post('/api/loans/:loanId/payments', async (req, res) => {
     const { loanId } = req.params;
     const { payment_amount, payment_date } = req.body;
@@ -178,6 +178,38 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
         await connection.rollback();
         console.error("ERROR en POST /api/loans/:loanId/payments:", err);
         res.status(500).json({ error: 'Error al registrar el pago.' });
+    } finally {
+        connection.release();
+    }
+});
+
+// --- ¡NUEVA RUTA PARA ELIMINAR PRÉSTAMOS! ---
+app.delete('/api/loans/:loanId', async (req, res) => {
+    const { loanId } = req.params;
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        // Paso 1: Eliminar todos los pagos asociados al préstamo.
+        // Esto es crucial para mantener la integridad de la base de datos.
+        await connection.query('DELETE FROM payments WHERE loan_id = ?', [loanId]);
+
+        // Paso 2: Eliminar el préstamo principal.
+        const [result] = await connection.query('DELETE FROM loans WHERE id = ?', [loanId]);
+
+        // Si no se afectó ninguna fila, significa que el préstamo no existía.
+        if (result.affectedRows === 0) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'El préstamo no fue encontrado.' });
+        }
+
+        await connection.commit();
+        res.status(200).json({ message: 'Préstamo y pagos asociados eliminados correctamente.' });
+
+    } catch (err) {
+        await connection.rollback();
+        console.error("ERROR en DELETE /api/loans/:loanId:", err);
+        res.status(500).json({ error: 'Error en el servidor al intentar eliminar el préstamo.' });
     } finally {
         connection.release();
     }
