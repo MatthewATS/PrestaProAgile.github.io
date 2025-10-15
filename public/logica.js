@@ -61,7 +61,7 @@ const declaracionContainer = document.getElementById('declaracion-container');
 const declaracionCheckbox = document.getElementById('declaracion_jurada');
 const submitButton = loanForm.querySelector('button[type="submit"]');
 
-// --- NUEVA FUNCIÓN AUXILIAR ---
+// --- NUEVA FUNCIÓN AUXILIAR MEJORADA ---
 /**
  * Habilita o deshabilita todos los campos del formulario excepto el campo de DNI.
  * @param {boolean} isEnabled - true para habilitar, false para deshabilitar.
@@ -77,12 +77,10 @@ function toggleFormFields(isEnabled) {
         declaracionCheckbox,
         submitButton
     ];
-
     fieldsToToggle.forEach(field => {
-        field.disabled = !isEnabled;
+        if (field) field.disabled = !isEnabled;
     });
 }
-
 
 // --- LÓGICA PARA MOSTRAR LA DECLARACIÓN JURADA ---
 montoInput.addEventListener('input', () => {
@@ -97,7 +95,7 @@ montoInput.addEventListener('input', () => {
     }
 });
 
-// --- MANEJO DE MODALES (MODIFICADO) ---
+// --- MANEJO DE MODALES ---
 const openModal = (modal) => modal.style.display = 'flex';
 const closeModal = (modal) => {
     modal.style.display = 'none';
@@ -106,9 +104,7 @@ const closeModal = (modal) => {
         nombresInput.readOnly = false;
         apellidosInput.readOnly = false;
         dniStatus.textContent = '';
-        dniStatus.style.color = '';
         declaracionContainer.style.display = 'none';
-        declaracionCheckbox.required = false;
         toggleFormFields(true); // Habilitar todos los campos al cerrar
     }
     if (modal.id === 'detailsModal') {
@@ -128,15 +124,24 @@ window.addEventListener('click', (event) => {
     if (event.target === detailsModal) closeModal(detailsModal);
 });
 
-// --- LÓGICA DE CONSULTA DE DNI (MODIFICADA) ---
-dniInput.addEventListener('blur', async () => {
-    const dni = dniInput.value;
-    
-    if (dni.length !== 8) {
-        // Si el DNI no es válido, asegúrate de que todo esté habilitado
+// --- LÓGICA DE CONSULTA DE DNI MEJORADA ---
+
+// Se activa mientras el usuario escribe para desbloquear el formulario si corrige el DNI
+dniInput.addEventListener('input', () => {
+    if (dniInput.value.length < 8) {
         toggleFormFields(true);
         dniStatus.textContent = '';
-        return;
+        nombresInput.readOnly = false;
+        apellidosInput.readOnly = false;
+    }
+});
+
+// Se activa cuando el usuario sale del campo, para hacer la validación final
+dniInput.addEventListener('blur', async () => {
+    const dni = dniInput.value;
+
+    if (dni.length !== 8) {
+        return; // No hacer nada si el DNI no es válido
     }
 
     const hasActiveLoan = loans.some(loan => loan.dni === dni && loan.status === 'Activo');
@@ -147,8 +152,8 @@ dniInput.addEventListener('blur', async () => {
         return;
     }
     
-    // Si no tiene préstamo activo, asegúrate de que todo esté habilitado antes de buscar
-    toggleFormFields(true); 
+    // Si no tiene préstamo activo, el formulario ya está habilitado por el evento 'input'
+    // Procedemos a buscar en la API externa
     dniStatus.textContent = 'Buscando...';
     dniStatus.style.color = '#667085';
     nombresInput.readOnly = true;
@@ -187,11 +192,7 @@ loanForm.addEventListener('submit', async function(event) {
     event.preventDefault();
     
     const newLoanData = {
-        client: {
-            dni: dniInput.value,
-            nombres: nombresInput.value,
-            apellidos: apellidosInput.value,
-        },
+        client: { dni: dniInput.value, nombres: nombresInput.value, apellidos: apellidosInput.value },
         monto: parseFloat(document.getElementById('monto').value),
         interes: parseFloat(document.getElementById('interes').value),
         fecha: document.getElementById('fecha').value,
@@ -220,7 +221,7 @@ loanForm.addEventListener('submit', async function(event) {
     }
 });
 
-// --- FUNCIONES PRINCIPALES ---
+// --- FUNCIONES PRINCIPALES (SIN CAMBIOS) ---
 
 async function fetchAndRenderLoans() {
     try {
