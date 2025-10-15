@@ -1,5 +1,6 @@
+// CÓDIGO DEFINITIVO - COPIA Y PEGA ESTO
 // --- VARIABLES GLOBALES ---
-const API_URL = 'prestaproagilegithubio-production-be75.up.railway.app';
+const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
 
 let loans = [];
 let clients = new Set();
@@ -78,7 +79,7 @@ window.addEventListener('click', (event) => {
     if (event.target === detailsModal) closeModal(detailsModal);
 });
 
-// --- LÓGICA DE CONSULTA DE DNI (A TRAVÉS DE NUESTRO PROPIO SERVIDOR) ---
+// --- LÓGICA DE CONSULTA DE DNI ---
 dniInput.addEventListener('blur', async () => {
     const dni = dniInput.value;
     if (dni.length !== 8) {
@@ -118,7 +119,7 @@ dniInput.addEventListener('blur', async () => {
     }
 });
 
-// --- LÓGICA PARA ENVIAR EL FORMULARIO ---
+
 loanForm.addEventListener('submit', async function(event) {
     event.preventDefault();
 
@@ -173,7 +174,6 @@ function renderHistoryTable() {
     }
     loans.forEach(loan => {
         const row = document.createElement('tr');
-        // CORRECCIÓN: Se accede a loan.nombres directamente (ya no es loan.client.nombres)
         row.innerHTML = `
             <td>${loan.nombres} ${loan.apellidos}</td>
             <td>S/ ${parseFloat(loan.monto).toFixed(2)}</td>
@@ -187,9 +187,8 @@ function renderHistoryTable() {
 }
 
 function populateDetailsModal(loan) {
-    currentLoanForDetails = loan; // Guardamos el préstamo completo
+    currentLoanForDetails = loan;
     const { monthlyPayment, schedule } = calculateSchedule(loan);
-    // CORRECCIÓN: Se accede a loan.nombres directamente
     document.getElementById('scheduleSummary').innerHTML = `
         <p><strong>Cliente:</strong> ${loan.nombres} ${loan.apellidos}</p>
         <p><strong>Monto:</strong> S/ ${parseFloat(loan.monto).toFixed(2)} | <strong>Interés:</strong> ${loan.interes}% | <strong>Plazo:</strong> ${loan.plazo} meses</p>
@@ -204,14 +203,12 @@ function populateDetailsModal(loan) {
 function updateDashboard() {
     const totalLoaned = loans.reduce((sum, loan) => sum + parseFloat(loan.monto), 0);
     clients.clear();
-    loans.forEach(loan => clients.add(loan.dni)); // Ahora el DNI está en el nivel superior
+    loans.forEach(loan => clients.add(loan.dni));
     document.getElementById('totalLoaned').textContent = `S/ ${totalLoaned.toFixed(2)}`;
     document.getElementById('activeLoans').textContent = loans.filter(loan => loan.status === 'Activo').length;
     document.getElementById('totalClients').textContent = clients.size;
 }
 
-// El resto de funciones (calculateSchedule, compartirPDF, etc.) no necesitan cambios
-// ya que reciben el objeto 'loan' completo y acceden a sus propiedades directamente.
 historyTableBody.addEventListener('click', function(event) {
     if (event.target.classList.contains('view-details-btn')) {
         const loanId = event.target.getAttribute('data-loan-id');
@@ -254,8 +251,8 @@ function compartirPDF() {
         doc.setFontSize(16); doc.setTextColor(52, 64, 84); doc.text("Cronograma de Pagos", 105, 30, { align: 'center' });
         doc.setFontSize(12); doc.setTextColor(100, 100, 100); doc.text("DATOS DEL CLIENTE", 14, 45);
         doc.setFontSize(11); doc.setTextColor(52, 64, 84);
-        doc.text(`Nombre: ${loan.nombres} ${loan.apellidos}`, 14, 52); // CORRECCIÓN
-        doc.text(`DNI: ${loan.dni}`, 14, 58); // CORRECCIÓN
+        doc.text(`Nombre: ${loan.nombres} ${loan.apellidos}`, 14, 52);
+        doc.text(`DNI: ${loan.dni}`, 14, 58);
         doc.text(`Fecha de Préstamo: ${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}`, 14, 64);
         doc.setFontSize(12); doc.setTextColor(100, 100, 100); doc.text("DATOS DEL PRÉSTAMO", 14, 75);
         doc.setFontSize(11); doc.setTextColor(52, 64, 84);
@@ -275,11 +272,11 @@ function compartirPDF() {
         doc.setFontSize(8); doc.setTextColor(150, 150, 150);
         doc.text('Generado por PrestaPro', 105, finalY + 10, { align: 'center' });
         doc.text(new Date().toLocaleString('es-PE'), 105, finalY + 15, { align: 'center' });
-        const fileName = `Cronograma_${loan.apellidos}_${loan.dni}.pdf`; // CORRECCIÓN
+        const fileName = `Cronograma_${loan.apellidos}_${loan.dni}.pdf`;
         const pdfBlob = doc.output('blob');
         if (navigator.share) {
             const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-            navigator.share({ files: [file], title: 'Cronograma de Pagos', text: `Cronograma de pagos de ${loan.nombres} ${loan.apellidos}`}) // CORRECCIÓN
+            navigator.share({ files: [file], title: 'Cronograma de Pagos', text: `Cronograma de pagos de ${loan.nombres} ${loan.apellidos}`})
             .catch((error) => { console.log('Error al compartir, iniciando descarga:', error); descargarPDF(doc, fileName); });
         } else { descargarPDF(doc, fileName); }
     } catch (error) { console.error('Error al generar PDF:', error); alert('Hubo un error al generar el PDF.'); }
@@ -292,10 +289,3 @@ function descargarPDF(doc, fileName) {
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
-
-
-
-
-
-
-
