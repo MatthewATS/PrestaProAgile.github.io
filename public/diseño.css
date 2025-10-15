@@ -455,16 +455,3 @@ input {
 }
 
 /* ... (todo tu CSS existente) ... */
-
-/* NUEVO: Estilo para botones de peligro/eliminar */
-.button-danger {
-    background-color: #D92D20; /* Rojo */
-    color: var(--white);
-}
-.button-danger:hover {
-    background-color: #B42318;
-}
-.button-danger:disabled {
-    background-color: #FECDCA;
-    cursor: not-allowed;
-}
