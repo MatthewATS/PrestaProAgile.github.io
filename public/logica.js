@@ -29,6 +29,12 @@ loanForm.innerHTML = `
             <div class="form-group"><label for="nombres">Nombres</label><input type="text" id="nombres" placeholder="Nombres completos" required></div>
             <div class="form-group"><label for="apellidos">Apellidos</label><input type="text" id="apellidos" placeholder="Apellidos completos" required></div>
         </div>
+        <div class="form-group" style="background-color: #F9FAFB; padding: 12px; border-radius: 8px;">
+            <div style="display: flex; align-items: center;">
+                 <input type="checkbox" id="is_pep" style="width: auto; margin-right: 12px; height: 18px; width: 18px;">
+                 <label for="is_pep" style="margin-bottom: 0;">¿Es una Persona Expuesta Políticamente (PEP)?</label>
+            </div>
+        </div>
     </fieldset>
     <fieldset>
         <legend>📋 Detalles del Préstamo</legend>
@@ -45,7 +51,7 @@ loanForm.innerHTML = `
                  <input type="checkbox" id="declaracion_jurada" required style="width: auto; margin-right: 12px; height: 18px; width: 18px;">
                  <label for="declaracion_jurada" style="margin-bottom: 0;">Declaro bajo juramento el origen lícito del dinero.</label>
             </div>
-            <small style="margin-left: 30px; margin-top: 4px; color: #667085;">Requerido para montos mayores a 1 UIT (S/ ${VALOR_UIT.toFixed(2)}).</small>
+            <small id="declaracion-motivo" style="margin-left: 30px; margin-top: 4px; color: #667085;"></small>
         </div>
     </fieldset>
     <button type="submit" class="submit-button">Guardar Préstamo</button>
@@ -59,41 +65,40 @@ const dniStatus = document.getElementById('dni-status');
 const montoInput = document.getElementById('monto');
 const declaracionContainer = document.getElementById('declaracion-container');
 const declaracionCheckbox = document.getElementById('declaracion_jurada');
+const isPepCheckbox = document.getElementById('is_pep');
 const submitButton = loanForm.querySelector('button[type="submit"]');
 
 // --- FUNCIÓN AUXILIAR ---
-/**
- * Habilita o deshabilita todos los campos del formulario excepto el campo de DNI.
- * @param {boolean} isEnabled - true para habilitar, false para deshabilitar.
- */
 function toggleFormFields(isEnabled) {
-    const fieldsToToggle = [
-        nombresInput,
-        apellidosInput,
-        montoInput,
-        document.getElementById('fecha'),
-        document.getElementById('interes'),
-        document.getElementById('plazo'),
-        declaracionCheckbox,
-        submitButton
-    ];
-    fieldsToToggle.forEach(field => {
-        if (field) field.disabled = !isEnabled;
-    });
+    const fieldsToToggle = [nombresInput, apellidosInput, montoInput, document.getElementById('fecha'), document.getElementById('interes'), document.getElementById('plazo'), isPepCheckbox, declaracionCheckbox, submitButton];
+    fieldsToToggle.forEach(field => { if (field) field.disabled = !isEnabled; });
 }
 
-// --- LÓGICA PARA MOSTRAR LA DECLARACIÓN JURADA ---
-montoInput.addEventListener('input', () => {
+// --- LÓGICA CENTRALIZADA PARA DECLARACIÓN JURADA ---
+function updateDeclaracionVisibility() {
     const monto = parseFloat(montoInput.value) || 0;
-    if (monto > VALOR_UIT) {
+    const esPEP = isPepCheckbox.checked;
+    const motivo = document.getElementById('declaracion-motivo');
+    
+    if (monto > VALOR_UIT || esPEP) {
         declaracionContainer.style.display = 'block';
         declaracionCheckbox.required = true;
+        if (esPEP && monto <= VALOR_UIT) {
+            motivo.textContent = 'Requerido por ser Persona Expuesta Políticamente (PEP).';
+        } else if (esPEP && monto > VALOR_UIT) {
+            motivo.textContent = 'Requerido por monto mayor a 1 UIT y por ser PEP.';
+        } else {
+            motivo.textContent = `Requerido para montos mayores a 1 UIT (S/ ${VALOR_UIT.toFixed(2)}).`;
+        }
     } else {
         declaracionContainer.style.display = 'none';
         declaracionCheckbox.required = false;
         declaracionCheckbox.checked = false;
     }
-});
+}
+
+montoInput.addEventListener('input', updateDeclaracionVisibility);
+isPepCheckbox.addEventListener('change', updateDeclaracionVisibility);
 
 // --- MANEJO DE MODALES ---
 const openModal = (modal) => modal.style.display = 'flex';
@@ -104,8 +109,8 @@ const closeModal = (modal) => {
         nombresInput.readOnly = false;
         apellidosInput.readOnly = false;
         dniStatus.textContent = '';
-        declaracionContainer.style.display = 'none';
-        toggleFormFields(true); // Habilitar todos los campos al cerrar
+        updateDeclaracionVisibility();
+        toggleFormFields(true);
     }
     if (modal.id === 'detailsModal') {
         currentLoanForDetails = null;
@@ -124,35 +129,30 @@ window.addEventListener('click', (event) => {
     if (event.target === detailsModal) closeModal(detailsModal);
 });
 
-// --- LÓGICA DE CONSULTA DE DNI (CORREGIDA Y SIMPLIFICADA) ---
+// --- LÓGICA DE CONSULTA DE DNI ---
 dniInput.addEventListener('blur', async () => {
     const dni = dniInput.value;
 
-    // Caso 1: DNI está vacío o incompleto.
     if (dni.length !== 8) {
         dniStatus.textContent = '';
-        toggleFormFields(true); // Asegurarse de que el formulario esté habilitado.
+        toggleFormFields(true);
         nombresInput.readOnly = false;
         apellidosInput.readOnly = false;
         return;
     }
 
-    // Caso 2: DNI tiene 8 dígitos.
     const hasActiveLoan = loans.some(loan => loan.dni === dni && loan.status === 'Activo');
 
     if (hasActiveLoan) {
-        // Subcaso 2a: Cliente tiene un préstamo activo.
         dniStatus.textContent = '⚠️ Este cliente ya tiene un préstamo activo.';
         dniStatus.style.color = 'orange';
-        toggleFormFields(false); // **BLOQUEAR FORMULARIO**
-        // Limpiar campos para evitar confusiones
+        toggleFormFields(false);
         nombresInput.value = '';
         apellidosInput.value = '';
         montoInput.value = '';
         return;
     } else {
-        // Subcaso 2b: Cliente NO tiene préstamo activo.
-        toggleFormFields(true); // Asegurarse de que el formulario esté habilitado.
+        toggleFormFields(true);
         dniStatus.textContent = 'Buscando...';
         dniStatus.style.color = '#667085';
         nombresInput.readOnly = true;
@@ -191,8 +191,13 @@ loanForm.addEventListener('submit', async function(event) {
     event.preventDefault();
     
     const newLoanData = {
-        client: { dni: dniInput.value, nombres: nombresInput.value, apellidos: apellidosInput.value },
-        monto: parseFloat(document.getElementById('monto').value),
+        client: {
+            dni: dniInput.value,
+            nombres: nombresInput.value,
+            apellidos: apellidosInput.value,
+            is_pep: isPepCheckbox.checked
+        },
+        monto: parseFloat(montoInput.value),
         interes: parseFloat(document.getElementById('interes').value),
         fecha: document.getElementById('fecha').value,
         plazo: parseInt(document.getElementById('plazo').value),
@@ -206,12 +211,10 @@ loanForm.addEventListener('submit', async function(event) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(newLoanData),
         });
-
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.error || `Error ${response.status}`);
         }
-
         await fetchAndRenderLoans();
         closeModal(loanModal);
     } catch (error) {
@@ -220,7 +223,7 @@ loanForm.addEventListener('submit', async function(event) {
     }
 });
 
-// --- FUNCIONES PRINCIPALES (SIN CAMBIOS) ---
+// --- FUNCIONES PRINCIPALES ---
 
 async function fetchAndRenderLoans() {
     try {
@@ -244,7 +247,7 @@ function renderHistoryTable() {
     loans.forEach(loan => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${loan.nombres} ${loan.apellidos}</td>
+            <td>${loan.nombres} ${loan.apellidos} ${loan.is_pep ? '<strong>(PEP)</strong>' : ''}</td>
             <td>S/ ${parseFloat(loan.monto).toFixed(2)}</td>
             <td>${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}</td>
             <td>${loan.plazo} meses</td>
@@ -261,12 +264,12 @@ function populateDetailsModal(loan) {
     const declaracionSection = document.getElementById('declaracionJuradaSection');
 
     document.getElementById('scheduleSummary').innerHTML = `
-        <p><strong>Cliente:</strong> ${loan.nombres} ${loan.apellidos}</p>
+        <p><strong>Cliente:</strong> ${loan.nombres} ${loan.apellidos} ${loan.is_pep ? '<strong>(PEP)</strong>' : ''}</p>
         <p><strong>Monto:</strong> S/ ${parseFloat(loan.monto).toFixed(2)} | <strong>Interés:</strong> ${loan.interes}% | <strong>Plazo:</strong> ${loan.plazo} meses</p>
         <p><strong>Cuota Mensual Fija: S/ ${monthlyPayment.toFixed(2)}</strong></p>
     `;
-
-    if (parseFloat(loan.monto) > VALOR_UIT) {
+    
+    if (parseFloat(loan.monto) > VALOR_UIT || loan.is_pep) {
         declaracionSection.style.display = 'block';
         declaracionSection.innerHTML = `
             <h3 class="declaracion-title">Declaración Jurada de Origen de Fondos</h3>
@@ -345,7 +348,7 @@ function compartirPDF() {
         
         doc.setFontSize(12); doc.setTextColor(100, 100, 100); doc.text("DATOS GENERALES", 14, 45);
         doc.setFontSize(11); doc.setTextColor(52, 64, 84);
-        doc.text(`Cliente: ${loan.nombres} ${loan.apellidos}`, 14, 52);
+        doc.text(`Cliente: ${loan.nombres} ${loan.apellidos} ${loan.is_pep ? '(PEP)' : ''}`, 14, 52);
         doc.text(`DNI: ${loan.dni}`, 105, 52);
         doc.text(`Monto Prestado: S/ ${parseFloat(loan.monto).toFixed(2)}`, 14, 58);
         doc.text(`Fecha de Préstamo: ${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}`, 105, 58);
@@ -355,7 +358,7 @@ function compartirPDF() {
 
         finalY = 80;
 
-        if (parseFloat(loan.monto) > VALOR_UIT) {
+        if (parseFloat(loan.monto) > VALOR_UIT || loan.is_pep) {
             doc.setFontSize(14); doc.setTextColor(52, 64, 84); doc.text("Declaración Jurada de Origen de Fondos", 105, finalY, { align: 'center' });
             finalY += 10;
             
