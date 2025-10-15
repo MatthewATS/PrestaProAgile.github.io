@@ -1,79 +1,88 @@
 const express = require('express');
-const path = require('path');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
-require('dotenv').config(); // Asegúrate de tener dotenv instalado (npm i dotenv)
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middlewares
-app.use(cors());
+// --- Middlewares ---
+
+// CAMBIO 1: Configuración de CORS más específica y robusta
+// Esto le da permiso explícito a tu frontend para que se conecte.
+const corsOptions = {
+  origin: 'https://matthewhs.github.io',
+  optionsSuccessStatus: 200 // Para compatibilidad con navegadores antiguos
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 
+
 // --- Conexión a la base de datos ---
-// La configuración ahora se lee desde las variables de entorno para mayor seguridad
-const pool = mysql.createPool(process.env.DATABASE_URL);
+let pool; // Definimos pool aquí para que sea accesible globalmente
 
+// CAMBIO 2: Función asíncrona para iniciar el servidor
+// Esto nos permite verificar la conexión a la BD antes de que el servidor empiece a escuchar peticiones.
+async function startServer() {
+  try {
+    // Verificamos que la variable de entorno exista
+    if (!process.env.DATABASE_URL) {
+      throw new Error('La variable de entorno DATABASE_URL no está definida.');
+    }
+    
+    pool = mysql.createPool(process.env.DATABASE_URL);
+    
+    // Intentamos hacer una conexión de prueba
+    await pool.getConnection();
+    console.log('✅ Conexión a la base de datos exitosa.');
 
-// --- RUTAS DE LA API ---
+    // --- RUTAS DE LA API (AHORA DENTRO DE startServer) ---
 
-// RUTA GET: Obtener todos los préstamos
-app.get('/api/loans', async (req, res) => {
-    try {
-        // La consulta ahora trae los datos en el formato que el frontend espera
+    app.get('/api/loans', async (req, res) => {
+      try {
         const [loans] = await pool.query(
-            'SELECT id, dni, nombres, apellidos, monto, interes, fecha, plazo, status, declaracion_jurada FROM loans ORDER BY fecha DESC'
+          'SELECT id, dni, nombres, apellidos, monto, interes, fecha, plazo, status, declaracion_jurada FROM loans ORDER BY fecha DESC'
         );
-        res.json(loans); // Se envían los datos directamente, ya no se necesita mapeo
-    } catch (err) {
+        res.json(loans);
+      } catch (err) {
         console.error("ERROR en GET /api/loans:", err);
         res.status(500).json({ error: 'Error al obtener los préstamos' });
-    }
-});
+      }
+    });
 
-// RUTA POST: Crear un nuevo préstamo
-app.post('/api/loans', async (req, res) => {
-    try {
-        const newLoan = req.body;
-        const clientData = newLoan.client; // Obtenemos el objeto cliente
+    app.post('/api/loans', async (req, res) => {
+      try {
+        const { client, monto, interes, fecha, plazo, status, declaracion_jurada } = req.body;
 
-        // Verificamos que los datos del cliente existan
-        if (!clientData || !clientData.dni || !clientData.nombres || !clientData.apellidos) {
-            return res.status(400).json({ error: 'Faltan datos del cliente.' });
+        if (!client || !client.dni || !client.nombres || !client.apellidos) {
+          return res.status(400).json({ error: 'Faltan datos del cliente.' });
         }
 
-        const hasDeclaracion = !!newLoan.declaracion_jurada;
-
-        // La consulta ahora inserta los campos del cliente de forma individual
         const query = `
-            INSERT INTO loans (dni, nombres, apellidos, monto, interes, fecha, plazo, status, declaracion_jurada) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+          INSERT INTO loans (dni, nombres, apellidos, monto, interes, fecha, plazo, status, declaracion_jurada) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
         `;
-        
         const values = [
-            clientData.dni,
-            clientData.nombres,
-            clientData.apellidos,
-            newLoan.monto,
-            newLoan.interes,
-            newLoan.fecha,
-            newLoan.plazo,
-            newLoan.status,
-            hasDeclaracion
+          client.dni, client.nombres, client.apellidos, monto, interes, fecha, plazo, status, !!declaracion_jurada
         ];
 
         await pool.query(query, values);
-        res.status(201).json({ message: 'Préstamo creado exitosamente', data: newLoan });
-
-    } catch (err) {
+        res.status(201).json({ message: 'Préstamo creado exitosamente' });
+      } catch (err) {
         console.error("ERROR en POST /api/loans:", err);
         res.status(500).json({ error: 'Error al guardar el préstamo' });
-    }
-});
+      }
+    });
 
+    // --- Iniciar el servidor ---
+    app.listen(PORT, () => {
+      console.log(`🚀 Servidor escuchando en el puerto ${PORT}`);
+    });
 
-// Iniciar el servidor
-app.listen(PORT, () => {
-    console.log(`🚀 Servidor escuchando en el puerto ${PORT}`);
-});
+  } catch (error) {
+    console.error('❌ Error fatal al iniciar el servidor:', error.message);
+    process.exit(1); // Detiene la aplicación si no se puede conectar a la BD
+  }
+}
+
+// Ejecutamos la función para iniciar todo
+startServer();
