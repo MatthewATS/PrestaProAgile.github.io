@@ -45,6 +45,12 @@ app.post('/api/loans', async (req, res) => {
     const { client, monto, interes, fecha, plazo, status, declaracion_jurada = false, tipo_calculo = 'Amortizado', meses_solo_interes = 0 } = req.body;
     const { dni, nombres, apellidos, is_pep = false } = client;
 
+    // --- NUEVO: Validación del monto del préstamo en el backend ---
+    if (monto < 100 || monto > 20000) {
+      await connection.rollback();
+      return res.status(400).json({ error: 'El monto del préstamo debe estar entre S/ 100 y S/ 20,000.' });
+    }
+
     // Validación de préstamo activo
     const searchActiveLoanQuery = `
       SELECT l.id FROM loans l JOIN clients c ON l.client_id = c.id
