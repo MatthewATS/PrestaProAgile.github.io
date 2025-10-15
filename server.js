@@ -103,7 +103,7 @@ app.post('/api/loans', async (req, res) => {
   }
 });
 
-// POST /api/loans/:loanId/payments (RUTA MODIFICADA)
+// POST /api/loans/:loanId/payments (RUTA CORREGIDA)
 app.post('/api/loans/:loanId/payments', async (req, res) => {
     const { loanId } = req.params;
     const { payment_amount, payment_date } = req.body;
@@ -138,21 +138,22 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
             totalDue = monthlyPayment * loan.plazo;
         }
 
-        // ===== ¡VALIDACIÓN AÑADIDA! =====
-        // Se calcula el saldo pendiente y se compara con el monto del pago
+        // ===== ¡VALIDACIÓN CORREGIDA! =====
         const remainingBalance = totalDue - totalPaid;
-        // Se añade una pequeña tolerancia (0.001) para evitar errores con decimales
-        if (parseFloat(payment_amount) > remainingBalance + 0.001) {
+        // Se redondea el saldo pendiente a 2 decimales ANTES de comparar
+        const roundedRemainingBalance = Math.round(remainingBalance * 100) / 100;
+        
+        // Se compara el pago con el saldo redondeado.
+        if (parseFloat(payment_amount) > roundedRemainingBalance) {
             await connection.rollback();
-            return res.status(400).json({ error: `El pago de S/ ${payment_amount} excede el saldo pendiente de S/ ${remainingBalance.toFixed(2)}.` });
+            return res.status(400).json({ error: `El pago excede el saldo pendiente de S/ ${roundedRemainingBalance.toFixed(2)}.` });
         }
         
-        // Se inserta el nuevo pago
         await connection.query('INSERT INTO payments (loan_id, payment_amount, payment_date) VALUES (?, ?, ?)', [loanId, payment_amount, payment_date]);
 
         const newTotalPaid = totalPaid + parseFloat(payment_amount);
 
-        // Si el nuevo total pagado cubre la deuda, se actualiza el estado
+        // Se usa una pequeña tolerancia para la comparación final por si quedan micro-decimales
         if (newTotalPaid >= totalDue - 0.001) {
             await connection.query("UPDATE loans SET status = 'Pagado' WHERE id = ?", [loanId]);
         }
