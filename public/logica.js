@@ -121,7 +121,7 @@ const closeModal = (modal) => {
 addLoanBtn.addEventListener('click', () => openModal(loanModal));
 closeModalBtn.addEventListener('click', () => closeModal(loanModal));
 closeDetailsModalBtn.addEventListener('click', () => closeModal(detailsModal));
-printScheduleBtn.addEventListener('click', () => window.print());
+printScheduleBtn.addEventListener('click', printSchedule);
 shareBtn.addEventListener('click', compartirPDF);
 
 window.addEventListener('click', (event) => {
@@ -333,6 +333,81 @@ function calculateSchedule(loan) {
     return { monthlyPayment, schedule };
 }
 
+// --- FUNCIÓN DE IMPRESIÓN DEFINITIVA (CORREGIDA) ---
+function printSchedule() {
+    const printableContent = document.querySelector('#detailsModal .printable').innerHTML;
+    
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+
+    const iframeDoc = iframe.contentWindow.document;
+    iframeDoc.open();
+    iframeDoc.write(`
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+            <title>Cronograma de Pagos</title>
+            <link rel="stylesheet" href="diseño.css">
+            <link rel="preconnect" href="https://fonts.googleapis.com">
+            <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+            <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+            <style>
+                /* --- Estilos Definitivos para Impresión Limpia --- */
+
+                /* 1. Reseteo Agresivo: Se eliminan TODOS los márgenes y paddings del documento.
+                   Esto es la clave para evitar que el navegador genere una página en blanco. */
+                @page {
+                    margin: 0;
+                }
+                html, body {
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    font-family: 'Poppins', sans-serif;
+                }
+
+                /* 2. Contenedor Controlado: Creamos márgenes "virtuales" usando padding
+                   dentro de un contenedor principal. Esto es más estable que usar 'margin' en el body. */
+                .print-container {
+                    padding: 20mm;
+                }
+
+                /* Se oculta el botón 'x' que se copia accidentalmente del modal */
+                .close-button {
+                    display: none;
+                }
+                
+                /* 3. Mejoras de Paginación para la tabla */
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                }
+                thead {
+                    display: table-header-group; /* Repite el encabezado de la tabla en cada nueva página */
+                }
+                tr, .summary-info {
+                    page-break-inside: avoid !important; /* Evita que estos elementos se corten */
+                }
+            </style>
+        </head>
+        <body>
+            <div class="print-container">
+                ${printableContent}
+            </div>
+        </body>
+        </html>
+    `);
+    iframeDoc.close();
+
+    iframe.onload = function() {
+        setTimeout(function() {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+            document.body.removeChild(iframe);
+        }, 350); // Un poco más de tiempo para asegurar la carga completa de estilos
+    };
+}
+
 function compartirPDF() {
     if (!currentLoanForDetails) { alert("No hay información del préstamo para compartir."); return; }
     if (typeof window.jspdf === 'undefined') { alert("Error: La librería jsPDF no se cargó correctamente."); return; }
@@ -408,3 +483,7 @@ function descargarPDF(doc, fileName) {
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
+
+// --- Carga Inicial ---
+document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
+
