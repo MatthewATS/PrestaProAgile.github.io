@@ -7,7 +7,6 @@
     --border-color: #D0D5DD;
     --white: #FFFFFF;
     --success-color: #12B76A;
-    /* --- ¡NUEVA VARIABLE DE COLOR! --- */
     --danger-color: #D92D20;
     --font-family: 'Poppins', sans-serif;
 }
@@ -90,7 +89,6 @@ body {
     background-color: #E4E7EC;
 }
 
-/* --- ¡NUEVA CLASE DE BOTÓN! --- */
 .button-danger {
     background-color: var(--danger-color);
     color: var(--white);
@@ -158,7 +156,6 @@ body {
     font-size: 14px;
 }
 
-/* --- ¡NUEVO CONTENEDOR PARA BOTONES! --- */
 .action-buttons {
     display: flex;
     gap: 8px;
@@ -298,6 +295,25 @@ input {
     font-size: 16px;
     font-weight: 600;
     margin-top: 10px;
+}
+
+/* --- ¡NUEVA CLASE DE BOTÓN! --- */
+.submit-button-danger {
+    width: 100%;
+    padding: 12px;
+    background: var(--danger-color);
+    color: var(--white);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    margin-top: 10px;
+    transition: background-color 0.2s;
+}
+
+.submit-button-danger:hover {
+    background-color: #B42318;
 }
 
 .summary-info {
@@ -445,13 +461,11 @@ input {
 }
 /* ==================================================== */
 
-/* NUEVO: Estilo para el estado "Pagado" */
 .status-paid {
-    background-color: #ECFDF3; /* Verde claro */
-    color: #027A48;      /* Verde oscuro */
+    background-color: #ECFDF3;
+    color: #027A48;
 }
 
-/* NUEVO: Estilos para la barra de progreso de pago */
 .progress-bar-container {
     width: 100%;
     background-color: #E4E7EC;
