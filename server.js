@@ -1,93 +1,63 @@
 const express = require('express');
+const path = require('path');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// --- Middlewares ---
-
-// Configuración final y correcta de CORS
-const allowedOrigins = ['https://matthewhs.github.io'];
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Permitir solicitudes sin origen (como Postman, apps móviles, etc.)
-    if (!origin) return callback(null, true);
-    
-    // Normalizar el origen quitando el slash final si existe
-    const normalizedOrigin = origin.endsWith('/') ? origin.slice(0, -1) : origin;
-
-    if (allowedOrigins.indexOf(normalizedOrigin) !== -1) {
-      callback(null, true);
-    } else {
-      // Si el origen no está permitido, rechazar la solicitud
-      callback(new Error(`El origen ${origin} no está permitido por CORS.`));
-    }
-  },
-  optionsSuccessStatus: 200
-};
-
-app.use(cors(corsOptions));
+// Middlewares
+app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
-let pool;
+// Conexión a la base de datos
+const pool = mysql.createPool(process.env.DATABASE_URL);
 
-// Función para iniciar la aplicación
-async function startServer() {
+// --- RUTAS DE LA API ---
+
+app.get('/api/loans', async (req, res) => {
   try {
-    if (!process.env.DATABASE_URL) {
-      throw new Error('La variable de entorno DATABASE_URL no está definida.');
-    }
-    pool = mysql.createPool(process.env.DATABASE_URL);
-    // Realizar una conexión de prueba para validar las credenciales
-    const connection = await pool.getConnection();
-    console.log('✅ Conexión a la base de datos exitosa.');
-    connection.release(); // Liberar la conexión de prueba
-
-    // --- RUTAS DE LA API ---
-
-    app.get('/api/loans', async (req, res) => {
-      try {
-        const sqlQuery = 'SELECT id, dni, nombres, apellidos, monto, interes, fecha, plazo, status, declaracion_jurada FROM loans ORDER BY fecha DESC';
-        const [loans] = await pool.query(sqlQuery);
-        res.json(loans);
-      } catch (err) {
-        console.error("❌ ERROR en la consulta SQL [GET /api/loans]:", err.message);
-        res.status(500).json({ error: 'Error interno del servidor al obtener los préstamos.', details: err.message });
-      }
-    });
-
-    app.post('/api/loans', async (req, res) => {
-      try {
-        const { client, monto, interes, fecha, plazo, status, declaracion_jurada } = req.body;
-        if (!client || !client.dni || !client.nombres || !client.apellidos) {
-          return res.status(400).json({ error: 'Faltan datos del cliente.' });
+    const [rows] = await pool.query('SELECT * FROM loans ORDER BY fecha DESC');
+    // Para asegurar que `client` sea un objeto, lo parseamos si es un string
+    const loans = rows.map(loan => {
+        if (typeof loan.client === 'string') {
+            try {
+                loan.client = JSON.parse(loan.client);
+            } catch (e) {
+                console.error("Error parsing client JSON:", e);
+                loan.client = {}; // Fallback a objeto vacío
+            }
         }
-        const query = `
-          INSERT INTO loans (dni, nombres, apellidos, monto, interes, fecha, plazo, status, declaracion_jurada) 
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
-        `;
-        const values = [
-          client.dni, client.nombres, client.apellidos, monto, interes, fecha, plazo, status, !!declaracion_jurada
-        ];
-        await pool.query(query, values);
-        res.status(201).json({ message: 'Préstamo creado exitosamente' });
-      } catch (err) {
-        console.error("❌ ERROR en la consulta SQL [POST /api/loans]:", err.message);
-        res.status(500).json({ error: 'Error interno del servidor al guardar el préstamo.', details: err.message });
-      }
+        return loan;
     });
-
-    // --- Iniciar el servidor ---
-    app.listen(PORT, () => {
-      console.log(`🚀 Servidor escuchando en el puerto ${PORT}`);
-    });
-
-  } catch (error) {
-    console.error('❌ Error fatal al iniciar el servidor:', error.message);
-    process.exit(1);
+    res.json(loans);
+  } catch (err) {
+    console.error("ERROR en GET /api/loans:", err);
+    res.status(500).json({ error: 'Error al obtener los préstamos' });
   }
-}
+});
 
-// Iniciar la aplicación
-startServer();
+app.post('/api/loans', async (req, res) => {
+  try {
+    const newLoan = req.body;
+    // Asegurarse de que el campo declaracion_jurada sea booleano
+    const hasDeclaracion = !!newLoan.declaracion_jurada; 
+
+    const query = `INSERT INTO loans (dni, client, monto, interes, fecha, plazo, status, declaracion_jurada) VALUES (?, ?, ?, ?, ?, ?, ?, ?);`;
+    const values = [
+      newLoan.client.dni, JSON.stringify(newLoan.client), newLoan.monto,
+      newLoan.interes, newLoan.fecha, newLoan.plazo, newLoan.status, hasDeclaracion
+    ];
+    await pool.query(query, values);
+    res.status(201).json(newLoan);
+  } catch (err) {
+    console.error("ERROR en POST /api/loans:", err);
+    res.status(500).json({ error: 'Error al guardar el préstamo' });
+  }
+});
+
+// Iniciar el servidor
+app.listen(PORT, () => {
+  console.log(`Servidor escuchando en el puerto ${PORT}`);
+});
