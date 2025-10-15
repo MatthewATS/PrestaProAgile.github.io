@@ -15,12 +15,22 @@ const detailsModal = document.getElementById('detailsModal');
 const closeDetailsModalBtn = document.getElementById('closeDetailsModalBtn');
 const printScheduleBtn = document.getElementById('printScheduleBtn');
 const shareBtn = document.getElementById('shareBtn');
-// --- NUEVOS ELEMENTOS DEL DOM PARA PAGOS ---
+// --- DOM PARA PAGOS ---
 const paymentModal = document.getElementById('paymentModal');
 const closePaymentModalBtn = document.getElementById('closePaymentModalBtn');
 const paymentForm = document.getElementById('paymentForm');
 const paymentModalTitle = document.getElementById('paymentModalTitle');
 const paymentLoanIdInput = document.getElementById('paymentLoanId');
+// --- NUEVOS ELEMENTOS DEL DOM PARA ELIMINACIÓN ---
+const deleteModal = document.getElementById('deleteModal');
+const closeDeleteModalBtn = document.getElementById('closeDeleteModalBtn');
+const deleteForm = document.getElementById('deleteForm');
+const deleteModalTitle = document.getElementById('deleteModalTitle');
+const deleteWarningText = document.getElementById('deleteWarningText');
+const deleteLoanIdInput = document.getElementById('deleteLoanId');
+const deleteConfirmInput = document.getElementById('deleteConfirmInput');
+const finalDeleteBtn = document.getElementById('finalDeleteBtn');
+
 
 // --- CARGA DINÁMICA DEL FORMULARIO DE PRÉSTAMO ---
 loanForm.innerHTML = `
@@ -74,6 +84,7 @@ loanForm.innerHTML = `
     <button type="submit" class="submit-button">Guardar Préstamo</button>
 `;
 
+// --- REFERENCIAS A CAMPOS DEL FORMULARIO ---
 const dniInput = document.getElementById('dni');
 const nombresInput = document.getElementById('nombres');
 const apellidosInput = document.getElementById('apellidos');
@@ -109,10 +120,12 @@ hibridoCheck.addEventListener('change', () => {
     mesesSoloInteresInput.max = plazo - 1;
     updateHibridoInfo(); 
 });
+
 document.getElementById('plazo').addEventListener('input', () => {
     const plazo = parseInt(document.getElementById('plazo').value, 10) || 1;
     mesesSoloInteresInput.max = plazo - 1;
 });
+
 function updateDeclaracionVisibility() {
     const monto = parseFloat(montoInput.value) || 0;
     const esPEP = isPepCheckbox.checked;
@@ -148,48 +161,45 @@ const closeModal = (modal) => {
     }
     if (modal.id === 'detailsModal') currentLoanForDetails = null;
     if (modal.id === 'paymentModal') paymentForm.reset();
+    if (modal.id === 'deleteModal') deleteForm.reset();
 };
 
 addLoanBtn.addEventListener('click', () => openModal(loanModal));
 closeModalBtn.addEventListener('click', () => closeModal(loanModal));
 closeDetailsModalBtn.addEventListener('click', () => closeModal(detailsModal));
-closePaymentModalBtn.addEventListener('click', () => closeModal(paymentModal)); // Cerrar modal de pago
+closePaymentModalBtn.addEventListener('click', () => closeModal(paymentModal));
+closeDeleteModalBtn.addEventListener('click', () => closeModal(deleteModal));
 printScheduleBtn.addEventListener('click', printSchedule);
 shareBtn.addEventListener('click', compartirPDF);
 
 window.addEventListener('click', (event) => {
     if (event.target === loanModal) closeModal(loanModal);
     if (event.target === detailsModal) closeModal(detailsModal);
-    if (event.target === paymentModal) closeModal(paymentModal); // Cerrar modal de pago
+    if (event.target === paymentModal) closeModal(paymentModal);
+    if (event.target === deleteModal) closeModal(deleteModal);
 });
 
 dniInput.addEventListener('blur', async () => {
     const dni = dniInput.value;
-
     if (dni.length !== 8) {
         dniStatus.textContent = '';
         nombresInput.readOnly = false;
         apellidosInput.readOnly = false;
         return;
     }
-
     const hasActiveLoan = loans.some(loan => loan.dni === dni && loan.status === 'Activo');
-
     if (hasActiveLoan) {
         dniStatus.textContent = '⚠️ Este cliente ya tiene un préstamo activo.';
         dniStatus.style.color = 'orange';
         return;
     } 
-    
     dniStatus.textContent = 'Buscando...';
     dniStatus.style.color = '#667085';
     nombresInput.readOnly = true;
     apellidosInput.readOnly = true;
-    
     try {
         const response = await fetch(`${API_URL}/api/dni/${dni}`);
         const data = await response.json();
-
         if (response.ok && data.nombres) {
             nombresInput.value = data.nombres;
             apellidosInput.value = `${data.apellidoPaterno} ${data.apellidoMaterno}`;
@@ -233,7 +243,6 @@ loanForm.addEventListener('submit', async function(event) {
     } catch (error) { alert(`No se pudo guardar el préstamo: ${error.message}`); }
 });
 
-// --- NUEVA LÓGICA PARA ENVIAR EL FORMULARIO DE PAGO ---
 paymentForm.addEventListener('submit', async function(event) {
     event.preventDefault();
     const loanId = paymentLoanIdInput.value;
@@ -254,10 +263,33 @@ paymentForm.addEventListener('submit', async function(event) {
     } catch (error) { alert(`No se pudo registrar el pago: ${error.message}`); }
 });
 
+deleteConfirmInput.addEventListener('input', () => {
+    finalDeleteBtn.disabled = deleteConfirmInput.value.trim() !== 'ELIMINAR';
+});
+
+deleteForm.addEventListener('submit', async function(event) {
+    event.preventDefault();
+    const loanId = deleteLoanIdInput.value;
+    if (deleteConfirmInput.value.trim() !== 'ELIMINAR') return;
+
+    try {
+        const response = await fetch(`${API_URL}/api/loans/${loanId}`, { method: 'DELETE' });
+        if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.error || `Error ${response.status}`); }
+        await fetchAndRenderLoans();
+        showSuccessAnimation('¡Préstamo Eliminado!');
+        closeModal(deleteModal);
+    } catch (error) {
+        alert(`No se pudo eliminar el préstamo: ${error.message}`);
+    }
+});
+
 function showSuccessAnimation(message) {
     document.getElementById('successText').textContent = message;
     document.getElementById('successAnimation').style.display = 'flex';
-    setTimeout(() => { document.getElementById('successAnimation').style.display = 'none'; closeModal(loanModal); }, 2500);
+    setTimeout(() => {
+        document.getElementById('successAnimation').style.display = 'none';
+        closeModal(loanModal);
+    }, 2500);
 }
 
 async function fetchAndRenderLoans() {
@@ -272,7 +304,6 @@ async function fetchAndRenderLoans() {
     }
 }
 
-// --- FUNCIÓN DE RENDERIZADO DE TABLA (MODIFICADA) ---
 function renderHistoryTable() {
     historyTableBody.innerHTML = '';
     if (loans.length === 0) { 
@@ -283,13 +314,9 @@ function renderHistoryTable() {
         const row = document.createElement('tr');
         const pepLabel = loan.is_pep ? ' <strong style="color: #D92D20;">(PEP)</strong>' : '';
         const hibridoLabel = loan.tipo_calculo === 'Hibrido' ? ' <strong style="color: #005DFF;">(Híbrido)</strong>' : '';
-
-        // Definir clase de estado y si el botón de pago debe estar deshabilitado
         const isPaid = loan.status === 'Pagado';
         const statusClass = isPaid ? 'status-paid' : 'status-active';
         const payButtonDisabled = isPaid ? 'disabled' : '';
-
-        // Lógica de la barra de progreso
         const progressPercent = loan.total_due > 0 ? (loan.total_paid / loan.total_due) * 100 : 0;
 
         row.innerHTML = `
@@ -302,9 +329,10 @@ function renderHistoryTable() {
                 </div>
             </td>
             <td><span class="status ${statusClass}">${loan.status}</span></td>
-            <td>
+            <td class="actions-cell">
                 <button class="button button-secondary view-details-btn" data-loan-id="${loan.id}">Detalles</button>
                 <button class="button button-primary register-payment-btn" data-loan-id="${loan.id}" ${payButtonDisabled}>Pagar</button>
+                <button class="button button-danger delete-loan-btn" data-loan-id="${loan.id}">Eliminar</button>
             </td>
         `;
         historyTableBody.appendChild(row);
@@ -314,7 +342,7 @@ function renderHistoryTable() {
 function populateDetailsModal(loan) {
     currentLoanForDetails = loan;
     const { payments, schedule } = calculateSchedule(loan);
-    let paymentSummary = '';
+    let paymentSummary;
     if(loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
         paymentSummary = `
             <p><strong>Cuota "Solo Interés" (Mes 1-${loan.meses_solo_interes}): S/ ${payments.interestOnlyPayment.toFixed(2)}</strong></p>
@@ -326,22 +354,32 @@ function populateDetailsModal(loan) {
 
     document.getElementById('scheduleSummary').innerHTML = `
         <p><strong>Cliente:</strong> ${loan.nombres} ${loan.apellidos} ${loan.is_pep ? '<strong style="color: #D92D20;">(PEP)</strong>' : ''}</p>
+        <p><strong>Fecha de Desembolso:</strong> ${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC', day: '2-digit', month: 'long', year: 'numeric' })}</p>
         <p><strong>Monto:</strong> S/ ${parseFloat(loan.monto).toFixed(2)} | <strong>Interés:</strong> ${loan.interes}% | <strong>Plazo:</strong> ${loan.plazo} meses</p>
         ${paymentSummary}
     `;
     
     if (parseFloat(loan.monto) > VALOR_UIT || loan.is_pep) {
-        document.getElementById('declaracionJuradaSection').style.display = 'block';
-        document.getElementById('declaracionJuradaSection').innerHTML = `...`; // Contenido omitido por brevedad
+        const declaracionSection = document.getElementById('declaracionJuradaSection');
+        declaracionSection.style.display = 'block';
+        declaracionSection.innerHTML = `
+            <h3 class="declaracion-title">Declaración Jurada de Origen de Fondos</h3>
+            <p class="declaracion-body">
+                Yo, <strong>${loan.nombres} ${loan.apellidos}</strong>, identificado(a) con DNI N° <strong>${loan.dni}</strong>, declaro bajo juramento que los fondos y/o bienes utilizados en la operación de préstamo de <strong>S/ ${parseFloat(loan.monto).toFixed(2)}</strong> otorgado en la fecha ${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}, provienen de actividades lícitas y no están vinculados con el lavado de activos, financiamiento del terrorismo ni cualquier otra actividad ilegal contemplada en la legislación peruana.
+            </p>
+            <div class="declaracion-signature">
+                <p>_________________________</p>
+                <p><strong>${loan.nombres} ${loan.apellidos}</strong></p>
+                <p>DNI: ${loan.dni}</p>
+            </div>
+        `;
     } else {
         document.getElementById('declaracionJuradaSection').style.display = 'none';
-        document.getElementById('declaracionJuradaSection').innerHTML = '';
     }
 
     document.getElementById('scheduleTableBody').innerHTML = schedule.map(item => `
         <tr><td>${item.cuota}</td><td>${item.fecha}</td><td>S/ ${item.monto}</td></tr>`).join('');
     
-    // --- NUEVO: LLENAR TABLA DE HISTORIAL DE PAGOS ---
     const paymentHistoryBody = document.getElementById('paymentHistoryBody');
     if (loan.payments && loan.payments.length > 0) {
         paymentHistoryBody.innerHTML = loan.payments.map((p, index) => `
@@ -367,23 +405,33 @@ function updateDashboard() {
     document.getElementById('totalClients').textContent = clients.size;
 }
 
-// --- EVENT LISTENER DE LA TABLA (MODIFICADO) ---
 historyTableBody.addEventListener('click', function(event) {
-    const target = event.target;
+    const target = event.target.closest('button');
+    if (!target) return;
+
+    const loanId = target.getAttribute('data-loan-id');
+    const loan = loans.find(l => l.id == loanId);
+
     if (target.classList.contains('view-details-btn')) {
-        const loanId = target.getAttribute('data-loan-id');
-        const loan = loans.find(l => l.id == loanId);
         if (loan) populateDetailsModal(loan);
     }
-    // --- NUEVO: MANEJAR CLIC EN BOTÓN DE PAGO ---
+    
     if (target.classList.contains('register-payment-btn')) {
-        const loanId = target.getAttribute('data-loan-id');
-        const loan = loans.find(l => l.id == loanId);
         if (loan) {
             paymentModalTitle.textContent = `Registrar Pago para ${loan.apellidos}`;
             paymentLoanIdInput.value = loan.id;
-            document.getElementById('payment_date').valueAsDate = new Date(); // Poner fecha actual por defecto
+            document.getElementById('payment_date').valueAsDate = new Date();
             openModal(paymentModal);
+        }
+    }
+    
+    if (target.classList.contains('delete-loan-btn')) {
+        if (loan) {
+            deleteModalTitle.textContent = `Eliminar Préstamo de ${loan.nombres} ${loan.apellidos}`;
+            deleteWarningText.innerHTML = `Esta acción es irreversible y eliminará permanentemente el préstamo de <strong>S/ ${loan.monto.toFixed(2)}</strong> y su historial de pagos.`;
+            deleteLoanIdInput.value = loan.id;
+            finalDeleteBtn.disabled = true;
+            openModal(deleteModal);
         }
     }
 });
@@ -398,7 +446,6 @@ function calculateSchedule(loan) {
    if (loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
         const interestOnlyPayment = principal * monthlyInterestRate;
         payments.interestOnlyPayment = interestOnlyPayment;
-
         for (let i = 1; i <= loan.meses_solo_interes; i++) {
             const paymentDate = new Date(startDate);
             paymentDate.setUTCMonth(paymentDate.getUTCMonth() + i);
@@ -408,11 +455,9 @@ function calculateSchedule(loan) {
                 monto: interestOnlyPayment.toFixed(2)
             });
         }
-
         const remainingTerm = loan.plazo - loan.meses_solo_interes;
         const amortizedPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -remainingTerm));
         payments.amortizedPayment = amortizedPayment;
-
         for (let i = 1; i <= remainingTerm; i++) {
             const paymentDate = new Date(startDate);
             paymentDate.setUTCMonth(paymentDate.getUTCMonth() + loan.meses_solo_interes + i);
@@ -422,11 +467,9 @@ function calculateSchedule(loan) {
                 monto: amortizedPayment.toFixed(2)
             });
         }
-
    } else {
         const monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
         payments.amortizedPayment = monthlyPayment;
-        
         for (let i = 1; i <= loan.plazo; i++) {
             const paymentDate = new Date(startDate);
             paymentDate.setUTCMonth(paymentDate.getUTCMonth() + i);
@@ -570,4 +613,5 @@ function descargarPDF(doc, fileName) {
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
+
 
