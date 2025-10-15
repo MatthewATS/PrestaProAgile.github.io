@@ -175,6 +175,11 @@ body {
     color: var(--primary-color);
 }
 
+.status-paid {
+    background-color: #ECFDF3;
+    color: #027A48;
+}
+
 .modal {
     position: fixed;
     top: 0;
@@ -284,7 +289,6 @@ input {
     box-sizing: border-box;
 }
 
-/* --- ¡NUEVO ESTILO AÑADIDO! --- */
 input[readonly] {
     background-color: var(--light-gray);
     cursor: not-allowed;
@@ -473,11 +477,6 @@ input[readonly] {
     100% {
         box-shadow: inset 0px 0px 0px 50px var(--white);
     }
-}
-
-.status-paid {
-    background-color: #ECFDF3;
-    color: #027A48;
 }
 
 .progress-bar-container {
