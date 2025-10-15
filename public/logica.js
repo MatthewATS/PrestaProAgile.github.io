@@ -46,6 +46,18 @@ loanForm.innerHTML = `
             <div class="form-group"><label for="interes">Interés Mensual (%)</label><input type="number" id="interes" placeholder="Ej: 3.5" required step="0.01" min="1" max="15"></div>
             <div class="form-group"><label for="plazo">Plazo (Meses)</label><input type="number" id="plazo" placeholder="Ej: 12" required min="1" max="60"></div>
         </div>
+
+        <div class="form-group" style="background-color: #F9FAFB; padding: 12px; border-radius: 8px;">
+             <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                <input type="checkbox" id="hibrido_check" style="width: auto; margin-right: 12px; height: 18px; width: 18px;">
+                <label for="hibrido_check" style="margin-bottom: 0;">Activar período de "solo interés"</label>
+            </div>
+            <div id="hibrido_options" style="display: none;">
+                <label for="meses_solo_interes">N° de meses de "solo interés"</label>
+                <input type="number" id="meses_solo_interes" placeholder="Ej: 3" min="1">
+            </div>
+        </div>
+
         <div id="declaracion-container" class="form-group" style="display: none; background-color: #E6F0FF; padding: 15px; border-radius: 8px; margin-top: 10px;">
             <div style="display: flex; align-items: center;">
                  <input type="checkbox" id="declaracion_jurada" required style="width: auto; margin-right: 12px; height: 18px; width: 18px;">
@@ -67,10 +79,31 @@ const declaracionContainer = document.getElementById('declaracion-container');
 const declaracionCheckbox = document.getElementById('declaracion_jurada');
 const isPepCheckbox = document.getElementById('is_pep');
 const submitButton = loanForm.querySelector('button[type="submit"]');
+const hibridoCheck = document.getElementById('hibrido_check');
+const hibridoOptions = document.getElementById('hibrido_options');
+const mesesSoloInteresInput = document.getElementById('meses_solo_interes');
+
+// --- LÓGICA PARA MOSTRAR/OCULTAR OPCIONES HÍBRIDAS ---
+hibridoCheck.addEventListener('change', () => {
+    if (hibridoCheck.checked) {
+        hibridoOptions.style.display = 'block';
+        mesesSoloInteresInput.required = true;
+        const plazo = parseInt(document.getElementById('plazo').value, 10) || 1;
+        mesesSoloInteresInput.max = plazo - 1; // No puede ser todo el plazo
+    } else {
+        hibridoOptions.style.display = 'none';
+        mesesSoloInteresInput.required = false;
+        mesesSoloInteresInput.value = '';
+    }
+});
+document.getElementById('plazo').addEventListener('input', () => {
+    const plazo = parseInt(document.getElementById('plazo').value, 10) || 1;
+    mesesSoloInteresInput.max = plazo - 1;
+});
 
 // --- FUNCIÓN AUXILIAR ---
 function toggleFormFields(isEnabled) {
-    const fieldsToToggle = [nombresInput, apellidosInput, montoInput, document.getElementById('fecha'), document.getElementById('interes'), document.getElementById('plazo'), isPepCheckbox, declaracionCheckbox, submitButton];
+    const fieldsToToggle = [nombresInput, apellidosInput, montoInput, document.getElementById('fecha'), document.getElementById('interes'), document.getElementById('plazo'), isPepCheckbox, declaracionCheckbox, submitButton, hibridoCheck, mesesSoloInteresInput];
     fieldsToToggle.forEach(field => { if (field) field.disabled = !isEnabled; });
 }
 
@@ -109,6 +142,7 @@ const closeModal = (modal) => {
         nombresInput.readOnly = false;
         apellidosInput.readOnly = false;
         dniStatus.textContent = '';
+        hibridoOptions.style.display = 'none';
         updateDeclaracionVisibility();
         toggleFormFields(true);
     }
@@ -190,6 +224,8 @@ dniInput.addEventListener('blur', async () => {
 loanForm.addEventListener('submit', async function(event) {
     event.preventDefault();
     
+    const esHibrido = hibridoCheck.checked;
+    
     const newLoanData = {
         client: {
             dni: dniInput.value,
@@ -202,7 +238,9 @@ loanForm.addEventListener('submit', async function(event) {
         fecha: document.getElementById('fecha').value,
         plazo: parseInt(document.getElementById('plazo').value),
         status: 'Activo',
-        declaracion_jurada: declaracionCheckbox.checked
+        declaracion_jurada: declaracionCheckbox.checked,
+        tipo_calculo: esHibrido ? 'Hibrido' : 'Amortizado',
+        meses_solo_interes: esHibrido ? parseInt(mesesSoloInteresInput.value) : 0
     };
 
     try {
@@ -246,8 +284,11 @@ function renderHistoryTable() {
     }
     loans.forEach(loan => {
         const row = document.createElement('tr');
+        const pepLabel = loan.is_pep ? ' <strong style="color: #D92D20;">(PEP)</strong>' : '';
+        const hibridoLabel = loan.tipo_calculo === 'Hibrido' ? ' <strong style="color: #005DFF;">(Híbrido)</strong>' : '';
+
         row.innerHTML = `
-            <td>${loan.nombres} ${loan.apellidos} ${loan.is_pep ? '<strong style="color: #D92D20;">(PEP)</strong>' : ''}</td>
+            <td>${loan.nombres} ${loan.apellidos}${pepLabel}${hibridoLabel}</td>
             <td>S/ ${parseFloat(loan.monto).toFixed(2)}</td>
             <td>${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}</td>
             <td>${loan.plazo} meses</td>
@@ -260,13 +301,23 @@ function renderHistoryTable() {
 
 function populateDetailsModal(loan) {
     currentLoanForDetails = loan;
-    const { monthlyPayment, schedule } = calculateSchedule(loan);
+    const { payments, schedule } = calculateSchedule(loan);
     const declaracionSection = document.getElementById('declaracionJuradaSection');
+
+    let paymentSummary = '';
+    if(loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
+        paymentSummary = `
+            <p><strong>Cuota "Solo Interés" (Mes 1-${loan.meses_solo_interes}): S/ ${payments.interestOnlyPayment.toFixed(2)}</strong></p>
+            <p><strong>Cuota Regular (Desde Mes ${loan.meses_solo_interes + 1}): S/ ${payments.amortizedPayment.toFixed(2)}</strong></p>
+        `;
+    } else {
+        paymentSummary = `<p><strong>Cuota Mensual Fija: S/ ${payments.amortizedPayment.toFixed(2)}</strong></p>`;
+    }
 
     document.getElementById('scheduleSummary').innerHTML = `
         <p><strong>Cliente:</strong> ${loan.nombres} ${loan.apellidos} ${loan.is_pep ? '<strong style="color: #D92D20;">(PEP)</strong>' : ''}</p>
         <p><strong>Monto:</strong> S/ ${parseFloat(loan.monto).toFixed(2)} | <strong>Interés:</strong> ${loan.interes}% | <strong>Plazo:</strong> ${loan.plazo} meses</p>
-        <p><strong>Cuota Mensual Fija: S/ ${monthlyPayment.toFixed(2)}</strong></p>
+        ${paymentSummary}
     `;
     
     if (parseFloat(loan.monto) > VALOR_UIT || loan.is_pep) {
@@ -314,26 +365,57 @@ historyTableBody.addEventListener('click', function(event) {
 function calculateSchedule(loan) {
    const monthlyInterestRate = parseFloat(loan.interes) / 100;
    const principal = parseFloat(loan.monto);
-   if (monthlyInterestRate === 0) {
-       const monthlyPayment = loan.plazo > 0 ? principal / loan.plazo : 0;
-       return { monthlyPayment, schedule: [] };
-   }
-   const monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
    const schedule = [];
    const startDate = new Date(loan.fecha);
-    for (let i = 1; i <= loan.plazo; i++) {
-        const paymentDate = new Date(startDate);
-        paymentDate.setUTCMonth(paymentDate.getUTCMonth() + i);
-        schedule.push({
-            cuota: i,
-            fecha: paymentDate.toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }),
-            monto: monthlyPayment.toFixed(2)
-        });
-    }
-    return { monthlyPayment, schedule };
+   let payments = {};
+
+   if (loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
+        // Fase 1: Solo Interés
+        const interestOnlyPayment = principal * monthlyInterestRate;
+        payments.interestOnlyPayment = interestOnlyPayment;
+
+        for (let i = 1; i <= loan.meses_solo_interes; i++) {
+            const paymentDate = new Date(startDate);
+            paymentDate.setUTCMonth(paymentDate.getUTCMonth() + i);
+            schedule.push({
+                cuota: i,
+                fecha: paymentDate.toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }),
+                monto: interestOnlyPayment.toFixed(2)
+            });
+        }
+
+        // Fase 2: Amortización
+        const remainingTerm = loan.plazo - loan.meses_solo_interes;
+        const amortizedPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -remainingTerm));
+        payments.amortizedPayment = amortizedPayment;
+
+        for (let i = 1; i <= remainingTerm; i++) {
+            const paymentDate = new Date(startDate);
+            paymentDate.setUTCMonth(paymentDate.getUTCMonth() + loan.meses_solo_interes + i);
+            schedule.push({
+                cuota: loan.meses_solo_interes + i,
+                fecha: paymentDate.toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }),
+                monto: amortizedPayment.toFixed(2)
+            });
+        }
+
+   } else {
+        const monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
+        payments.amortizedPayment = monthlyPayment;
+        
+        for (let i = 1; i <= loan.plazo; i++) {
+            const paymentDate = new Date(startDate);
+            paymentDate.setUTCMonth(paymentDate.getUTCMonth() + i);
+            schedule.push({
+                cuota: i,
+                fecha: paymentDate.toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }),
+                monto: monthlyPayment.toFixed(2)
+            });
+        }
+   }
+    return { payments, schedule };
 }
 
-// --- FUNCIÓN DE IMPRESIÓN DEFINITIVA (CORREGIDA) ---
 // --- FUNCIÓN DE IMPRESIÓN CORREGIDA ---
 function printSchedule() {
     const printableContent = document.querySelector('#detailsModal .printable').innerHTML;
@@ -357,125 +439,26 @@ function printSchedule() {
             <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
             <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
             <style>
-                @page {
-                    margin: 15mm;
-                    size: A4;
-                }
-                
-                * {
-                    box-sizing: border-box;
-                }
-                
-                html, body {
-                    margin: 0;
-                    padding: 0;
-                    font-family: 'Poppins', sans-serif;
-                    font-size: 12px;
-                    line-height: 1.4;
-                    color: #344054;
-                }
-
-                .modal-header {
-                    padding: 0 0 15px 0;
-                    border-bottom: 2px solid #D0D5DD;
-                    margin-bottom: 20px;
-                }
-
-                .modal-header h2 {
-                    font-size: 18px;
-                    color: #0D244F;
-                    margin: 0;
-                }
-
-                .close-button {
-                    display: none !important;
-                }
-
-                .summary-info {
-                    padding: 15px;
-                    background-color: #E6F0FF;
-                    border-radius: 8px;
-                    margin-bottom: 20px;
-                    border: 1px solid #005DFF;
-                    page-break-inside: avoid;
-                }
-
-                .summary-info p {
-                    margin: 5px 0;
-                    font-size: 11px;
-                }
-
-                #declaracionJuradaSection {
-                    margin: 20px 0;
-                    padding: 15px;
-                    border: 1px solid #D0D5DD;
-                    border-radius: 8px;
-                    page-break-inside: avoid;
-                }
-
-                .declaracion-title {
-                    text-align: center;
-                    font-size: 14px;
-                    font-weight: bold;
-                    text-transform: uppercase;
-                    margin-bottom: 15px;
-                    color: #0D244F;
-                }
-
-                .declaracion-body {
-                    font-size: 10px;
-                    line-height: 1.6;
-                    text-align: justify;
-                    margin-bottom: 25px;
-                }
-
-                .declaracion-signature {
-                    margin-top: 30px;
-                    text-align: center;
-                    font-size: 10px;
-                }
-
-                .declaracion-signature p {
-                    margin: 3px 0;
-                }
-
-                .table-container {
-                    width: 100%;
-                    overflow: visible;
-                }
-
-                table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin-top: 10px;
-                }
-
-                thead {
-                    display: table-header-group;
-                }
-
-                th, td {
-                    padding: 10px;
-                    text-align: left;
-                    border: 1px solid #D0D5DD;
-                    font-size: 11px;
-                }
-
-                th {
-                    background-color: #F9FAFB;
-                    font-weight: 600;
-                    text-transform: uppercase;
-                    color: #667085;
-                    font-size: 10px;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                }
-
-                tbody tr:nth-child(even) {
-                    background-color: #FAFBFC;
-                }
+                @page { margin: 15mm; size: A4; }
+                * { box-sizing: border-box; }
+                html, body { margin: 0; padding: 0; font-family: 'Poppins', sans-serif; font-size: 12px; line-height: 1.4; color: #344054; }
+                .modal-header { padding: 0 0 15px 0; border-bottom: 2px solid #D0D5DD; margin-bottom: 20px; }
+                .modal-header h2 { font-size: 18px; color: #0D244F; margin: 0; }
+                .close-button { display: none !important; }
+                .summary-info { padding: 15px; background-color: #E6F0FF; border-radius: 8px; margin-bottom: 20px; border: 1px solid #005DFF; page-break-inside: avoid; }
+                .summary-info p { margin: 5px 0; font-size: 11px; }
+                #declaracionJuradaSection { margin: 20px 0; padding: 15px; border: 1px solid #D0D5DD; border-radius: 8px; page-break-inside: avoid; }
+                .declaracion-title { text-align: center; font-size: 14px; font-weight: bold; text-transform: uppercase; margin-bottom: 15px; color: #0D244F; }
+                .declaracion-body { font-size: 10px; line-height: 1.6; text-align: justify; margin-bottom: 25px; }
+                .declaracion-signature { margin-top: 30px; text-align: center; font-size: 10px; }
+                .declaracion-signature p { margin: 3px 0; }
+                .table-container { width: 100%; overflow: visible; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                thead { display: table-header-group; }
+                th, td { padding: 10px; text-align: left; border: 1px solid #D0D5DD; font-size: 11px; }
+                th { background-color: #F9FAFB; font-weight: 600; text-transform: uppercase; color: #667085; font-size: 10px; }
+                tr { page-break-inside: avoid; }
+                tbody tr:nth-child(even) { background-color: #FAFBFC; }
             </style>
         </head>
         <body>
@@ -501,7 +484,7 @@ function compartirPDF() {
     if (typeof window.jspdf === 'undefined') { alert("Error: La librería jsPDF no se cargó correctamente."); return; }
     try {
         const loan = currentLoanForDetails;
-        const { monthlyPayment, schedule } = calculateSchedule(loan);
+        const { payments, schedule } = calculateSchedule(loan);
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         let finalY = 0;
@@ -517,21 +500,24 @@ function compartirPDF() {
         doc.text(`Fecha de Préstamo: ${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}`, 105, 58);
         doc.text(`Interés Mensual: ${loan.interes}%`, 14, 64);
         doc.text(`Plazo: ${loan.plazo} meses`, 105, 64);
-        doc.text(`Cuota Mensual Fija: S/ ${monthlyPayment.toFixed(2)}`, 14, 70);
 
-        finalY = 80;
+        if (loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
+            doc.text(`Cuota 'Solo Interés': S/ ${payments.interestOnlyPayment.toFixed(2)}`, 14, 70);
+            doc.text(`Cuota Regular: S/ ${payments.amortizedPayment.toFixed(2)}`, 14, 76);
+            finalY = 86;
+        } else {
+            doc.text(`Cuota Mensual Fija: S/ ${payments.amortizedPayment.toFixed(2)}`, 14, 70);
+            finalY = 80;
+        }
 
         if (parseFloat(loan.monto) > VALOR_UIT || loan.is_pep) {
             doc.setFontSize(14); doc.setTextColor(52, 64, 84); doc.text("Declaración Jurada de Origen de Fondos", 105, finalY, { align: 'center' });
             finalY += 10;
-            
             const textoDeclaracion = `Yo, ${loan.nombres} ${loan.apellidos}, identificado(a) con DNI N° ${loan.dni}, declaro bajo juramento que los fondos y/o bienes utilizados en la operación de préstamo de S/ ${parseFloat(loan.monto).toFixed(2)} provienen de actividades lícitas y no están vinculados con el lavado de activos ni cualquier otra actividad ilegal.`;
-            
             doc.setFontSize(10); doc.setTextColor(100, 100, 100);
             const splitText = doc.splitTextToSize(textoDeclaracion, 180);
             doc.text(splitText, 14, finalY);
             finalY += (splitText.length * 5) + 20;
-            
             doc.text("_________________________", 105, finalY, { align: 'center' });
             finalY += 5;
             doc.text(`${loan.nombres} ${loan.apellidos}`, 105, finalY, { align: 'center' });
@@ -571,8 +557,3 @@ function descargarPDF(doc, fileName) {
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
-
-// --- Carga Inicial ---
-document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
-
-
