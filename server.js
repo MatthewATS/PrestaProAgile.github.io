@@ -1,3 +1,5 @@
+// server.js MODIFICADO
+
 const express = require('express');
 const path = require('path');
 const mysql = require('mysql2/promise');
@@ -41,8 +43,17 @@ app.post('/api/loans', async (req, res) => {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
-    const { client, monto, interes, fecha, plazo, status } = req.body;
+
+    // MODIFICADO: Se recibe 'declaracion_jurada' del body.
+    // Se le asigna `false` por defecto si no viene en la petición.
+    const { client, monto, interes, fecha, plazo, status, declaracion_jurada = false } = req.body;
     const { dni, nombres, apellidos } = client;
+
+    // Aquí podrías agregar una validación extra del lado del servidor si quisieras:
+    // const VALOR_UIT = 5150;
+    // if (monto > VALOR_UIT && !declaracion_jurada) {
+    //   return res.status(400).json({ error: 'La declaración jurada es requerida para este monto.' });
+    // }
 
     let [existingClient] = await connection.query('SELECT id FROM clients WHERE dni = ?', [dni]);
     let clientId;
@@ -56,12 +67,13 @@ app.post('/api/loans', async (req, res) => {
       );
       clientId = result.insertId;
     }
-
+    
+    // MODIFICADO: Se añade 'declaracion_jurada' al INSERT
     const loanQuery = `
-      INSERT INTO loans (client_id, monto, interes, fecha, plazo, status) 
-      VALUES (?, ?, ?, ?, ?, ?);
+      INSERT INTO loans (client_id, monto, interes, fecha, plazo, status, declaracion_jurada) 
+      VALUES (?, ?, ?, ?, ?, ?, ?);
     `;
-    const loanValues = [clientId, monto, interes, fecha, plazo, status];
+    const loanValues = [clientId, monto, interes, fecha, plazo, status, declaracion_jurada];
     await connection.query(loanQuery, loanValues);
 
     await connection.commit();
