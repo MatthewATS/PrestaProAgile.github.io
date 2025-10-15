@@ -89,7 +89,7 @@ hibridoCheck.addEventListener('change', () => {
         hibridoOptions.style.display = 'block';
         mesesSoloInteresInput.required = true;
         const plazo = parseInt(document.getElementById('plazo').value, 10) || 1;
-        mesesSoloInteresInput.max = plazo - 1; // No puede ser todo el plazo
+        mesesSoloInteresInput.max = plazo - 1;
     } else {
         hibridoOptions.style.display = 'none';
         mesesSoloInteresInput.required = false;
@@ -254,12 +254,24 @@ loanForm.addEventListener('submit', async function(event) {
             throw new Error(errorData.error || `Error ${response.status}`);
         }
         await fetchAndRenderLoans();
-        closeModal(loanModal);
+        showSuccessAnimation();
+
     } catch (error) {
         console.error(error);
         alert(`No se pudo guardar el préstamo: ${error.message}`);
     }
 });
+
+// --- FUNCIÓN PARA MOSTRAR ANIMACIÓN DE ÉXITO ---
+function showSuccessAnimation() {
+    const animationContainer = document.getElementById('successAnimation');
+    animationContainer.style.display = 'flex';
+
+    setTimeout(() => {
+        animationContainer.style.display = 'none';
+        closeModal(loanModal);
+    }, 2500);
+}
 
 // --- FUNCIONES PRINCIPALES ---
 
@@ -370,7 +382,6 @@ function calculateSchedule(loan) {
    let payments = {};
 
    if (loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
-        // Fase 1: Solo Interés
         const interestOnlyPayment = principal * monthlyInterestRate;
         payments.interestOnlyPayment = interestOnlyPayment;
 
@@ -384,7 +395,6 @@ function calculateSchedule(loan) {
             });
         }
 
-        // Fase 2: Amortización
         const remainingTerm = loan.plazo - loan.meses_solo_interes;
         const amortizedPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -remainingTerm));
         payments.amortizedPayment = amortizedPayment;
@@ -416,7 +426,6 @@ function calculateSchedule(loan) {
     return { payments, schedule };
 }
 
-// --- FUNCIÓN DE IMPRESIÓN CORREGIDA ---
 function printSchedule() {
     const printableContent = document.querySelector('#detailsModal .printable').innerHTML;
     
@@ -439,31 +448,24 @@ function printSchedule() {
             <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
             <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
             <style>
-                @page { margin: 15mm; size: A4; }
-                * { box-sizing: border-box; }
+                @page { margin: 15mm; size: A4; } * { box-sizing: border-box; }
                 html, body { margin: 0; padding: 0; font-family: 'Poppins', sans-serif; font-size: 12px; line-height: 1.4; color: #344054; }
                 .modal-header { padding: 0 0 15px 0; border-bottom: 2px solid #D0D5DD; margin-bottom: 20px; }
-                .modal-header h2 { font-size: 18px; color: #0D244F; margin: 0; }
-                .close-button { display: none !important; }
+                .modal-header h2 { font-size: 18px; color: #0D244F; margin: 0; } .close-button { display: none !important; }
                 .summary-info { padding: 15px; background-color: #E6F0FF; border-radius: 8px; margin-bottom: 20px; border: 1px solid #005DFF; page-break-inside: avoid; }
                 .summary-info p { margin: 5px 0; font-size: 11px; }
                 #declaracionJuradaSection { margin: 20px 0; padding: 15px; border: 1px solid #D0D5DD; border-radius: 8px; page-break-inside: avoid; }
                 .declaracion-title { text-align: center; font-size: 14px; font-weight: bold; text-transform: uppercase; margin-bottom: 15px; color: #0D244F; }
                 .declaracion-body { font-size: 10px; line-height: 1.6; text-align: justify; margin-bottom: 25px; }
-                .declaracion-signature { margin-top: 30px; text-align: center; font-size: 10px; }
-                .declaracion-signature p { margin: 3px 0; }
+                .declaracion-signature { margin-top: 30px; text-align: center; font-size: 10px; } .declaracion-signature p { margin: 3px 0; }
                 .table-container { width: 100%; overflow: visible; }
-                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-                thead { display: table-header-group; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; } thead { display: table-header-group; }
                 th, td { padding: 10px; text-align: left; border: 1px solid #D0D5DD; font-size: 11px; }
                 th { background-color: #F9FAFB; font-weight: 600; text-transform: uppercase; color: #667085; font-size: 10px; }
-                tr { page-break-inside: avoid; }
-                tbody tr:nth-child(even) { background-color: #FAFBFC; }
+                tr { page-break-inside: avoid; } tbody tr:nth-child(even) { background-color: #FAFBFC; }
             </style>
         </head>
-        <body>
-            ${printableContent}
-        </body>
+        <body>${printableContent}</body>
         </html>
     `);
     iframeDoc.close();
@@ -472,9 +474,7 @@ function printSchedule() {
         setTimeout(function() {
             iframe.contentWindow.focus();
             iframe.contentWindow.print();
-            setTimeout(() => {
-                document.body.removeChild(iframe);
-            }, 100);
+            setTimeout(() => { document.body.removeChild(iframe); }, 100);
         }, 500);
     };
 }
@@ -491,7 +491,6 @@ function compartirPDF() {
 
         doc.setFontSize(22); doc.setTextColor(0, 93, 255); doc.text("PRESTAPRO", 105, 20, { align: 'center' });
         doc.setFontSize(16); doc.setTextColor(52, 64, 84); doc.text("Detalles del Préstamo", 105, 30, { align: 'center' });
-        
         doc.setFontSize(12); doc.setTextColor(100, 100, 100); doc.text("DATOS GENERALES", 14, 45);
         doc.setFontSize(11); doc.setTextColor(52, 64, 84);
         doc.text(`Cliente: ${loan.nombres} ${loan.apellidos} ${loan.is_pep ? '(PEP)' : ''}`, 14, 52);
@@ -557,3 +556,4 @@ function descargarPDF(doc, fileName) {
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
+
