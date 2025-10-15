@@ -163,34 +163,21 @@ window.addEventListener('click', (event) => {
     if (event.target === paymentModal) closeModal(paymentModal); // Cerrar modal de pago
 });
 
-/**
- * --- ¡NUEVA FUNCIÓN! ---
- * Bloquea o desbloquea todos los campos del formulario excepto el DNI.
- * @param {boolean} locked - `true` para bloquear el formulario, `false` para desbloquear.
- */
 function toggleFormLock(locked) {
     const formElements = loanForm.querySelectorAll('input, button');
     const fieldsets = loanForm.querySelectorAll('fieldset');
-
     formElements.forEach(element => {
-        // No deshabilitamos el campo DNI para que el usuario pueda corregirlo
         if (element.id !== 'dni') {
             element.disabled = locked;
         }
     });
-
     fieldsets.forEach(fieldset => {
-        // Damos una señal visual de que el formulario está bloqueado
         fieldset.style.opacity = locked ? 0.6 : 1;
     });
 }
 
-
-// --- LÓGICA DE VERIFICACIÓN DE DNI (MODIFICADA) ---
 dniInput.addEventListener('blur', async () => {
-    // Primero, nos aseguramos de que el formulario esté desbloqueado al iniciar la verificación
     toggleFormLock(false);
-    
     const dni = dniInput.value;
 
     if (dni.length !== 8) {
@@ -205,8 +192,8 @@ dniInput.addEventListener('blur', async () => {
     if (hasActiveLoan) {
         dniStatus.textContent = '⚠️ Este cliente ya tiene un préstamo activo. Formulario bloqueado.';
         dniStatus.style.color = 'orange';
-        toggleFormLock(true); // Bloqueamos todo el formulario
-        return; // Detenemos la ejecución
+        toggleFormLock(true);
+        return;
     } 
     
     dniStatus.textContent = 'Buscando...';
@@ -312,12 +299,10 @@ function renderHistoryTable() {
         const pepLabel = loan.is_pep ? ' <strong style="color: #D92D20;">(PEP)</strong>' : '';
         const hibridoLabel = loan.tipo_calculo === 'Hibrido' ? ' <strong style="color: #005DFF;">(Híbrido)</strong>' : '';
 
-        // Definir clase de estado y si el botón de pago debe estar deshabilitado
         const isPaid = loan.status === 'Pagado';
         const statusClass = isPaid ? 'status-paid' : 'status-active';
         const payButtonDisabled = isPaid ? 'disabled' : '';
 
-        // Lógica de la barra de progreso
         const progressPercent = loan.total_due > 0 ? (loan.total_paid / loan.total_due) * 100 : 0;
 
         row.innerHTML = `
@@ -331,14 +316,18 @@ function renderHistoryTable() {
             </td>
             <td><span class="status ${statusClass}">${loan.status}</span></td>
             <td>
-                <button class="button button-secondary view-details-btn" data-loan-id="${loan.id}">Detalles</button>
-                <button class="button button-primary register-payment-btn" data-loan-id="${loan.id}" ${payButtonDisabled}>Pagar</button>
+                <div class="action-buttons">
+                    <button class="button button-secondary view-details-btn" data-loan-id="${loan.id}">Detalles</button>
+                    <button class="button button-primary register-payment-btn" data-loan-id="${loan.id}" ${payButtonDisabled}>Pagar</button>
+                    <button class="button button-danger delete-loan-btn" data-loan-id="${loan.id}">Eliminar</button>
+                </div>
             </td>
         `;
         historyTableBody.appendChild(row);
     });
 }
 
+// --- FUNCIÓN DE DETALLES (MODIFICADA) ---
 function populateDetailsModal(loan) {
     currentLoanForDetails = loan;
     const { payments, schedule } = calculateSchedule(loan);
@@ -352,15 +341,25 @@ function populateDetailsModal(loan) {
         paymentSummary = `<p><strong>Cuota Mensual Fija: S/ ${payments.amortizedPayment.toFixed(2)}</strong></p>`;
     }
 
+    // Formatear la fecha de desembolso para mostrarla
+    const disbursementDate = new Date(loan.fecha).toLocaleDateString('es-PE', {
+        day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC'
+    });
+
     document.getElementById('scheduleSummary').innerHTML = `
         <p><strong>Cliente:</strong> ${loan.nombres} ${loan.apellidos} ${loan.is_pep ? '<strong style="color: #D92D20;">(PEP)</strong>' : ''}</p>
-        <p><strong>Monto:</strong> S/ ${parseFloat(loan.monto).toFixed(2)} | <strong>Interés:</strong> ${loan.interes}% | <strong>Plazo:</strong> ${loan.plazo} meses</p>
+        <p>
+            <strong>Monto:</strong> S/ ${parseFloat(loan.monto).toFixed(2)} | 
+            <strong>Interés:</strong> ${loan.interes}% | 
+            <strong>Plazo:</strong> ${loan.plazo} meses
+        </p>
+        <p><strong>Fecha de Desembolso:</strong> ${disbursementDate}</p>
         ${paymentSummary}
     `;
     
     if (parseFloat(loan.monto) > VALOR_UIT || loan.is_pep) {
         document.getElementById('declaracionJuradaSection').style.display = 'block';
-        document.getElementById('declaracionJuradaSection').innerHTML = `...`; // Contenido omitido por brevedad
+        document.getElementById('declaracionJuradaSection').innerHTML = `...`;
     } else {
         document.getElementById('declaracionJuradaSection').style.display = 'none';
         document.getElementById('declaracionJuradaSection').innerHTML = '';
@@ -369,7 +368,6 @@ function populateDetailsModal(loan) {
     document.getElementById('scheduleTableBody').innerHTML = schedule.map(item => `
         <tr><td>${item.cuota}</td><td>${item.fecha}</td><td>S/ ${item.monto}</td></tr>`).join('');
     
-    // --- NUEVO: LLENAR TABLA DE HISTORIAL DE PAGOS ---
     const paymentHistoryBody = document.getElementById('paymentHistoryBody');
     if (loan.payments && loan.payments.length > 0) {
         paymentHistoryBody.innerHTML = loan.payments.map((p, index) => `
@@ -386,6 +384,7 @@ function populateDetailsModal(loan) {
     openModal(detailsModal);
 }
 
+
 function updateDashboard() {
     const totalLoaned = loans.reduce((sum, loan) => sum + parseFloat(loan.monto), 0);
     clients.clear();
@@ -397,24 +396,64 @@ function updateDashboard() {
 
 // --- EVENT LISTENER DE LA TABLA (MODIFICADO) ---
 historyTableBody.addEventListener('click', function(event) {
-    const target = event.target;
+    const target = event.target.closest('button'); // Mejoramos la deteccion del clic
+    if (!target) return;
+
     if (target.classList.contains('view-details-btn')) {
         const loanId = target.getAttribute('data-loan-id');
         const loan = loans.find(l => l.id == loanId);
         if (loan) populateDetailsModal(loan);
     }
-    // --- NUEVO: MANEJAR CLIC EN BOTÓN DE PAGO ---
+    
     if (target.classList.contains('register-payment-btn')) {
         const loanId = target.getAttribute('data-loan-id');
         const loan = loans.find(l => l.id == loanId);
         if (loan) {
             paymentModalTitle.textContent = `Registrar Pago para ${loan.apellidos}`;
             paymentLoanIdInput.value = loan.id;
-            document.getElementById('payment_date').valueAsDate = new Date(); // Poner fecha actual por defecto
+            document.getElementById('payment_date').valueAsDate = new Date();
             openModal(paymentModal);
         }
     }
+
+    // --- ¡NUEVA LÓGICA PARA EL BOTÓN DE ELIMINAR! ---
+    if (target.classList.contains('delete-loan-btn')) {
+        const loanId = target.getAttribute('data-loan-id');
+        const loan = loans.find(l => l.id == loanId);
+        if (loan) {
+            const confirmationText = 'ELIMINAR';
+            const userInput = prompt(
+                `Esta acción es irreversible.\nPara confirmar la eliminación del préstamo de ${loan.nombres} ${loan.apellidos}, escribe la siguiente palabra: ${confirmationText}`
+            );
+
+            if (userInput === confirmationText) {
+                deleteLoan(loanId);
+            } else if (userInput !== null) { // Si el usuario escribió algo pero es incorrecto
+                alert('La palabra no coincide. La eliminación ha sido cancelada.');
+            }
+        }
+    }
 });
+
+// --- ¡NUEVA FUNCIÓN ASÍNCRONA PARA ELIMINAR! ---
+async function deleteLoan(loanId) {
+    try {
+        const response = await fetch(`${API_URL}/api/loans/${loanId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Error en el servidor');
+        }
+
+        alert('¡Préstamo eliminado con éxito!');
+        fetchAndRenderLoans(); // Recargamos la tabla para que desaparezca el registro
+    } catch (error) {
+        alert(`No se pudo eliminar el préstamo: ${error.message}`);
+    }
+}
+
 
 function calculateSchedule(loan) {
    const monthlyInterestRate = parseFloat(loan.interes) / 100;
