@@ -121,7 +121,7 @@ const closeModal = (modal) => {
 addLoanBtn.addEventListener('click', () => openModal(loanModal));
 closeModalBtn.addEventListener('click', () => closeModal(loanModal));
 closeDetailsModalBtn.addEventListener('click', () => closeModal(detailsModal));
-printScheduleBtn.addEventListener('click', printSchedule); // Llama a la nueva función
+printScheduleBtn.addEventListener('click', printSchedule);
 shareBtn.addEventListener('click', compartirPDF);
 
 window.addEventListener('click', (event) => {
@@ -333,19 +333,14 @@ function calculateSchedule(loan) {
     return { monthlyPayment, schedule };
 }
 
-// --- NUEVA FUNCIÓN DE IMPRESIÓN A PRUEBA DE ERRORES ---
+// --- FUNCIÓN DE IMPRESIÓN REFINADA ---
 function printSchedule() {
     const printableContent = document.querySelector('#detailsModal .printable').innerHTML;
     
-    // 1. Crear un iframe oculto
     const iframe = document.createElement('iframe');
-    iframe.style.position = 'absolute';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
+    iframe.style.display = 'none';
     document.body.appendChild(iframe);
 
-    // 2. Escribir el contenido y los estilos en el iframe
     const iframeDoc = iframe.contentWindow.document;
     iframeDoc.open();
     iframeDoc.write(`
@@ -354,25 +349,41 @@ function printSchedule() {
         <head>
             <title>Cronograma de Pagos</title>
             <link rel="stylesheet" href="diseño.css">
+            <link rel="preconnect" href="https://fonts.googleapis.com">
+            <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+            <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
             <style>
-                /* Estilos específicos para asegurar la paginación correcta */
-                @media print {
-                    body { 
-                        margin: 25px; 
-                        font-family: 'Poppins', sans-serif;
-                    }
-                    .summary-info, .declaracion-title {
-                        page-break-after: avoid;
-                    }
-                    .table-container {
-                        page-break-before: auto;
-                    }
-                    table {
-                        width: 100%;
-                    }
-                    tr {
-                        page-break-inside: avoid;
-                    }
+                /* --- Estilos Definitivos para Impresión Limpia --- */
+                body {
+                    margin: 20mm; /* Margen estándar para documentos A4 */
+                    font-family: 'Poppins', sans-serif;
+                }
+                
+                /* FIX #1: ELIMINAR PÁGINA EN BLANCO INICIAL */
+                /* Al primer elemento del contenido (el encabezado), se le quita el margen y padding superior */
+                body > .modal-header {
+                    margin-top: 0 !important;
+                    padding-top: 0 !important;
+                }
+
+                /* FIX #2: CORREGIR 'DESCUADRE' */
+                /* Se oculta el botón de cerrar que se copia junto con el resto del HTML */
+                .close-button {
+                    display: none;
+                }
+                
+                /* MEJORAS DE PAGINACIÓN */
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                }
+                /* Repite el encabezado de la tabla en cada nueva página */
+                thead {
+                    display: table-header-group;
+                }
+                /* Evita que una fila de la tabla se corte entre dos páginas */
+                tr {
+                    page-break-inside: avoid !important;
                 }
             </style>
         </head>
@@ -383,14 +394,12 @@ function printSchedule() {
     `);
     iframeDoc.close();
 
-    // 3. Esperar a que el contenido (especialmente los estilos) se cargue y luego imprimir
     iframe.onload = function() {
         setTimeout(function() {
             iframe.contentWindow.focus();
             iframe.contentWindow.print();
-            // 4. Eliminar el iframe después de un tiempo
-            setTimeout(() => document.body.removeChild(iframe), 1000);
-        }, 250); 
+            document.body.removeChild(iframe);
+        }, 250);
     };
 }
 
