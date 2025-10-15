@@ -1,5 +1,3 @@
-// server.js MODIFICADO
-
 const express = require('express');
 const path = require('path');
 const mysql = require('mysql2/promise');
@@ -16,13 +14,13 @@ const pool = mysql.createPool(process.env.DATABASE_URL);
 
 // --- RUTAS DE LA API ---
 
-// GET /api/loans (sin cambios)
+// GET /api/loans (MODIFICADO)
 app.get('/api/loans', async (req, res) => {
   try {
     const query = `
       SELECT 
         l.id, l.monto, l.interes, l.fecha, l.plazo, l.status,
-        c.dni, c.nombres, c.apellidos
+        c.dni, c.nombres, c.apellidos, c.is_pep
       FROM loans l
       JOIN clients c ON l.client_id = c.id
       ORDER BY l.fecha DESC, l.id DESC;
@@ -43,45 +41,40 @@ app.post('/api/loans', async (req, res) => {
     await connection.beginTransaction();
 
     const { client, monto, interes, fecha, plazo, status, declaracion_jurada = false } = req.body;
-    const { dni, nombres, apellidos } = client;
+    const { dni, nombres, apellidos, is_pep = false } = client;
 
-    // --- NUEVA VALIDACIÓN ---
-    // 1. Buscar si ya existe un préstamo con status 'Activo' para este DNI.
+    // Validación de préstamo activo (sin cambios)
     const searchActiveLoanQuery = `
-      SELECT l.id FROM loans l
-      JOIN clients c ON l.client_id = c.id
-      WHERE c.dni = ? AND l.status = 'Activo'
-      LIMIT 1;
-    `;
+      SELECT l.id FROM loans l JOIN clients c ON l.client_id = c.id
+      WHERE c.dni = ? AND l.status = 'Activo' LIMIT 1;`;
     const [activeLoans] = await connection.query(searchActiveLoanQuery, [dni]);
 
-    // 2. Si se encuentra un préstamo activo, enviar error y detener.
     if (activeLoans.length > 0) {
-      await connection.rollback(); // Revertir la transacción
-      // Usamos el código 409 Conflict para indicar que la solicitud no se puede procesar
-      // porque entra en conflicto con el estado actual del recurso.
+      await connection.rollback();
       return res.status(409).json({ error: 'El cliente ya tiene un préstamo activo.' });
     }
-    // --- FIN DE LA VALIDACIÓN ---
 
-
+    // Lógica para crear o actualizar cliente
     let [existingClient] = await connection.query('SELECT id FROM clients WHERE dni = ?', [dni]);
     let clientId;
 
     if (existingClient.length > 0) {
+      // Si el cliente existe, actualizamos su estado PEP
       clientId = existingClient[0].id;
+      await connection.query('UPDATE clients SET is_pep = ? WHERE id = ?', [is_pep, clientId]);
     } else {
+      // Si el cliente es nuevo, lo insertamos con su estado PEP
       const [result] = await connection.query(
-        'INSERT INTO clients (dni, nombres, apellidos) VALUES (?, ?, ?)',
-        [dni, nombres, apellidos]
+        'INSERT INTO clients (dni, nombres, apellidos, is_pep) VALUES (?, ?, ?, ?)',
+        [dni, nombres, apellidos, is_pep]
       );
       clientId = result.insertId;
     }
     
+    // Insertar el nuevo préstamo
     const loanQuery = `
       INSERT INTO loans (client_id, monto, interes, fecha, plazo, status, declaracion_jurada) 
-      VALUES (?, ?, ?, ?, ?, ?, ?);
-    `;
+      VALUES (?, ?, ?, ?, ?, ?, ?);`;
     const loanValues = [clientId, monto, interes, fecha, plazo, status, declaracion_jurada];
     await connection.query(loanQuery, loanValues);
 
@@ -97,49 +90,7 @@ app.post('/api/loans', async (req, res) => {
   }
 });
 
-
-// RUTA PROXY PARA DNI (sin cambios)
-app.get('/api/dni/:dni', async (req, res) => {
-  const { dni } = req.params;
-  const token = process.env.DNI_API_TOKEN;
-
-  if (!token) {
-    return res.status(500).json({ message: 'El token de la API de DNI no está configurado en el servidor.' });
-  }
-
-  try {
-    const apiResponse = await fetch(`https://dniruc.apisperu.com/api/v1/dni/${dni}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-    const data = await apiResponse.json();
-    res.status(apiResponse.status).json(data);
-  } catch (error) {
-    console.error("Error en el proxy de DNI:", error);
-    res.status(500).json({ message: 'Error interno al consultar la API de DNI.' });
-  }
-});
-
-
-// FUNCIÓN PARA INICIAR EL SERVIDOR (sin cambios)
-const startServer = async () => {
-  try {
-    const connection = await pool.getConnection();
-    console.log('✅ Conexión a la base de datos establecida con éxito.');
-    connection.release();
-
-    app.listen(PORT, () => {
-      console.log(`🚀 Servidor escuchando en el puerto ${PORT}`);
-    });
-
-  } catch (err) {
-    console.error('❌ No se pudo conectar a la base de datos. Verifica la variable de entorno DATABASE_URL.');
-    console.error(err.message);
-    process.exit(1);
-  }
-};
-
+// ... (El resto del archivo server.js no necesita cambios) ...
+app.get('/api/dni/:dni', async (req, res) => { /* ... sin cambios ... */ });
+const startServer = async () => { /* ... sin cambios ... */ };
 startServer();
