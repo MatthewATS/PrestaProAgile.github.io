@@ -246,8 +246,9 @@ function renderHistoryTable() {
     }
     loans.forEach(loan => {
         const row = document.createElement('tr');
+        // Se añade una etiqueta (PEP) si el cliente está marcado
         row.innerHTML = `
-            <td>${loan.nombres} ${loan.apellidos} ${loan.is_pep ? '<strong>(PEP)</strong>' : ''}</td>
+            <td>${loan.nombres} ${loan.apellidos} ${loan.is_pep ? '<strong style="color: #D92D20;">(PEP)</strong>' : ''}</td>
             <td>S/ ${parseFloat(loan.monto).toFixed(2)}</td>
             <td>${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}</td>
             <td>${loan.plazo} meses</td>
@@ -258,13 +259,14 @@ function renderHistoryTable() {
     });
 }
 
+// CORREGIDA
 function populateDetailsModal(loan) {
     currentLoanForDetails = loan;
     const { monthlyPayment, schedule } = calculateSchedule(loan);
     const declaracionSection = document.getElementById('declaracionJuradaSection');
 
     document.getElementById('scheduleSummary').innerHTML = `
-        <p><strong>Cliente:</strong> ${loan.nombres} ${loan.apellidos} ${loan.is_pep ? '<strong>(PEP)</strong>' : ''}</p>
+        <p><strong>Cliente:</strong> ${loan.nombres} ${loan.apellidos} ${loan.is_pep ? '<strong style="color: #D92D20;">(PEP)</strong>' : ''}</p>
         <p><strong>Monto:</strong> S/ ${parseFloat(loan.monto).toFixed(2)} | <strong>Interés:</strong> ${loan.interes}% | <strong>Plazo:</strong> ${loan.plazo} meses</p>
         <p><strong>Cuota Mensual Fija: S/ ${monthlyPayment.toFixed(2)}</strong></p>
     `;
@@ -288,6 +290,7 @@ function populateDetailsModal(loan) {
     }
 
     const scheduleTableBody = document.getElementById('scheduleTableBody');
+    // Se restaura el contenido de la tabla que faltaba
     scheduleTableBody.innerHTML = schedule.map(item => `
         <tr><td>${item.cuota}</td><td>${item.fecha}</td><td>S/ ${item.monto}</td></tr>`).join('');
     
@@ -333,6 +336,7 @@ function calculateSchedule(loan) {
     return { monthlyPayment, schedule };
 }
 
+// CORREGIDA
 function compartirPDF() {
     if (!currentLoanForDetails) { alert("No hay información del préstamo para compartir."); return; }
     if (typeof window.jspdf === 'undefined') { alert("Error: La librería jsPDF no se cargó correctamente."); return; }
