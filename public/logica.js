@@ -358,11 +358,25 @@ async function fetchAndRenderLoans() {
         // Limpiamos y recalculamos el set de clientes
         clients.clear();
         loans.forEach(loan => {
-            // Reconstruir el objeto client si viene como string
+            // PRIMERO: Nos aseguramos de que `loan.client` sea un objeto.
+            // Puede que venga como texto (string) desde la base de datos.
             if (typeof loan.client === 'string') {
-               loan.client = JSON.parse(loan.client);
+                try {
+                    loan.client = JSON.parse(loan.client);
+                } catch (e) {
+                    console.error("Error al parsear datos del cliente:", e);
+                    // Si falla la conversión, lo dejamos como null para evitar errores.
+                    loan.client = null; 
+                }
             }
-            clients.add(loan.client.dni);
+
+            // SEGUNDO: Añadimos una validación.
+            // Solo intentamos leer '.dni' si 'loan.client' existe y tiene un valor.
+            if (loan.client && loan.client.dni) {
+                clients.add(loan.client.dni);
+            } else {
+                console.warn("Se encontró un préstamo sin datos de cliente válidos:", loan);
+            }
         });
 
         renderHistoryTable();
@@ -373,6 +387,6 @@ async function fetchAndRenderLoans() {
     }
 }
 
-
 // --- Carga Inicial de Datos desde el Servidor ---
 fetchAndRenderLoans();
+
