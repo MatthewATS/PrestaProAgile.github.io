@@ -14,12 +14,13 @@ const pool = mysql.createPool(process.env.DATABASE_URL);
 
 // --- RUTAS DE LA API ---
 
-// GET /api/loans
+// GET /api/loans (MODIFICADO para incluir los nuevos campos)
 app.get('/api/loans', async (req, res) => {
   try {
     const query = `
       SELECT 
         l.id, l.monto, l.interes, l.fecha, l.plazo, l.status,
+        l.tipo_calculo, l.meses_solo_interes, -- <-- NUEVO
         c.dni, c.nombres, c.apellidos, c.is_pep
       FROM loans l
       JOIN clients c ON l.client_id = c.id
@@ -34,13 +35,14 @@ app.get('/api/loans', async (req, res) => {
 });
 
 
-// POST /api/loans (CORREGIDO Y CON MEJOR MANEJO DE ERRORES)
+// POST /api/loans (MODIFICADO para recibir y guardar los nuevos campos)
 app.post('/api/loans', async (req, res) => {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
 
-    const { client, monto, interes, fecha, plazo, status, declaracion_jurada = false } = req.body;
+    // --- MODIFICADO: Se desestructuran los nuevos campos del body ---
+    const { client, monto, interes, fecha, plazo, status, declaracion_jurada = false, tipo_calculo = 'Amortizado', meses_solo_interes = 0 } = req.body;
     const { dni, nombres, apellidos, is_pep = false } = client;
 
     // Validación de préstamo activo
@@ -60,7 +62,6 @@ app.post('/api/loans', async (req, res) => {
 
     if (existingClient.length > 0) {
       clientId = existingClient[0].id;
-      // Ahora también actualiza nombres y apellidos, por si la API de DNI los corrigió
       await connection.query(
         'UPDATE clients SET nombres = ?, apellidos = ?, is_pep = ? WHERE id = ?', 
         [nombres, apellidos, is_pep, clientId]
@@ -73,11 +74,11 @@ app.post('/api/loans', async (req, res) => {
       clientId = result.insertId;
     }
     
-    // Insertar el nuevo préstamo
+    // --- MODIFICADO: Se incluyen los nuevos campos en la inserción ---
     const loanQuery = `
-      INSERT INTO loans (client_id, monto, interes, fecha, plazo, status, declaracion_jurada) 
-      VALUES (?, ?, ?, ?, ?, ?, ?);`;
-    const loanValues = [clientId, monto, interes, fecha, plazo, status, declaracion_jurada];
+      INSERT INTO loans (client_id, monto, interes, fecha, plazo, status, declaracion_jurada, tipo_calculo, meses_solo_interes) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`;
+    const loanValues = [clientId, monto, interes, fecha, plazo, status, declaracion_jurada, tipo_calculo, meses_solo_interes];
     await connection.query(loanQuery, loanValues);
 
     await connection.commit();
@@ -85,11 +86,9 @@ app.post('/api/loans', async (req, res) => {
 
   } catch (err) {
     await connection.rollback();
-    
-    // MEJORA IMPORTANTE: Log detallado del error de la base de datos
     console.error("----------- ERROR DE BASE DE DATOS -----------");
     console.error(`Ocurrió un error al intentar guardar un préstamo para el DNI: ${req.body.client.dni}`);
-    console.error("Mensaje del error de MySQL:", err.message); // <-- ESTO TE DIRÁ EL PROBLEMA EXACTO
+    console.error("Mensaje del error de MySQL:", err.message);
     console.error("--------------------------------------------");
     
     res.status(500).json({ error: 'Error interno al guardar en la base de datos.' });
@@ -99,7 +98,7 @@ app.post('/api/loans', async (req, res) => {
 });
 
 
-// RUTA PROXY PARA DNI
+// RUTA PROXY PARA DNI (Sin cambios)
 app.get('/api/dni/:dni', async (req, res) => {
   const { dni } = req.params;
   const token = process.env.DNI_API_TOKEN;
@@ -125,7 +124,7 @@ app.get('/api/dni/:dni', async (req, res) => {
 });
 
 
-// FUNCIÓN PARA INICIAR EL SERVIDOR
+// FUNCIÓN PARA INICIAR EL SERVIDOR (Sin cambios)
 const startServer = async () => {
   try {
     const connection = await pool.getConnection();
