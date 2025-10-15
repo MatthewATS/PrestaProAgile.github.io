@@ -9,95 +9,114 @@ const PORT = process.env.PORT || 3000;
 // Middlewares
 app.use(cors());
 app.use(express.json());
-// OJO: Si tu front.html no está en una carpeta 'public', esta línea podría no ser necesaria
-// o debería apuntar al directorio correcto. Por ahora la dejamos.
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Conexión a la base de datos
 const pool = mysql.createPool(process.env.DATABASE_URL);
 
-// --- RUTAS DE LA API DE PRÉSTAMOS ---
 
+// --- RUTAS DE LA API ---
+
+// GET /api/loans
 app.get('/api/loans', async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM loans ORDER BY fecha DESC');
-    // Para asegurar que `client` sea un objeto, lo parseamos si es un string
-    const loans = rows.map(loan => {
-        if (typeof loan.client === 'string') {
-            try {
-                loan.client = JSON.parse(loan.client);
-            } catch (e) {
-                console.error("Error parsing client JSON:", e);
-                loan.client = {}; // Fallback a objeto vacío
-            }
-        }
-        return loan;
-    });
-    res.json(loans);
+    const query = `
+      SELECT 
+        l.id, l.monto, l.interes, l.fecha, l.plazo, l.status,
+        c.dni, c.nombres, c.apellidos
+      FROM loans l
+      JOIN clients c ON l.client_id = c.id
+      ORDER BY l.fecha DESC, l.id DESC;
+    `;
+    const [rows] = await pool.query(query);
+    res.json(rows);
   } catch (err) {
     console.error("ERROR en GET /api/loans:", err);
     res.status(500).json({ error: 'Error al obtener los préstamos' });
   }
 });
 
+// POST /api/loans
 app.post('/api/loans', async (req, res) => {
+  const connection = await pool.getConnection();
   try {
-    const newLoan = req.body;
-    // Asegurarse de que el campo declaracion_jurada sea booleano
-    const hasDeclaracion = !!newLoan.declaracion_jurada; 
+    await connection.beginTransaction();
+    const { client, monto, interes, fecha, plazo, status } = req.body;
+    const { dni, nombres, apellidos } = client;
 
-    const query = `INSERT INTO loans (dni, client, monto, interes, fecha, plazo, status, declaracion_jurada) VALUES (?, ?, ?, ?, ?, ?, ?, ?);`;
-    const values = [
-      newLoan.client.dni, JSON.stringify(newLoan.client), newLoan.monto,
-      newLoan.interes, newLoan.fecha, newLoan.plazo, newLoan.status, hasDeclaracion
-    ];
-    await pool.query(query, values);
-    res.status(201).json(newLoan);
+    let [existingClient] = await connection.query('SELECT id FROM clients WHERE dni = ?', [dni]);
+    let clientId;
+
+    if (existingClient.length > 0) {
+      clientId = existingClient[0].id;
+    } else {
+      const [result] = await connection.query(
+        'INSERT INTO clients (dni, nombres, apellidos) VALUES (?, ?, ?)',
+        [dni, nombres, apellidos]
+      );
+      clientId = result.insertId;
+    }
+
+    const loanQuery = `
+      INSERT INTO loans (client_id, monto, interes, fecha, plazo, status) 
+      VALUES (?, ?, ?, ?, ?, ?);
+    `;
+    const loanValues = [clientId, monto, interes, fecha, plazo, status];
+    await connection.query(loanQuery, loanValues);
+
+    await connection.commit();
+    res.status(201).json({ ...req.body, client_id: clientId });
+
   } catch (err) {
+    await connection.rollback();
     console.error("ERROR en POST /api/loans:", err);
     res.status(500).json({ error: 'Error al guardar el préstamo' });
+  } finally {
+    connection.release();
   }
 });
 
-
-// --- RUTA NUEVA PARA CONSULTAR DNI (SIMULACIÓN) ---
+// RUTA PROXY PARA DNI
 app.get('/api/dni/:dni', async (req, res) => {
   const { dni } = req.params;
+  const token = process.env.DNI_API_TOKEN;
 
-  // Simulación: En un caso real, aquí llamarías a una API externa (como Apis.net.pe, etc.)
-  // Por ahora, vamos a simular una respuesta para un DNI de ejemplo.
-  
-  console.log(`Buscando DNI: ${dni}`);
-
-  if (dni === '12345678') {
-    // Si el DNI es el de ejemplo, devolvemos datos exitosos
-    res.json({
-      nombres: 'Juan Andrés',
-      apellidoPaterno: 'Pérez',
-      apellidoMaterno: 'Gómez',
-      tipoDocumento: '1',
-      numeroDocumento: dni,
-      digitoVerificador: '5'
-    });
-  } else if (dni.length === 8) {
-     // Para cualquier otro DNI de 8 dígitos, simulamos otro usuario
-     res.json({
-      nombres: 'Maria Claudia',
-      apellidoPaterno: 'Flores',
-      apellidoMaterno: 'Rojas',
-      tipoDocumento: '1',
-      numeroDocumento: dni,
-      digitoVerificador: '2'
-    });
+  if (!token) {
+    return res.status(500).json({ message: 'El token de la API de DNI no está configurado en el servidor.' });
   }
-  else {
-    // Si no es el DNI de ejemplo, devolvemos un error
-    res.status(404).json({ message: 'No se encontraron resultados para el DNI consultado.' });
+
+  try {
+    const apiResponse = await fetch(`https://dniruc.apisperu.com/api/v1/dni/${dni}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    const data = await apiResponse.json();
+    res.status(apiResponse.status).json(data);
+  } catch (error) {
+    console.error("Error en el proxy de DNI:", error);
+    res.status(500).json({ message: 'Error interno al consultar la API de DNI.' });
   }
 });
 
+// --- FUNCIÓN PARA INICIAR EL SERVIDOR ---
+const startServer = async () => {
+  try {
+    const connection = await pool.getConnection();
+    console.log('✅ Conexión a la base de datos establecida con éxito.');
+    connection.release();
 
-// Iniciar el servidor
-app.listen(PORT, () => {
-  console.log(`Servidor escuchando en el puerto ${PORT}`);
-});
+    app.listen(PORT, () => {
+      console.log(`🚀 Servidor escuchando en el puerto ${PORT}`);
+    });
+
+  } catch (err) {
+    console.error('❌ No se pudo conectar a la base de datos. Verifica la variable de entorno DATABASE_URL.');
+    console.error(err.message);
+    process.exit(1);
+  }
+};
+
+startServer();
