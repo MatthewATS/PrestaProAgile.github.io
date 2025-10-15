@@ -284,6 +284,13 @@ input {
     box-sizing: border-box;
 }
 
+/* --- ¡NUEVO ESTILO AÑADIDO! --- */
+input[readonly] {
+    background-color: var(--light-gray);
+    cursor: not-allowed;
+    color: #667085;
+}
+
 .submit-button {
     width: 100%;
     padding: 12px;
@@ -297,10 +304,9 @@ input {
     margin-top: 10px;
 }
 
-/* --- ESTILO DE FOCO AÑADIDO --- */
 .submit-button:focus {
     outline: none;
-    box-shadow: 0 0 0 4px rgba(0, 93, 255, 0.3); /* Resplandor azul */
+    box-shadow: 0 0 0 4px rgba(0, 93, 255, 0.3);
 }
 
 .submit-button-danger {
@@ -321,10 +327,9 @@ input {
     background-color: #B42318;
 }
 
-/* --- ESTILO DE FOCO AÑADIDO PARA EL BOTÓN DE PELIGRO --- */
 .submit-button-danger:focus {
     outline: none;
-    box-shadow: 0 0 0 4px rgba(217, 45, 32, 0.3); /* Resplandor rojo */
+    box-shadow: 0 0 0 4px rgba(217, 45, 32, 0.3);
 }
 
 .summary-info {
