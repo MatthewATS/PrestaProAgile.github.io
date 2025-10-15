@@ -61,7 +61,10 @@ loanForm.innerHTML = `
         <legend>📋 Detalles del Préstamo</legend>
         <div class="form-row">
             <div class="form-group"><label for="monto">Monto (S/)</label><input type="number" id="monto" placeholder="Ej: 1000" required step="0.01" min="100" max="20000"></div>
-            <div class="form-group"><label for="Fecha de Desembolso">Fecha</label><input type="date" id="fecha" required></div>
+            <div class="form-group">
+                <label for="fecha">Fecha de Desembolso</label>
+                <input type="date" id="fecha" required>
+            </div>
         </div>
         <div class="form-row">
             <div class="form-group"><label for="interes">Interés Mensual (%)</label><input type="number" id="interes" placeholder="Ej: 3.5" required step="0.01" min="1" max="15"></div>
@@ -429,6 +432,7 @@ function updateDashboard() {
     document.getElementById('totalClients').textContent = clients.size;
 }
 
+// --- EVENT LISTENER DE LA TABLA (MODIFICADO) ---
 historyTableBody.addEventListener('click', function(event) {
     const target = event.target.closest('button');
     if (!target) return;
@@ -443,6 +447,15 @@ historyTableBody.addEventListener('click', function(event) {
         const loanId = target.getAttribute('data-loan-id');
         const loan = loans.find(l => l.id == loanId);
         if (loan) {
+            // Se calcula el saldo restante
+            const remainingBalance = loan.total_due - loan.total_paid;
+            const paymentAmountInput = document.getElementById('payment_amount');
+            
+            // Se establece el valor máximo y el valor por defecto del input
+            paymentAmountInput.max = remainingBalance > 0 ? remainingBalance.toFixed(2) : '0.01';
+            paymentAmountInput.value = remainingBalance > 0 ? remainingBalance.toFixed(2) : '';
+
+            // Se completan los otros campos de la modal
             paymentModalTitle.textContent = `Registrar Pago para ${loan.apellidos}`;
             paymentLoanIdInput.value = loan.id;
             document.getElementById('payment_date').valueAsDate = new Date();
@@ -664,4 +677,3 @@ function descargarPDF(doc, fileName) {
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
-
