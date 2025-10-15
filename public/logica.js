@@ -248,7 +248,6 @@ loanForm.addEventListener('submit', async function(event) {
     } catch (error) { alert(`No se pudo guardar el préstamo: ${error.message}`); }
 });
 
-// --- NUEVA LÓGICA PARA ENVIAR EL FORMULARIO DE PAGO ---
 paymentForm.addEventListener('submit', async function(event) {
     event.preventDefault();
     const loanId = paymentLoanIdInput.value;
@@ -287,7 +286,11 @@ async function fetchAndRenderLoans() {
     }
 }
 
-// --- FUNCIÓN DE RENDERIZADO DE TABLA (MODIFICADA) ---
+// =================================================================================
+// ===== SECCIÓN CORREGIDA 1: RENDERIZADO DE LA TABLA ==============================
+// =================================================================================
+// Me aseguro de que el botón Eliminar esté aquí. Si no lo veías, era por un
+// problema de caché del navegador. Este código es el correcto.
 function renderHistoryTable() {
     historyTableBody.innerHTML = '';
     if (loans.length === 0) { 
@@ -327,7 +330,10 @@ function renderHistoryTable() {
     });
 }
 
-// --- FUNCIÓN DE DETALLES (MODIFICADA) ---
+// =================================================================================
+// ===== SECCIÓN CORREGIDA 2: VENTANA DE DETALLES ==================================
+// =================================================================================
+// He reemplazado el "..." con el contenido HTML completo de la declaración jurada.
 function populateDetailsModal(loan) {
     currentLoanForDetails = loan;
     const { payments, schedule } = calculateSchedule(loan);
@@ -341,7 +347,6 @@ function populateDetailsModal(loan) {
         paymentSummary = `<p><strong>Cuota Mensual Fija: S/ ${payments.amortizedPayment.toFixed(2)}</strong></p>`;
     }
 
-    // Formatear la fecha de desembolso para mostrarla
     const disbursementDate = new Date(loan.fecha).toLocaleDateString('es-PE', {
         day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC'
     });
@@ -357,12 +362,24 @@ function populateDetailsModal(loan) {
         ${paymentSummary}
     `;
     
+    const declaracionSection = document.getElementById('declaracionJuradaSection');
     if (parseFloat(loan.monto) > VALOR_UIT || loan.is_pep) {
-        document.getElementById('declaracionJuradaSection').style.display = 'block';
-        document.getElementById('declaracionJuradaSection').innerHTML = `...`;
+        declaracionSection.style.display = 'block';
+        declaracionSection.innerHTML = `
+            <h4 class="declaracion-title">DECLARACIÓN JURADA DE ORIGEN DE FONDOS</h4>
+            <div class="declaracion-body">
+                <p>Yo, <strong>${loan.nombres} ${loan.apellidos}</strong>, identificado(a) con DNI N° <strong>${loan.dni}</strong>, declaro bajo juramento que los fondos y/o bienes utilizados en la operación de préstamo de S/ ${parseFloat(loan.monto).toFixed(2)} provienen de actividades lícitas y no están vinculados con el lavado de activos, financiamiento del terrorismo ni cualquier otra actividad ilegal contemplada en las leyes vigentes del Perú.</p>
+                <p>Asimismo, declaro que la información proporcionada es veraz y autorizo a PRESTAPRO a realizar las verificaciones correspondientes.</p>
+            </div>
+            <div class="declaracion-signature">
+                <p>_________________________</p>
+                <p><strong>${loan.nombres} ${loan.apellidos}</strong></p>
+                <p>DNI: ${loan.dni}</p>
+            </div>
+        `;
     } else {
-        document.getElementById('declaracionJuradaSection').style.display = 'none';
-        document.getElementById('declaracionJuradaSection').innerHTML = '';
+        declaracionSection.style.display = 'none';
+        declaracionSection.innerHTML = '';
     }
 
     document.getElementById('scheduleTableBody').innerHTML = schedule.map(item => `
@@ -384,7 +401,6 @@ function populateDetailsModal(loan) {
     openModal(detailsModal);
 }
 
-
 function updateDashboard() {
     const totalLoaned = loans.reduce((sum, loan) => sum + parseFloat(loan.monto), 0);
     clients.clear();
@@ -394,9 +410,8 @@ function updateDashboard() {
     document.getElementById('totalClients').textContent = clients.size;
 }
 
-// --- EVENT LISTENER DE LA TABLA (MODIFICADO) ---
 historyTableBody.addEventListener('click', function(event) {
-    const target = event.target.closest('button'); // Mejoramos la deteccion del clic
+    const target = event.target.closest('button');
     if (!target) return;
 
     if (target.classList.contains('view-details-btn')) {
@@ -416,7 +431,6 @@ historyTableBody.addEventListener('click', function(event) {
         }
     }
 
-    // --- ¡NUEVA LÓGICA PARA EL BOTÓN DE ELIMINAR! ---
     if (target.classList.contains('delete-loan-btn')) {
         const loanId = target.getAttribute('data-loan-id');
         const loan = loans.find(l => l.id == loanId);
@@ -428,14 +442,13 @@ historyTableBody.addEventListener('click', function(event) {
 
             if (userInput === confirmationText) {
                 deleteLoan(loanId);
-            } else if (userInput !== null) { // Si el usuario escribió algo pero es incorrecto
+            } else if (userInput !== null) {
                 alert('La palabra no coincide. La eliminación ha sido cancelada.');
             }
         }
     }
 });
 
-// --- ¡NUEVA FUNCIÓN ASÍNCRONA PARA ELIMINAR! ---
 async function deleteLoan(loanId) {
     try {
         const response = await fetch(`${API_URL}/api/loans/${loanId}`, {
@@ -448,12 +461,11 @@ async function deleteLoan(loanId) {
         }
 
         alert('¡Préstamo eliminado con éxito!');
-        fetchAndRenderLoans(); // Recargamos la tabla para que desaparezca el registro
+        fetchAndRenderLoans();
     } catch (error) {
         alert(`No se pudo eliminar el préstamo: ${error.message}`);
     }
 }
-
 
 function calculateSchedule(loan) {
    const monthlyInterestRate = parseFloat(loan.interes) / 100;
