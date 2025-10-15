@@ -18,7 +18,7 @@ const pool = mysql.createPool(process.env.DATABASE_URL);
 app.get('/api/loans', async (req, res) => {
   try {
     const loanQuery = `
-      SELECT 
+      SELECT
         l.id, l.monto, l.interes, l.fecha, l.plazo, l.status,
         l.tipo_calculo, l.meses_solo_interes,
         c.dni, c.nombres, c.apellidos, c.is_pep
@@ -88,7 +88,7 @@ app.post('/api/loans', async (req, res) => {
       const [result] = await connection.query('INSERT INTO clients (dni, nombres, apellidos, is_pep) VALUES (?, ?, ?, ?)', [dni, nombres, apellidos, is_pep]);
       clientId = result.insertId;
     }
-    
+
     await connection.query(`INSERT INTO loans (client_id, monto, interes, fecha, plazo, status, declaracion_jurada, tipo_calculo, meses_solo_interes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`, [clientId, monto, interes, fecha, plazo, status, declaracion_jurada, tipo_calculo, meses_solo_interes]);
 
     await connection.commit();
@@ -103,11 +103,11 @@ app.post('/api/loans', async (req, res) => {
   }
 });
 
-// POST /api/loans/:loanId/payments (RUTA CORREGIDA)
+// POST /api/loans/:loanId/payments
 app.post('/api/loans/:loanId/payments', async (req, res) => {
     const { loanId } = req.params;
     const { payment_amount, payment_date } = req.body;
-    
+
     if (!payment_amount || !payment_date || parseFloat(payment_amount) <= 0) {
         return res.status(400).json({ error: 'El monto y la fecha del pago son obligatorios.' });
     }
@@ -122,7 +122,7 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
             return res.status(404).json({ error: 'Préstamo no encontrado.' });
         }
         const loan = loanRows[0];
-        
+
         const [totalPaidRows] = await connection.query('SELECT SUM(payment_amount) as totalPaid FROM payments WHERE loan_id = ?', [loanId]);
         const totalPaid = totalPaidRows[0].totalPaid || 0;
 
@@ -138,23 +138,22 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
             totalDue = monthlyPayment * loan.plazo;
         }
 
-        // ===== ¡VALIDACIÓN CORREGIDA! =====
         const remainingBalance = totalDue - totalPaid;
-        // Se redondea el saldo pendiente a 2 decimales ANTES de comparar
         const roundedRemainingBalance = Math.round(remainingBalance * 100) / 100;
-        
-        // Se compara el pago con el saldo redondeado.
+
         if (parseFloat(payment_amount) > roundedRemainingBalance) {
             await connection.rollback();
             return res.status(400).json({ error: `El pago excede el saldo pendiente de S/ ${roundedRemainingBalance.toFixed(2)}.` });
         }
-        
+
         await connection.query('INSERT INTO payments (loan_id, payment_amount, payment_date) VALUES (?, ?, ?)', [loanId, payment_amount, payment_date]);
 
         const newTotalPaid = totalPaid + parseFloat(payment_amount);
 
-        // Se usa una pequeña tolerancia para la comparación final por si quedan micro-decimales
-        if (newTotalPaid >= totalDue - 0.001) {
+        // ===== ¡VERIFICACIÓN CORREGIDA! =====
+        // Se redondea el total adeudado a 2 decimales para una comparación precisa.
+        const roundedTotalDue = Math.round(totalDue * 100) / 100;
+        if (newTotalPaid >= roundedTotalDue) {
             await connection.query("UPDATE loans SET status = 'Pagado' WHERE id = ?", [loanId]);
         }
 
