@@ -1,7 +1,7 @@
 // --- VARIABLES GLOBALES ---
 const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
 const VALOR_UIT = 5150; // Valor de la UIT para 2025
-let loans = []; // Esta variable ahora será una caché de los datos del servidor
+let loans = [];
 let clients = new Set();
 let currentLoanForDetails = null;
 
@@ -20,7 +20,11 @@ const shareBtn = document.getElementById('shareBtn');
 loanForm.innerHTML = `
     <fieldset>
         <legend>👤 Información del Cliente</legend>
-        <div class="form-group"><label for="dni">DNI</label><input type="text" id="dni" placeholder="Ej: 71234567" required pattern="\\d{8}"></div>
+        <div class="form-group">
+            <label for="dni">DNI</label>
+            <input type="text" id="dni" placeholder="Ingresa 8 dígitos y presiona Tab" required pattern="\\d{8}" maxlength="8">
+            <small id="dni-status" style="margin-top: 5px; display: block;"></small>
+        </div>
         <div class="form-row">
             <div class="form-group"><label for="nombres">Nombres</label><input type="text" id="nombres" placeholder="Nombres completos" required></div>
             <div class="form-group"><label for="apellidos">Apellidos</label><input type="text" id="apellidos" placeholder="Apellidos completos" required></div>
@@ -29,12 +33,12 @@ loanForm.innerHTML = `
     <fieldset>
         <legend>📋 Detalles del Préstamo</legend>
         <div class="form-row">
-            <div class="form-group"><label for="monto">Monto (S/)</label><input type="number" id="monto" placeholder="Ej: 1000" required step="0.01"></div>
+            <div class="form-group"><label for="monto">Monto (S/)</label><input type="number" id="monto" placeholder="Ej: 1000" required step="0.01" min="100" max="50000"></div>
             <div class="form-group"><label for="fecha">Fecha</label><input type="date" id="fecha" required></div>
         </div>
         <div class="form-row">
-            <div class="form-group"><label for="interes">Interés Mensual (%)</label><input type="number" id="interes" placeholder="Ej: 3.5" required step="0.01"></div>
-            <div class="form-group"><label for="plazo">Plazo (Meses)</label><input type="number" id="plazo" placeholder="Ej: 12" required></div>
+            <div class="form-group"><label for="interes">Interés Mensual (%)</label><input type="number" id="interes" placeholder="Ej: 3.5" required step="0.01" min="1" max="15"></div>
+            <div class="form-group"><label for="plazo">Plazo (Meses)</label><input type="number" id="plazo" placeholder="Ej: 12" required min="1" max="60"></div>
         </div>
     </fieldset>
     <div class="form-group" id="declaracionJuradaContainer" style="display: none; background-color: #E6F0FF; padding: 15px; border-radius: 8px; margin-top: 15px;">
@@ -46,28 +50,29 @@ loanForm.innerHTML = `
     <button type="submit" class="submit-button">Guardar Préstamo</button>
 `;
 
-// Event listener para el campo de monto para mostrar/ocultar la declaración jurada
+// --- REFERENCIAS A CAMPOS DEL FORMULARIO ---
+const dniInput = document.getElementById('dni');
+const nombresInput = document.getElementById('nombres');
+const apellidosInput = document.getElementById('apellidos');
+const dniStatus = document.getElementById('dni-status');
 const montoInput = document.getElementById('monto');
 const declaracionContainer = document.getElementById('declaracionJuradaContainer');
 const declaracionCheckbox = document.getElementById('declaracionJurada');
-
-montoInput.addEventListener('input', function() {
-    const monto = parseFloat(this.value);
-    if (monto > VALOR_UIT) {
-        declaracionContainer.style.display = 'block';
-        declaracionCheckbox.required = true;
-    } else {
-        declaracionContainer.style.display = 'none';
-        declaracionCheckbox.required = false;
-        declaracionCheckbox.checked = false; // Desmarcar si el monto baja
-    }
-});
 
 
 // --- MANEJO DE MODALES ---
 const openModal = (modal) => modal.style.display = 'flex';
 const closeModal = (modal) => {
     modal.style.display = 'none';
+    if (modal.id === 'loanModal') {
+        loanForm.reset();
+        nombresInput.readOnly = false;
+        apellidosInput.readOnly = false;
+        dniStatus.textContent = '';
+        dniStatus.style.color = '';
+        // Ocultar el campo de declaración jurada al cerrar
+        declaracionContainer.style.display = 'none';
+    }
     if (modal.id === 'detailsModal') {
         currentLoanForDetails = null;
     }
@@ -78,78 +83,123 @@ addLoanBtn.addEventListener('click', () => openModal(loanModal));
 closeModalBtn.addEventListener('click', () => closeModal(loanModal));
 closeDetailsModalBtn.addEventListener('click', () => closeModal(detailsModal));
 printScheduleBtn.addEventListener('click', () => window.print());
-
-// BOTÓN DE COMPARTIR - NUEVO EVENT LISTENER
-shareBtn.addEventListener('click', function() {
-    console.log('Botón compartir clickeado');
-    compartirPDF();
-});
+shareBtn.addEventListener('click', compartirPDF);
 
 window.addEventListener('click', (event) => {
     if (event.target === loanModal) closeModal(loanModal);
     if (event.target === detailsModal) closeModal(detailsModal);
 });
 
-loanForm.addEventListener('submit', async function(event) {
-    event.preventDefault();
-    
-    const monto = parseFloat(document.getElementById('monto').value);
-    
-    // Validación adicional para la declaración jurada
-    if (monto > VALOR_UIT && !document.getElementById('declaracionJurada').checked) {
-        alert('Para montos mayores a una UIT, debe marcar la declaración jurada.');
+
+// CAMBIO 2: Lógica para mostrar/ocultar la declaración jurada
+montoInput.addEventListener('input', function() {
+    const monto = parseFloat(this.value);
+    if (monto > VALOR_UIT) {
+        declaracionContainer.style.display = 'block';
+        declaracionCheckbox.required = true;
+    } else {
+        declaracionContainer.style.display = 'none';
+        declaracionCheckbox.required = false;
+        declaracionCheckbox.checked = false;
+    }
+});
+
+
+// --- LÓGICA DE CONSULTA DE DNI ---
+dniInput.addEventListener('blur', async () => {
+    const dni = dniInput.value;
+    if (dni.length !== 8) {
+        dniStatus.textContent = '';
         return;
     }
 
-    const newLoan = {
+    dniStatus.textContent = 'Buscando...';
+    dniStatus.style.color = '#667085';
+    nombresInput.readOnly = true;
+    apellidosInput.readOnly = true;
+
+    try {
+        const response = await fetch(`${API_URL}/api/dni/${dni}`);
+        const data = await response.json();
+
+        if (response.ok && data.nombres) {
+            nombresInput.value = data.nombres;
+            apellidosInput.value = `${data.apellidoPaterno} ${data.apellidoMaterno}`;
+            dniStatus.textContent = '✅ Cliente encontrado.';
+            dniStatus.style.color = 'var(--success-color)';
+        } else {
+            throw new Error(data.message || 'No se encontraron resultados.');
+        }
+    } catch (error) {
+        console.error("Error al consultar DNI:", error);
+        dniStatus.textContent = `❌ ${error.message}`;
+        dniStatus.style.color = 'red';
+        nombresInput.value = '';
+        apellidosInput.value = '';
+    } finally {
+        if (!nombresInput.value) {
+            nombresInput.readOnly = false;
+            apellidosInput.readOnly = false;
+            nombresInput.focus();
+        }
+    }
+});
+
+
+loanForm.addEventListener('submit', async function(event) {
+    event.preventDefault();
+
+    // CAMBIO 3: Validación de la declaración jurada al enviar
+    const monto = parseFloat(document.getElementById('monto').value);
+    if (monto > VALOR_UIT && !declaracionCheckbox.checked) {
+        alert('Para montos mayores a una UIT, debe marcar la declaración jurada.');
+        return; // Detiene el envío del formulario
+    }
+
+    const newLoanData = {
         client: {
-            dni: document.getElementById('dni').value,
-            nombres: document.getElementById('nombres').value,
-            apellidos: document.getElementById('apellidos').value,
+            dni: dniInput.value,
+            nombres: nombresInput.value,
+            apellidos: apellidosInput.value,
         },
         monto: monto,
         interes: parseFloat(document.getElementById('interes').value),
         fecha: document.getElementById('fecha').value,
         plazo: parseInt(document.getElementById('plazo').value),
         status: 'Activo',
-        declaracion_jurada: document.getElementById('declaracionJurada').checked // Enviar estado
+        declaracion_jurada: declaracionCheckbox.checked // Se envía el estado
     };
 
     try {
         const response = await fetch(`${API_URL}/api/loans`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(newLoan),
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(newLoanData),
         });
-
-        if (!response.ok) {
-            throw new Error('Error al guardar el préstamo en el servidor');
-        }
-
+        if (!response.ok) throw new Error('Error al guardar el préstamo.');
         await fetchAndRenderLoans();
-        loanForm.reset();
-        // Ocultar nuevamente el contenedor de la declaración jurada
-        document.getElementById('declaracionJuradaContainer').style.display = 'none';
         closeModal(loanModal);
-
     } catch (error) {
         console.error(error);
         alert('No se pudo guardar el préstamo. Inténtalo de nuevo.');
     }
 });
 
-
-historyTableBody.addEventListener('click', function(event) {
-    if (event.target.classList.contains('view-details-btn')) {
-        const loanDNI = event.target.getAttribute('data-loan-dni');
-        const loan = loans.find(l => l.client.dni === loanDNI);
-        if (loan) populateDetailsModal(loan);
-    }
-});
-
 // --- FUNCIONES PRINCIPALES ---
+
+async function fetchAndRenderLoans() {
+    try {
+        const response = await fetch(`${API_URL}/api/loans`);
+        if (!response.ok) throw new Error('Error al cargar los préstamos');
+        loans = await response.json();
+        renderHistoryTable();
+        updateDashboard();
+    } catch (error) {
+        console.error(error);
+        historyTableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: red;">Error al cargar los datos.</td></tr>`;
+    }
+}
+
 function renderHistoryTable() {
     historyTableBody.innerHTML = '';
     if (loans.length === 0) {
@@ -159,12 +209,12 @@ function renderHistoryTable() {
     loans.forEach(loan => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${loan.client.nombres} ${loan.client.apellidos}</td>
+            <td>${loan.nombres} ${loan.apellidos}</td>
             <td>S/ ${parseFloat(loan.monto).toFixed(2)}</td>
             <td>${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}</td>
             <td>${loan.plazo} meses</td>
             <td><span class="status status-active">${loan.status}</span></td>
-            <td><button class="button button-secondary view-details-btn" data-loan-dni="${loan.client.dni}">Ver Detalles</button></td>
+            <td><button class="button button-secondary view-details-btn" data-loan-id="${loan.id}">Ver Detalles</button></td>
         `;
         historyTableBody.appendChild(row);
     });
@@ -174,11 +224,12 @@ function populateDetailsModal(loan) {
     currentLoanForDetails = loan;
     const { monthlyPayment, schedule } = calculateSchedule(loan);
     let summaryHTML = `
-        <p><strong>Cliente:</strong> ${loan.client.nombres} ${loan.client.apellidos}</p>
+        <p><strong>Cliente:</strong> ${loan.nombres} ${loan.apellidos}</p>
         <p><strong>Monto:</strong> S/ ${parseFloat(loan.monto).toFixed(2)} | <strong>Interés:</strong> ${loan.interes}% | <strong>Plazo:</strong> ${loan.plazo} meses</p>
         <p><strong>Cuota Mensual Fija: S/ ${monthlyPayment.toFixed(2)}</strong></p>
     `;
-    // Mostrar si se marcó la declaración jurada
+
+    // CAMBIO 4: Mostrar si se presentó declaración jurada en los detalles
     if (loan.declaracion_jurada) {
         summaryHTML += `<p style="color: #005DFF;"><strong>✓ Se presentó declaración jurada.</strong></p>`;
     }
@@ -190,22 +241,36 @@ function populateDetailsModal(loan) {
     openModal(detailsModal);
 }
 
-
 function updateDashboard() {
     const totalLoaned = loans.reduce((sum, loan) => sum + parseFloat(loan.monto), 0);
+    clients.clear();
+    loans.forEach(loan => clients.add(loan.dni));
     document.getElementById('totalLoaned').textContent = `S/ ${totalLoaned.toFixed(2)}`;
     document.getElementById('activeLoans').textContent = loans.filter(loan => loan.status === 'Activo').length;
     document.getElementById('totalClients').textContent = clients.size;
 }
 
+historyTableBody.addEventListener('click', function(event) {
+    if (event.target.classList.contains('view-details-btn')) {
+        const loanId = event.target.getAttribute('data-loan-id');
+        const loan = loans.find(l => l.id == loanId);
+        if (loan) populateDetailsModal(loan);
+    }
+});
+
 function calculateSchedule(loan) {
    const monthlyInterestRate = parseFloat(loan.interes) / 100;
-   const monthlyPayment = (parseFloat(loan.monto) * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
-    const schedule = [];
-    const startDate = new Date(loan.fecha);
+   const principal = parseFloat(loan.monto);
+   if (monthlyInterestRate === 0) {
+       const monthlyPayment = loan.plazo > 0 ? principal / loan.plazo : 0;
+       return { monthlyPayment, schedule: [] };
+   }
+   const monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
+   const schedule = [];
+   const startDate = new Date(loan.fecha);
     for (let i = 1; i <= loan.plazo; i++) {
         const paymentDate = new Date(startDate);
-        paymentDate.setMonth(paymentDate.getMonth() + i);
+        paymentDate.setUTCMonth(paymentDate.getUTCMonth() + i);
         schedule.push({
             cuota: i,
             fecha: paymentDate.toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }),
@@ -215,131 +280,55 @@ function calculateSchedule(loan) {
     return { monthlyPayment, schedule };
 }
 
-// --- FUNCIÓN DE COMPARTIR PDF ---
 function compartirPDF() {
-    console.log('Función compartirPDF ejecutándose...');
-
-    if (!currentLoanForDetails) {
-        alert("No hay información del préstamo para compartir.");
-        return;
-    }
-
-    // Verificar que jsPDF esté cargado
-    if (typeof window.jspdf === 'undefined') {
-        alert("Error: La librería jsPDF no se cargó correctamente. Verifica tu conexión a internet.");
-        return;
-    }
-
+    if (!currentLoanForDetails) { alert("No hay información del préstamo para compartir."); return; }
+    if (typeof window.jspdf === 'undefined') { alert("Error: La librería jsPDF no se cargó correctamente."); return; }
     try {
         const loan = currentLoanForDetails;
         const { monthlyPayment, schedule } = calculateSchedule(loan);
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
-
-        // TÍTULO
-        doc.setFontSize(22);
-        doc.setTextColor(0, 93, 255);
-        doc.text("PRESTAPRO", 105, 20, { align: 'center' });
-
-        doc.setFontSize(16);
-        doc.setTextColor(52, 64, 84);
-        doc.text("Cronograma de Pagos", 105, 30, { align: 'center' });
-
-        // INFORMACIÓN DEL CLIENTE
-        doc.setFontSize(12);
-        doc.setTextColor(100, 100, 100);
-        doc.text("DATOS DEL CLIENTE", 14, 45);
-
-        doc.setFontSize(11);
-        doc.setTextColor(52, 64, 84);
-        doc.text(`Nombre: ${loan.client.nombres} ${loan.client.apellidos}`, 14, 52);
-        doc.text(`DNI: ${loan.client.dni}`, 14, 58);
-        doc.text(`Fecha: ${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}`, 14, 64);
-
-        // INFORMACIÓN DEL PRÉSTAMO
-        doc.setFontSize(12);
-        doc.setTextColor(100, 100, 100);
-        doc.text("DATOS DEL PRÉSTAMO", 14, 75);
-
-        doc.setFontSize(11);
-        doc.setTextColor(52, 64, 84);
+        doc.setFontSize(22); doc.setTextColor(0, 93, 255); doc.text("PRESTAPRO", 105, 20, { align: 'center' });
+        doc.setFontSize(16); doc.setTextColor(52, 64, 84); doc.text("Cronograma de Pagos", 105, 30, { align: 'center' });
+        doc.setFontSize(12); doc.setTextColor(100, 100, 100); doc.text("DATOS DEL CLIENTE", 14, 45);
+        doc.setFontSize(11); doc.setTextColor(52, 64, 84);
+        doc.text(`Nombre: ${loan.nombres} ${loan.apellidos}`, 14, 52);
+        doc.text(`DNI: ${loan.dni}`, 14, 58);
+        doc.text(`Fecha de Préstamo: ${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}`, 14, 64);
+        doc.setFontSize(12); doc.setTextColor(100, 100, 100); doc.text("DATOS DEL PRÉSTAMO", 14, 75);
+        doc.setFontSize(11); doc.setTextColor(52, 64, 84);
         doc.text(`Monto Prestado: S/ ${parseFloat(loan.monto).toFixed(2)}`, 14, 82);
         doc.text(`Interés Mensual: ${loan.interes}%`, 14, 88);
         doc.text(`Plazo: ${loan.plazo} meses`, 14, 94);
         doc.text(`Cuota Mensual Fija: S/ ${monthlyPayment.toFixed(2)}`, 14, 100);
+        let startY = 110;
         if (loan.declaracion_jurada) {
             doc.setFont(undefined, 'bold');
             doc.setTextColor(0, 93, 255);
             doc.text("✓ Se presentó declaración jurada de origen de fondos.", 14, 106);
             doc.setFont(undefined, 'normal');
+            startY = 115; // Ajustamos la posición de la tabla
         }
-
-        // TABLA DE CRONOGRAMA
-        const tableData = schedule.map(item => [
-            item.cuota.toString(),
-            item.fecha,
-            `S/ ${item.monto}`
-        ]);
-
+        const tableData = schedule.map(item => [item.cuota.toString(), item.fecha, `S/ ${item.monto}`]);
         doc.autoTable({
             head: [['N° Cuota', 'Fecha de Vencimiento', 'Monto a Pagar']],
-            body: tableData,
-            startY: 115, // Ajustamos la posición inicial
-            theme: 'grid',
-            headStyles: {
-                fillColor: [0, 93, 255],
-                textColor: [255, 255, 255],
-                fontStyle: 'bold',
-                halign: 'center',
-                fontSize: 11
-            },
-            bodyStyles: {
-                fontSize: 10
-            },
-            columnStyles: {
-                0: { halign: 'center', cellWidth: 25 },
-                1: { halign: 'left', cellWidth: 100 },
-                2: { halign: 'right', cellWidth: 40 }
-            }
+            body: tableData, startY: startY, theme: 'grid',
+            headStyles: { fillColor: [0, 93, 255], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center', fontSize: 11 },
+            bodyStyles: { fontSize: 10 },
+            columnStyles: { 0: { halign: 'center' }, 2: { halign: 'right' } }
         });
-
-        // PIE DE PÁGINA
         const finalY = doc.lastAutoTable.finalY || 250;
-        doc.setFontSize(8);
-        doc.setTextColor(150, 150, 150);
+        doc.setFontSize(8); doc.setTextColor(150, 150, 150);
         doc.text('Generado por PrestaPro', 105, finalY + 10, { align: 'center' });
         doc.text(new Date().toLocaleString('es-PE'), 105, finalY + 15, { align: 'center' });
-
-        // INTENTAR COMPARTIR O DESCARGAR
-        const fileName = `Cronograma_${loan.client.apellidos}_${loan.client.dni}.pdf`;
+        const fileName = `Cronograma_${loan.apellidos}_${loan.dni}.pdf`;
         const pdfBlob = doc.output('blob');
-
-        // Intentar usar la API de compartir (funciona en móviles)
         if (navigator.share) {
             const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-
-            navigator.share({
-                files: [file],
-                title: 'Cronograma de Pagos',
-                text: `Cronograma de pagos de ${loan.client.nombres} ${loan.client.apellidos}`
-            })
-                .then(() => {
-                    console.log('Compartido exitosamente');
-                })
-                .catch((error) => {
-                    console.log('Error al compartir o cancelado:', error);
-                    // Si falla o se cancela, descargar
-                    descargarPDF(doc, fileName);
-                });
-        } else {
-            // Si no hay API de compartir, descargar directamente
-            descargarPDF(doc, fileName);
-        }
-
-    } catch (error) {
-        console.error('Error al generar PDF:', error);
-        alert('Hubo un error al generar el PDF. Por favor, intenta nuevamente.');
-    }
+            navigator.share({ files: [file], title: 'Cronograma de Pagos', text: `Cronograma de pagos de ${loan.nombres} ${loan.apellidos}`})
+            .catch((error) => { console.log('Error al compartir, iniciando descarga:', error); descargarPDF(doc, fileName); });
+        } else { descargarPDF(doc, fileName); }
+    } catch (error) { console.error('Error al generar PDF:', error); alert('Hubo un error al generar el PDF.'); }
 }
 
 function descargarPDF(doc, fileName) {
@@ -347,46 +336,5 @@ function descargarPDF(doc, fileName) {
     console.log('PDF descargado:', fileName);
 }
 
-async function fetchAndRenderLoans() {
-    try {
-        const response = await fetch(`${API_URL}/api/loans`);
-        if (!response.ok) {
-            throw new Error('Error al cargar los préstamos');
-        }
-        loans = await response.json(); // Actualizamos la variable local con datos de la BD
-
-        // Limpiamos y recalculamos el set de clientes
-        clients.clear();
-        loans.forEach(loan => {
-            // PRIMERO: Nos aseguramos de que `loan.client` sea un objeto.
-            // Puede que venga como texto (string) desde la base de datos.
-            if (typeof loan.client === 'string') {
-                try {
-                    loan.client = JSON.parse(loan.client);
-                } catch (e) {
-                    console.error("Error al parsear datos del cliente:", e);
-                    // Si falla la conversión, lo dejamos como null para evitar errores.
-                    loan.client = null; 
-                }
-            }
-
-            // SEGUNDO: Añadimos una validación.
-            // Solo intentamos leer '.dni' si 'loan.client' existe y tiene un valor.
-            if (loan.client && loan.client.dni) {
-                clients.add(loan.client.dni);
-            } else {
-                console.warn("Se encontró un préstamo sin datos de cliente válidos:", loan);
-            }
-        });
-
-        renderHistoryTable();
-        updateDashboard();
-    } catch (error) {
-        console.error(error);
-        historyTableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: red;">Error al cargar los datos.</td></tr>`;
-    }
-}
-
-// --- Carga Inicial de Datos desde el Servidor ---
-fetchAndRenderLoans();
-
+// --- Carga Inicial ---
+document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
