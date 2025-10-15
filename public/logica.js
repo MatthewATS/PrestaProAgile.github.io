@@ -21,7 +21,7 @@ const closePaymentModalBtn = document.getElementById('closePaymentModalBtn');
 const paymentForm = document.getElementById('paymentForm');
 const paymentModalTitle = document.getElementById('paymentModalTitle');
 const paymentLoanIdInput = document.getElementById('paymentLoanId');
-// --- ¡NUEVOS ELEMENTOS DEL DOM PARA CONFIRMACIÓN DE ELIMINACIÓN! ---
+// Elementos del DOM para Confirmación de Eliminación
 const deleteConfirmationModal = document.getElementById('deleteConfirmationModal');
 const closeDeleteModalBtn = document.getElementById('closeDeleteModalBtn');
 const deleteConfirmationForm = document.getElementById('deleteConfirmationForm');
@@ -31,7 +31,7 @@ const deleteModalTitle = document.getElementById('deleteModalTitle');
 const deleteErrorMessage = document.getElementById('delete-error-message');
 
 
-// --- CARGA DINÁMICA DEL FORMULARIO DE PRÉSTAMO ---
+// --- CARGA DINÁMICA DEL FORMULARIO DE PRÉSTAMO (MODIFICADO) ---
 loanForm.innerHTML = `
     <fieldset>
         <legend>👤 Información del Cliente</legend>
@@ -41,8 +41,14 @@ loanForm.innerHTML = `
             <small id="dni-status" style="margin-top: 5px; display: block;"></small>
         </div>
         <div class="form-row">
-            <div class="form-group"><label for="nombres">Nombres</label><input type="text" id="nombres" placeholder="Nombres completos" required></div>
-            <div class="form-group"><label for="apellidos">Apellidos</label><input type="text" id="apellidos" placeholder="Apellidos completos" required></div>
+            <div class="form-group">
+                <label for="nombres">Nombres</label>
+                <input type="text" id="nombres" placeholder="Autocompletado con DNI" required readonly>
+            </div>
+            <div class="form-group">
+                <label for="apellidos">Apellidos</label>
+                <input type="text" id="apellidos" placeholder="Autocompletado con DNI" required readonly>
+            </div>
         </div>
         <div class="form-group" style="background-color: #F9FAFB; padding: 12px; border-radius: 8px;">
             <div style="display: flex; align-items: center;">
@@ -148,8 +154,6 @@ const closeModal = (modal) => {
     modal.style.display = 'none';
     if (modal.id === 'loanModal') {
         loanForm.reset();
-        nombresInput.readOnly = false;
-        apellidosInput.readOnly = false;
         dniStatus.textContent = '';
         hibridoOptions.style.display = 'none';
         document.getElementById('hibrido-info').textContent = '';
@@ -157,7 +161,6 @@ const closeModal = (modal) => {
     }
     if (modal.id === 'detailsModal') currentLoanForDetails = null;
     if (modal.id === 'paymentModal') paymentForm.reset();
-    // --- ¡AÑADIDO! Limpiar el formulario de eliminación al cerrar ---
     if (modal.id === 'deleteConfirmationModal') {
         deleteConfirmationForm.reset();
         deleteErrorMessage.style.display = 'none';
@@ -168,7 +171,6 @@ addLoanBtn.addEventListener('click', () => openModal(loanModal));
 closeModalBtn.addEventListener('click', () => closeModal(loanModal));
 closeDetailsModalBtn.addEventListener('click', () => closeModal(detailsModal));
 closePaymentModalBtn.addEventListener('click', () => closeModal(paymentModal));
-// --- ¡AÑADIDO! Evento para el botón de cerrar de la nueva modal ---
 closeDeleteModalBtn.addEventListener('click', () => closeModal(deleteConfirmationModal));
 printScheduleBtn.addEventListener('click', printSchedule);
 shareBtn.addEventListener('click', compartirPDF);
@@ -177,7 +179,6 @@ window.addEventListener('click', (event) => {
     if (event.target === loanModal) closeModal(loanModal);
     if (event.target === detailsModal) closeModal(detailsModal);
     if (event.target === paymentModal) closeModal(paymentModal);
-    // --- ¡AÑADIDO! Cerrar la nueva modal si se hace clic afuera ---
     if (event.target === deleteConfirmationModal) closeModal(deleteConfirmationModal);
 });
 
@@ -194,14 +195,17 @@ function toggleFormLock(locked) {
     });
 }
 
+// --- VERIFICACIÓN DE DNI (MODIFICADO) ---
 dniInput.addEventListener('blur', async () => {
     toggleFormLock(false);
+    // Limpiamos los campos de nombre y apellido cada vez que se busca un nuevo DNI
+    nombresInput.value = '';
+    apellidosInput.value = '';
+    
     const dni = dniInput.value;
 
     if (dni.length !== 8) {
         dniStatus.textContent = '';
-        nombresInput.readOnly = false;
-        apellidosInput.readOnly = false;
         return;
     }
 
@@ -216,8 +220,6 @@ dniInput.addEventListener('blur', async () => {
     
     dniStatus.textContent = 'Buscando...';
     dniStatus.style.color = '#667085';
-    nombresInput.readOnly = true;
-    apellidosInput.readOnly = true;
     
     try {
         const response = await fetch(`${API_URL}/api/dni/${dni}`);
@@ -234,14 +236,6 @@ dniInput.addEventListener('blur', async () => {
     } catch (error) {
         dniStatus.textContent = `❌ ${error.message}`;
         dniStatus.style.color = 'red';
-        nombresInput.value = '';
-        apellidosInput.value = '';
-    } finally {
-        if (!nombresInput.value) {
-            nombresInput.readOnly = false;
-            apellidosInput.readOnly = false;
-            nombresInput.focus();
-        }
     }
 });
 
@@ -286,7 +280,6 @@ paymentForm.addEventListener('submit', async function(event) {
     } catch (error) { alert(`No se pudo registrar el pago: ${error.message}`); }
 });
 
-// --- ¡NUEVO LISTENER PARA EL FORMULARIO DE CONFIRMACIÓN DE ELIMINACIÓN! ---
 deleteConfirmationForm.addEventListener('submit', function(event) {
     event.preventDefault();
     const loanId = deleteLoanIdInput.value;
@@ -438,7 +431,6 @@ function updateDashboard() {
     document.getElementById('totalClients').textContent = clients.size;
 }
 
-// --- EVENT LISTENER DE LA TABLA (MODIFICADO) ---
 historyTableBody.addEventListener('click', function(event) {
     const target = event.target.closest('button');
     if (!target) return;
@@ -460,7 +452,6 @@ historyTableBody.addEventListener('click', function(event) {
         }
     }
 
-    // --- ¡LÓGICA ACTUALIZADA! AHORA ABRE LA VENTANA MODAL ---
     if (target.classList.contains('delete-loan-btn')) {
         const loanId = target.getAttribute('data-loan-id');
         const loan = loans.find(l => l.id == loanId);
@@ -483,7 +474,6 @@ async function deleteLoan(loanId) {
             throw new Error(errorData.error || 'Error en el servidor');
         }
         
-        // Usamos la animación de éxito para notificar
         document.getElementById('successText').textContent = "¡Préstamo Eliminado!";
         document.getElementById('successAnimation').style.display = 'flex';
         setTimeout(() => { document.getElementById('successAnimation').style.display = 'none'; }, 2500);
