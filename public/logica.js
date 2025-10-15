@@ -163,7 +163,34 @@ window.addEventListener('click', (event) => {
     if (event.target === paymentModal) closeModal(paymentModal); // Cerrar modal de pago
 });
 
+/**
+ * --- ¡NUEVA FUNCIÓN! ---
+ * Bloquea o desbloquea todos los campos del formulario excepto el DNI.
+ * @param {boolean} locked - `true` para bloquear el formulario, `false` para desbloquear.
+ */
+function toggleFormLock(locked) {
+    const formElements = loanForm.querySelectorAll('input, button');
+    const fieldsets = loanForm.querySelectorAll('fieldset');
+
+    formElements.forEach(element => {
+        // No deshabilitamos el campo DNI para que el usuario pueda corregirlo
+        if (element.id !== 'dni') {
+            element.disabled = locked;
+        }
+    });
+
+    fieldsets.forEach(fieldset => {
+        // Damos una señal visual de que el formulario está bloqueado
+        fieldset.style.opacity = locked ? 0.6 : 1;
+    });
+}
+
+
+// --- LÓGICA DE VERIFICACIÓN DE DNI (MODIFICADA) ---
 dniInput.addEventListener('blur', async () => {
+    // Primero, nos aseguramos de que el formulario esté desbloqueado al iniciar la verificación
+    toggleFormLock(false);
+    
     const dni = dniInput.value;
 
     if (dni.length !== 8) {
@@ -176,9 +203,10 @@ dniInput.addEventListener('blur', async () => {
     const hasActiveLoan = loans.some(loan => loan.dni === dni && loan.status === 'Activo');
 
     if (hasActiveLoan) {
-        dniStatus.textContent = '⚠️ Este cliente ya tiene un préstamo activo.';
+        dniStatus.textContent = '⚠️ Este cliente ya tiene un préstamo activo. Formulario bloqueado.';
         dniStatus.style.color = 'orange';
-        return;
+        toggleFormLock(true); // Bloqueamos todo el formulario
+        return; // Detenemos la ejecución
     } 
     
     dniStatus.textContent = 'Buscando...';
@@ -570,6 +598,3 @@ function descargarPDF(doc, fileName) {
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
-
-
-
