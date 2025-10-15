@@ -39,7 +39,7 @@ loanForm.innerHTML = `
     <fieldset>
         <legend>📋 Detalles del Préstamo</legend>
         <div class="form-row">
-            <div class="form-group"><label for="monto">Monto (S/)</label><input type="number" id="monto" placeholder="Ej: 1000" required step="0.01" min="100" max="50000"></div>
+            <div class="form-group"><label for="monto">Monto (S/)</label><input type="number" id="monto" placeholder="Ej: 1000" required step="0.01" min="100" max="20000"></div>
             <div class="form-group"><label for="fecha">Fecha</label><input type="date" id="fecha" required></div>
         </div>
         <div class="form-row">
@@ -556,4 +556,3 @@ function descargarPDF(doc, fileName) {
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
-
