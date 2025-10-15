@@ -61,6 +61,29 @@ const declaracionContainer = document.getElementById('declaracion-container');
 const declaracionCheckbox = document.getElementById('declaracion_jurada');
 const submitButton = loanForm.querySelector('button[type="submit"]');
 
+// --- NUEVA FUNCIÓN AUXILIAR ---
+/**
+ * Habilita o deshabilita todos los campos del formulario excepto el campo de DNI.
+ * @param {boolean} isEnabled - true para habilitar, false para deshabilitar.
+ */
+function toggleFormFields(isEnabled) {
+    const fieldsToToggle = [
+        nombresInput,
+        apellidosInput,
+        montoInput,
+        document.getElementById('fecha'),
+        document.getElementById('interes'),
+        document.getElementById('plazo'),
+        declaracionCheckbox,
+        submitButton
+    ];
+
+    fieldsToToggle.forEach(field => {
+        field.disabled = !isEnabled;
+    });
+}
+
+
 // --- LÓGICA PARA MOSTRAR LA DECLARACIÓN JURADA ---
 montoInput.addEventListener('input', () => {
     const monto = parseFloat(montoInput.value) || 0;
@@ -74,7 +97,7 @@ montoInput.addEventListener('input', () => {
     }
 });
 
-// --- MANEJO DE MODALES ---
+// --- MANEJO DE MODALES (MODIFICADO) ---
 const openModal = (modal) => modal.style.display = 'flex';
 const closeModal = (modal) => {
     modal.style.display = 'none';
@@ -86,7 +109,7 @@ const closeModal = (modal) => {
         dniStatus.style.color = '';
         declaracionContainer.style.display = 'none';
         declaracionCheckbox.required = false;
-        submitButton.disabled = false;
+        toggleFormFields(true); // Habilitar todos los campos al cerrar
     }
     if (modal.id === 'detailsModal') {
         currentLoanForDetails = null;
@@ -105,23 +128,27 @@ window.addEventListener('click', (event) => {
     if (event.target === detailsModal) closeModal(detailsModal);
 });
 
-// --- LÓGICA DE CONSULTA DE DNI ---
+// --- LÓGICA DE CONSULTA DE DNI (MODIFICADA) ---
 dniInput.addEventListener('blur', async () => {
     const dni = dniInput.value;
-    submitButton.disabled = false;
-    dniStatus.textContent = '';
-    dniStatus.style.color = '';
-
-    if (dni.length !== 8) return;
+    
+    if (dni.length !== 8) {
+        // Si el DNI no es válido, asegúrate de que todo esté habilitado
+        toggleFormFields(true);
+        dniStatus.textContent = '';
+        return;
+    }
 
     const hasActiveLoan = loans.some(loan => loan.dni === dni && loan.status === 'Activo');
     if (hasActiveLoan) {
         dniStatus.textContent = '⚠️ Este cliente ya tiene un préstamo activo.';
         dniStatus.style.color = 'orange';
-        submitButton.disabled = true;
+        toggleFormFields(false); // Deshabilitar todos los campos
         return;
     }
-
+    
+    // Si no tiene préstamo activo, asegúrate de que todo esté habilitado antes de buscar
+    toggleFormFields(true); 
     dniStatus.textContent = 'Buscando...';
     dniStatus.style.color = '#667085';
     nombresInput.readOnly = true;
@@ -153,6 +180,7 @@ dniInput.addEventListener('blur', async () => {
         }
     }
 });
+
 
 // --- LÓGICA DE ENVÍO DE FORMULARIO ---
 loanForm.addEventListener('submit', async function(event) {
