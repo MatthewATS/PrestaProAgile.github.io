@@ -333,7 +333,7 @@ function calculateSchedule(loan) {
     return { monthlyPayment, schedule };
 }
 
-// --- FUNCIÓN DE IMPRESIÓN REFINADA ---
+// --- FUNCIÓN DE IMPRESIÓN DEFINITIVA ---
 function printSchedule() {
     const printableContent = document.querySelector('#detailsModal .printable').innerHTML;
     
@@ -354,41 +354,37 @@ function printSchedule() {
             <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
             <style>
                 /* --- Estilos Definitivos para Impresión Limpia --- */
-                body {
-                    margin: 20mm; /* Margen estándar para documentos A4 */
-                    font-family: 'Poppins', sans-serif;
+                html, body {
+                    /* 1. Reseteo Agresivo para eliminar márgenes por defecto */
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    width: 100%;
                 }
-                
-                /* FIX #1: ELIMINAR PÁGINA EN BLANCO INICIAL */
-                /* Al primer elemento del contenido (el encabezado), se le quita el margen y padding superior */
-                body > .modal-header {
-                    margin-top: 0 !important;
-                    padding-top: 0 !important;
+                .print-container {
+                    /* 2. Contenedor que añade un padding simulando el margen de la hoja */
+                    padding: 20mm;
+                    width: auto;
                 }
-
-                /* FIX #2: CORREGIR 'DESCUADRE' */
-                /* Se oculta el botón de cerrar que se copia junto con el resto del HTML */
                 .close-button {
-                    display: none;
+                    display: none; /* Oculta el botón 'x' */
                 }
-                
-                /* MEJORAS DE PAGINACIÓN */
+                /* 3. Mejoras de Paginación */
                 table {
                     width: 100%;
                     border-collapse: collapse;
                 }
-                /* Repite el encabezado de la tabla en cada nueva página */
                 thead {
-                    display: table-header-group;
+                    display: table-header-group; /* Repite el encabezado de la tabla en cada nueva página */
                 }
-                /* Evita que una fila de la tabla se corte entre dos páginas */
-                tr {
-                    page-break-inside: avoid !important;
+                tr, .summary-info, .declaracion-title {
+                    page-break-inside: avoid !important; /* Evita que estos elementos se corten entre páginas */
                 }
             </style>
         </head>
         <body>
-            ${printableContent}
+            <div class="print-container">
+                ${printableContent}
+            </div>
         </body>
         </html>
     `);
@@ -399,7 +395,7 @@ function printSchedule() {
             iframe.contentWindow.focus();
             iframe.contentWindow.print();
             document.body.removeChild(iframe);
-        }, 250);
+        }, 300);
     };
 }
 
