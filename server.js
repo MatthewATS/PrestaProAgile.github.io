@@ -8,18 +8,15 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middlewares
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Conexión a la base de datos
 const pool = mysql.createPool(process.env.DATABASE_URL);
-
 
 // --- RUTAS DE LA API ---
 
-// GET /api/loans
+// GET /api/loans (sin cambios)
 app.get('/api/loans', async (req, res) => {
   try {
     const query = `
@@ -38,22 +35,35 @@ app.get('/api/loans', async (req, res) => {
   }
 });
 
-// POST /api/loans
+
+// POST /api/loans (MODIFICADO)
 app.post('/api/loans', async (req, res) => {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
 
-    // MODIFICADO: Se recibe 'declaracion_jurada' del body.
-    // Se le asigna `false` por defecto si no viene en la petición.
     const { client, monto, interes, fecha, plazo, status, declaracion_jurada = false } = req.body;
     const { dni, nombres, apellidos } = client;
 
-    // Aquí podrías agregar una validación extra del lado del servidor si quisieras:
-    // const VALOR_UIT = 5150;
-    // if (monto > VALOR_UIT && !declaracion_jurada) {
-    //   return res.status(400).json({ error: 'La declaración jurada es requerida para este monto.' });
-    // }
+    // --- NUEVA VALIDACIÓN ---
+    // 1. Buscar si ya existe un préstamo con status 'Activo' para este DNI.
+    const searchActiveLoanQuery = `
+      SELECT l.id FROM loans l
+      JOIN clients c ON l.client_id = c.id
+      WHERE c.dni = ? AND l.status = 'Activo'
+      LIMIT 1;
+    `;
+    const [activeLoans] = await connection.query(searchActiveLoanQuery, [dni]);
+
+    // 2. Si se encuentra un préstamo activo, enviar error y detener.
+    if (activeLoans.length > 0) {
+      await connection.rollback(); // Revertir la transacción
+      // Usamos el código 409 Conflict para indicar que la solicitud no se puede procesar
+      // porque entra en conflicto con el estado actual del recurso.
+      return res.status(409).json({ error: 'El cliente ya tiene un préstamo activo.' });
+    }
+    // --- FIN DE LA VALIDACIÓN ---
+
 
     let [existingClient] = await connection.query('SELECT id FROM clients WHERE dni = ?', [dni]);
     let clientId;
@@ -68,7 +78,6 @@ app.post('/api/loans', async (req, res) => {
       clientId = result.insertId;
     }
     
-    // MODIFICADO: Se añade 'declaracion_jurada' al INSERT
     const loanQuery = `
       INSERT INTO loans (client_id, monto, interes, fecha, plazo, status, declaracion_jurada) 
       VALUES (?, ?, ?, ?, ?, ?, ?);
@@ -88,7 +97,8 @@ app.post('/api/loans', async (req, res) => {
   }
 });
 
-// RUTA PROXY PARA DNI
+
+// RUTA PROXY PARA DNI (sin cambios)
 app.get('/api/dni/:dni', async (req, res) => {
   const { dni } = req.params;
   const token = process.env.DNI_API_TOKEN;
@@ -113,7 +123,8 @@ app.get('/api/dni/:dni', async (req, res) => {
   }
 });
 
-// --- FUNCIÓN PARA INICIAR EL SERVIDOR ---
+
+// FUNCIÓN PARA INICIAR EL SERVIDOR (sin cambios)
 const startServer = async () => {
   try {
     const connection = await pool.getConnection();
