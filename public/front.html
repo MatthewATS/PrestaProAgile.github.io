@@ -27,7 +27,7 @@
         <div class="card-body">
             <div class="table-container">
                 <table id="historyTable" class="main-table">
-                    <thead><tr><th>Cliente</th><th>Monto</th><th>Fecha</th><th>Plazo</th><th>Estado</th><th>Acciones</th></tr></thead>
+                    <thead><tr><th>Cliente</th><th>Monto</th><th>Progreso Pago</th><th>Estado</th><th>Acciones</th></tr></thead>
                     <tbody id="historyTableBody"></tbody>
                 </table>
             </div>
@@ -49,14 +49,18 @@
             </div>
             <div class="modal-body">
                 <div id="scheduleSummary" class="summary-info"></div>
-
-                <div id="declaracionJuradaSection" style="display: none; margin-bottom: 25px; border: 1px solid #D0D5DD; padding: 20px; border-radius: 8px;">
-                    </div>
-
+                <div id="declaracionJuradaSection" style="display: none; margin-bottom: 25px; border: 1px solid #D0D5DD; padding: 20px; border-radius: 8px;"></div>
                 <div class="table-container">
                     <table id="scheduleTable" class="main-table">
                         <thead><tr><th>Cuota</th><th>Fecha de Vencimiento</th><th>Monto</th></tr></thead>
                         <tbody id="scheduleTableBody"></tbody>
+                    </table>
+                </div>
+                <h3 style="margin-top: 30px; color: var(--secondary-color);">Historial de Pagos Realizados</h3>
+                <div class="table-container">
+                    <table id="paymentHistoryTable" class="main-table">
+                         <thead><tr><th>N°</th><th>Fecha de Pago</th><th>Monto Pagado</th></tr></thead>
+                         <tbody id="paymentHistoryBody"></tbody>
                     </table>
                 </div>
             </div>
@@ -67,16 +71,38 @@
         </div>
     </div>
 </div>
-<script src="logica.js?version=1"></script>
 
+<div id="paymentModal" class="modal">
+    <div class="modal-content" style="max-width: 480px;">
+        <div class="modal-header">
+            <h2 id="paymentModalTitle">Registrar Pago</h2>
+            <button class="close-button" id="closePaymentModalBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="paymentForm">
+                <input type="hidden" id="paymentLoanId">
+                <div class="form-group">
+                    <label for="payment_amount">Monto a Pagar (S/)</label>
+                    <input type="number" id="payment_amount" required step="0.01" min="0.01">
+                </div>
+                <div class="form-group">
+                    <label for="payment_date">Fecha de Pago</label>
+                    <input type="date" id="payment_date" required>
+                </div>
+                <button type="submit" class="submit-button">Confirmar Pago</button>
+            </form>
+        </div>
+    </div>
+</div>
 <div id="successAnimation" class="animation-container" style="display: none;">
     <div class="animation-content">
         <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
             <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none"/>
             <path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
         </svg>
-        <p>¡Préstamo Registrado!</p>
+        <p id="successText">¡Préstamo Registrado!</p>
     </div>
 </div>
-</body>
+
+<script src="logica.js?version=2"></script> </body>
 </html>
