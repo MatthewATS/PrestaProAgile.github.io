@@ -333,7 +333,7 @@ function calculateSchedule(loan) {
     return { monthlyPayment, schedule };
 }
 
-// --- FUNCIÓN DE IMPRESIÓN DEFINITIVA ---
+// --- FUNCIÓN DE IMPRESIÓN DEFINITIVA (CORREGIDA) ---
 function printSchedule() {
     const printableContent = document.querySelector('#detailsModal .printable').innerHTML;
     
@@ -354,21 +354,30 @@ function printSchedule() {
             <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
             <style>
                 /* --- Estilos Definitivos para Impresión Limpia --- */
+
+                /* 1. Reseteo Agresivo: Se eliminan TODOS los márgenes y paddings del documento.
+                   Esto es la clave para evitar que el navegador genere una página en blanco. */
+                @page {
+                    margin: 0;
+                }
                 html, body {
-                    /* 1. Reseteo Agresivo para eliminar márgenes por defecto */
                     margin: 0 !important;
                     padding: 0 !important;
-                    width: 100%;
+                    font-family: 'Poppins', sans-serif;
                 }
+
+                /* 2. Contenedor Controlado: Creamos márgenes "virtuales" usando padding
+                   dentro de un contenedor principal. Esto es más estable que usar 'margin' en el body. */
                 .print-container {
-                    /* 2. Contenedor que añade un padding simulando el margen de la hoja */
                     padding: 20mm;
-                    width: auto;
                 }
+
+                /* Se oculta el botón 'x' que se copia accidentalmente del modal */
                 .close-button {
-                    display: none; /* Oculta el botón 'x' */
+                    display: none;
                 }
-                /* 3. Mejoras de Paginación */
+                
+                /* 3. Mejoras de Paginación para la tabla */
                 table {
                     width: 100%;
                     border-collapse: collapse;
@@ -376,8 +385,8 @@ function printSchedule() {
                 thead {
                     display: table-header-group; /* Repite el encabezado de la tabla en cada nueva página */
                 }
-                tr, .summary-info, .declaracion-title {
-                    page-break-inside: avoid !important; /* Evita que estos elementos se corten entre páginas */
+                tr, .summary-info {
+                    page-break-inside: avoid !important; /* Evita que estos elementos se corten */
                 }
             </style>
         </head>
@@ -395,7 +404,7 @@ function printSchedule() {
             iframe.contentWindow.focus();
             iframe.contentWindow.print();
             document.body.removeChild(iframe);
-        }, 300);
+        }, 350); // Un poco más de tiempo para asegurar la carga completa de estilos
     };
 }
 
