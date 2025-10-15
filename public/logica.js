@@ -1,5 +1,6 @@
 // --- VARIABLES GLOBALES ---
 const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
+const VALOR_UIT = 5150; // Valor de la UIT en Soles (ej: S/ 5,150 para 2024)
 let loans = [];
 let clients = new Set();
 let currentLoanForDetails = null;
@@ -39,6 +40,13 @@ loanForm.innerHTML = `
             <div class="form-group"><label for="interes">Interés Mensual (%)</label><input type="number" id="interes" placeholder="Ej: 3.5" required step="0.01" min="1" max="15"></div>
             <div class="form-group"><label for="plazo">Plazo (Meses)</label><input type="number" id="plazo" placeholder="Ej: 12" required min="1" max="60"></div>
         </div>
+        <div id="declaracion-container" class="form-group" style="display: none; background-color: #E6F0FF; padding: 15px; border-radius: 8px; margin-top: 10px;">
+            <div style="display: flex; align-items: center;">
+                 <input type="checkbox" id="declaracion_jurada" required style="width: auto; margin-right: 12px; height: 18px; width: 18px;">
+                 <label for="declaracion_jurada" style="margin-bottom: 0;">Declaro bajo juramento el origen lícito del dinero.</label>
+            </div>
+            <small style="margin-left: 30px; margin-top: 4px; color: #667085;">Requerido para montos mayores a 1 UIT (S/ ${VALOR_UIT.toFixed(2)}).</small>
+        </div>
     </fieldset>
     <button type="submit" class="submit-button">Guardar Préstamo</button>
 `;
@@ -48,6 +56,23 @@ const dniInput = document.getElementById('dni');
 const nombresInput = document.getElementById('nombres');
 const apellidosInput = document.getElementById('apellidos');
 const dniStatus = document.getElementById('dni-status');
+const montoInput = document.getElementById('monto');
+const declaracionContainer = document.getElementById('declaracion-container');
+const declaracionCheckbox = document.getElementById('declaracion_jurada');
+
+// --- LÓGICA PARA MOSTRAR LA DECLARACIÓN JURADA ---
+montoInput.addEventListener('input', () => {
+    const monto = parseFloat(montoInput.value) || 0;
+    if (monto > VALOR_UIT) {
+        declaracionContainer.style.display = 'block';
+        declaracionCheckbox.required = true;
+    } else {
+        declaracionContainer.style.display = 'none';
+        declaracionCheckbox.required = false;
+        declaracionCheckbox.checked = false;
+    }
+});
+
 
 // --- MANEJO DE MODALES ---
 const openModal = (modal) => modal.style.display = 'flex';
@@ -59,6 +84,9 @@ const closeModal = (modal) => {
         apellidosInput.readOnly = false;
         dniStatus.textContent = '';
         dniStatus.style.color = '';
+        // Ocultar el campo de declaración al cerrar
+        declaracionContainer.style.display = 'none';
+        declaracionCheckbox.required = false;
     }
     if (modal.id === 'detailsModal') {
         currentLoanForDetails = null;
@@ -120,7 +148,8 @@ dniInput.addEventListener('blur', async () => {
 
 loanForm.addEventListener('submit', async function(event) {
     event.preventDefault();
-
+    
+    // NUEVO: Se obtiene el valor del checkbox
     const newLoanData = {
         client: {
             dni: dniInput.value,
@@ -131,7 +160,8 @@ loanForm.addEventListener('submit', async function(event) {
         interes: parseFloat(document.getElementById('interes').value),
         fecha: document.getElementById('fecha').value,
         plazo: parseInt(document.getElementById('plazo').value),
-        status: 'Activo'
+        status: 'Activo',
+        declaracion_jurada: declaracionCheckbox.checked // <-- AÑADIDO
     };
 
     try {
