@@ -94,6 +94,30 @@
         </div>
     </div>
 </div>
+
+<div id="deleteModal" class="modal">
+    <div class="modal-content" style="max-width: 520px;">
+        <div class="modal-header">
+            <h2 id="deleteModalTitle">Confirmar Eliminación</h2>
+            <button class="close-button" id="closeDeleteModalBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="deleteForm">
+                 <input type="hidden" id="deleteLoanId">
+                 <p id="deleteWarningText" style="line-height: 1.6;">
+                    Esta acción es irreversible y eliminará permanentemente el préstamo y su historial de pagos.
+                 </p>
+                 <p>Para confirmar, por favor escriba <strong>ELIMINAR</strong> en el campo de abajo.</p>
+                 <div class="form-group">
+                    <label for="deleteConfirmInput">Texto de confirmación</label>
+                    <input type="text" id="deleteConfirmInput" autocomplete="off">
+                 </div>
+                 <button type="submit" id="finalDeleteBtn" class="submit-button button-danger" disabled>Eliminar Permanentemente</button>
+            </form>
+        </div>
+    </div>
+</div>
+
 <div id="successAnimation" class="animation-container" style="display: none;">
     <div class="animation-content">
         <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
@@ -104,5 +128,6 @@
     </div>
 </div>
 
-<script src="logica.js?version=2"></script> </body>
+<script src="logica.js?version=3"></script>
+</body>
 </html>
