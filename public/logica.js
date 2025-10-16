@@ -78,7 +78,7 @@ const closePaymentModalBtn = document.getElementById('closePaymentModalBtn');
 const paymentForm = document.getElementById('paymentForm');
 const paymentModalTitle = document.getElementById('paymentModalTitle');
 const paymentLoanIdInput = document.getElementById('paymentLoanId');
-const paymentAmountInput = document.getElementById('payment_amount'); // Obtenemos el input de monto
+const paymentAmountInput = document.getElementById('payment_amount');
 // Elementos del DOM para Confirmación de Eliminación
 const deleteConfirmationModal = document.getElementById('deleteConfirmationModal');
 const closeDeleteModalBtn = document.getElementById('closeDeleteModalBtn');
@@ -126,7 +126,7 @@ loanForm.innerHTML = `
         </div>
         <div class="form-row">
             <div class="form-group">
-                <label for="interes">Tasa de Interés Anual</label>
+                <label>Tasa de Interés Anual</label>
                 <div class="static-value">${TASA_INTERES_ANUAL}% (Fijo)</div>
             </div>
             <div class="form-group"><label for="plazo">Plazo (Meses)</label><input type="number" id="plazo" placeholder="Ej: 12" required min="1" max="60"></div>
@@ -164,10 +164,7 @@ const isPepCheckbox = document.getElementById('is_pep');
 const hibridoCheck = document.getElementById('hibrido_check');
 const hibridoOptions = document.getElementById('hibrido_options');
 const mesesSoloInteresInput = document.getElementById('meses_solo_interes');
-// Se elimina la constante 'interesInput' ya que el campo no existe más
 
-// --- ¡NUEVO LISTENER AÑADIDO! ---
-// Este listener se asegura de que el valor nunca exceda el máximo permitido
 paymentAmountInput.addEventListener('input', () => {
     const maxValue = parseFloat(paymentAmountInput.max);
     if (parseFloat(paymentAmountInput.value) > maxValue) {
@@ -175,14 +172,12 @@ paymentAmountInput.addEventListener('input', () => {
     }
 });
 
-
 dniInput.addEventListener('input', () => { dniInput.value = dniInput.value.replace(/[^0-9]/g, ''); });
 
 function updateHibridoInfo() {
     const infoEl = document.getElementById('hibrido-info');
     if (!hibridoCheck.checked) { infoEl.textContent = ''; return; }
     const monto = parseFloat(montoInput.value) || 0;
-    // CAMBIO: Se usa la tasa mensual calculada de la constante anual
     const interesMensual = TASA_INTERES_ANUAL / 12;
     const meses = parseInt(mesesSoloInteresInput.value) || 0;
     if (monto > 0 && interesMensual > 0 && meses > 0) {
@@ -221,7 +216,6 @@ function updateDeclaracionVisibility() {
 }
 montoInput.addEventListener('input', () => { updateDeclaracionVisibility(); updateHibridoInfo(); });
 isPepCheckbox.addEventListener('change', updateDeclaracionVisibility);
-// Se elimina el event listener de 'interesInput'
 mesesSoloInteresInput.addEventListener('input', updateHibridoInfo);
 
 const openModal = (modal) => modal.style.display = 'flex';
@@ -317,8 +311,7 @@ loanForm.addEventListener('submit', async function(event) {
     const newLoanData = {
         client: { dni: dniInput.value, nombres: nombresInput.value, apellidos: apellidosInput.value, is_pep: isPepCheckbox.checked },
         monto: parseFloat(montoInput.value),
-        // CAMBIO: Se envía la tasa mensual calculada de la constante anual.
-        interes: TASA_INTERES_ANUAL / 12,
+        interes: TASA_INTERES_ANUAL / 12, // Se envía la tasa MENSUAL al backend
         fecha: document.getElementById('fecha').value,
         plazo: parseInt(document.getElementById('plazo').value),
         status: 'Activo',
@@ -349,7 +342,6 @@ paymentForm.addEventListener('submit', async function(event) {
         });
         if (!response.ok) { 
             const errorData = await response.json();
-            // Mostramos el error específico del backend
             throw new Error(errorData.error || `Error ${response.status}`); 
         }
         await fetchAndRenderLoans();
@@ -452,9 +444,8 @@ function populateDetailsModal(loan) {
         day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC'
     });
     
-    // CAMBIO: Mostrar la tasa de interés anual fija en los detalles
-    const interesAnualMostrado = (loan.interes * 12).toFixed(2);
-
+    // El valor 'loan.interes' es mensual, lo multiplicamos por 12 para mostrar el anual
+    const interesAnualMostrado = (parseFloat(loan.interes) * 12).toFixed(2);
 
     document.getElementById('scheduleSummary').innerHTML = `
         <p><strong>Cliente:</strong> ${loan.nombres} ${loan.apellidos} ${loan.is_pep ? '<strong style="color: #D92D20;">(PEP)</strong>' : ''}</p>
@@ -688,9 +679,7 @@ function compartirPDF() {
         const doc = new jsPDF();
         let finalY = 0;
         
-        // CAMBIO: Se muestra la tasa anual en el PDF
-        const interesAnualMostrado = (loan.interes * 12).toFixed(2);
-
+        const interesAnualMostrado = (parseFloat(loan.interes) * 12).toFixed(2);
 
         doc.setFontSize(22); doc.setTextColor(0, 93, 255); doc.text("PRESTAPRO", 105, 20, { align: 'center' });
         doc.setFontSize(16); doc.setTextColor(52, 64, 84); doc.text("Detalles del Préstamo", 105, 30, { align: 'center' });
