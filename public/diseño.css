@@ -498,3 +498,67 @@ input[readonly] {
     font-size: 12px;
     color: #667085;
 }
+
+/* === ESTILOS PARA EL LOGIN (AÑADIR AL FINAL DE diseño.css) === */
+
+.login-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.login-card {
+    background: var(--white);
+    border-radius: 16px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.07);
+    width: 100%;
+    max-width: 400px;
+    padding: 40px;
+    box-sizing: border-box;
+    animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.login-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.login-header h1 {
+    color: var(--primary-color);
+    font-size: 32px;
+    margin: 0 0 10px 0;
+}
+
+.login-header p {
+    font-size: 16px;
+    color: #667085;
+    margin: 0;
+}
+
+/* Ajuste para que los inputs del login no hereden otros estilos */
+.login-card input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 4px rgba(0, 93, 255, 0.2);
+}
+
+.error-message {
+    color: var(--danger-color);
+    background-color: #FEE4E2;
+    border: 1px solid var(--danger-color);
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 14px;
+    text-align: center;
+    margin-top: 15px;
+    display: none; /* Oculto por defecto */
+}
