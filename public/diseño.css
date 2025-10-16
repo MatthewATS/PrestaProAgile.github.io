@@ -574,3 +574,12 @@ input[readonly] {
     margin-top: 15px;
     display: none; /* Oculto por defecto */
 }
+.static-value {
+    padding: 10px 14px;
+    background-color: var(--light-gray);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 16px;
+    color: #667085;
+    box-sizing: border-box;
+}
