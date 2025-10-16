@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PrestaPro | Sistema de Préstamos</title>
-    <link rel="stylesheet" href="diseño.css?version=4"> 
+    <link rel="stylesheet" href="diseño.css?version=5"> 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -30,6 +30,10 @@
             </div>
             <div id="error-message" class="error-message"></div>
             <button type="submit" class="submit-button">Iniciar Sesión</button>
+            
+            <div class="login-footer">
+                <a href="#" id="changePasswordLink">¿Olvidaste tu contraseña?</a>
+            </div>
         </form>
     </div>
 </div>
@@ -114,7 +118,7 @@
                 </div>
                 <div class="form-group">
                     <label for="payment_date">Fecha de Pago</label>
-                    <input type="date" id="payment_date" required readonly>
+                    <input type="date" id="payment_date" required>
                 </div>
                 <button type="submit" class="submit-button">Confirmar Pago</button>
             </form>
@@ -142,6 +146,35 @@
         </div>
     </div>
 </div>
+
+<div id="changePasswordModal" class="modal">
+    <div class="modal-content" style="max-width: 480px;">
+        <div class="modal-header">
+            <h2>Cambiar Contraseña</h2>
+            <button class="close-button" id="closeChangePasswordModalBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="changePasswordForm">
+                <p>Esto es una simulación. La contraseña se reiniciará al actualizar la página.</p>
+                <div class="form-group">
+                    <label for="current_password">Contraseña Actual</label>
+                    <input type="password" id="current_password" required placeholder="Ingresa tu contraseña actual">
+                </div>
+                <div class="form-group">
+                    <label for="new_password">Nueva Contraseña</label>
+                    <input type="password" id="new_password" required placeholder="Mínimo 6 caracteres">
+                </div>
+                 <div class="form-group">
+                    <label for="confirm_new_password">Confirmar Nueva Contraseña</label>
+                    <input type="password" id="confirm_new_password" required placeholder="Repite la nueva contraseña">
+                </div>
+                <div id="change-password-error" class="error-message"></div>
+                <button type="submit" class="submit-button">Actualizar Contraseña</button>
+            </form>
+        </div>
+    </div>
+</div>
+
 <div id="successAnimation" class="animation-container" style="display: none;">
     <div class="animation-content">
         <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
@@ -152,6 +185,6 @@
     </div>
 </div>
 
-<script src="logica.js?version=6"></script> 
+<script src="logica.js?version=7"></script> 
 </body>
 </html>
