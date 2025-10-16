@@ -1,3 +1,59 @@
+// --- LÓGICA DE LOGIN (AGREGAR AL INICIO) ---
+document.addEventListener('DOMContentLoaded', () => {
+    // --- ELEMENTOS DEL DOM PARA LOGIN Y APP ---
+    const loginContainer = document.getElementById('loginContainer');
+    const appContainer = document.getElementById('appContainer');
+    const loginForm = document.getElementById('loginForm');
+    const errorMessage = document.getElementById('error-message');
+    const logoutBtn = document.getElementById('logoutBtn');
+
+    // --- FUNCIÓN PARA MOSTRAR/OCULTAR SECCIONES ---
+    const showApp = () => {
+        loginContainer.style.display = 'none';
+        appContainer.style.display = 'block';
+        fetchAndRenderLoans(); // Cargar datos cruciales solo después de iniciar sesión
+    };
+
+    const showLogin = () => {
+        loginContainer.style.display = 'flex';
+        appContainer.style.display = 'none';
+    };
+    
+    // --- LÓGICA DE AUTENTICACIÓN ---
+    // Verificar si el usuario ya está autenticado al cargar la página
+    if (sessionStorage.getItem('isAuthenticated') === 'true') {
+        showApp();
+    } else {
+        showLogin();
+    }
+
+    // Event listener para el formulario de login
+    if(loginForm) {
+        loginForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            // Credenciales predeterminadas
+            if (username === 'admin' && password === 'admin123') {
+                sessionStorage.setItem('isAuthenticated', 'true');
+                showApp();
+            } else {
+                errorMessage.textContent = 'Usuario o contraseña incorrectos.';
+                errorMessage.style.display = 'block';
+            }
+        });
+    }
+
+    // Event listener para el botón de cerrar sesión
+    if(logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+            sessionStorage.removeItem('isAuthenticated');
+            window.location.reload();
+        });
+    }
+});
+
 // --- VARIABLES GLOBALES ---
 const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
 const VALOR_UIT = 5150;
@@ -689,3 +745,4 @@ function descargarPDF(doc, fileName) {
 
 // --- Carga Inicial ---
 document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
+
