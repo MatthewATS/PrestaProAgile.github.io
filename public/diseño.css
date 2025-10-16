@@ -295,6 +295,18 @@ input[readonly] {
     color: #667085;
 }
 
+/* === NUEVO ESTILO AÑADIDO === */
+.static-value {
+    padding: 10px 14px;
+    background-color: var(--light-gray);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 16px;
+    color: #667085;
+    cursor: not-allowed;
+    box-sizing: border-box;
+}
+
 .submit-button {
     width: 100%;
     padding: 12px;
