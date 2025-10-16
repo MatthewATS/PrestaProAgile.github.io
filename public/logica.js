@@ -6,12 +6,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('loginForm');
     const errorMessage = document.getElementById('error-message');
     const logoutBtn = document.getElementById('logoutBtn');
+    
+    // --- NUEVOS ELEMENTOS DEL DOM PARA CAMBIO DE CONTRASEÑA ---
+    const changePasswordLink = document.getElementById('changePasswordLink');
+    const changePasswordModal = document.getElementById('changePasswordModal');
+    const closeChangePasswordModalBtn = document.getElementById('closeChangePasswordModalBtn');
+    const changePasswordForm = document.getElementById('changePasswordForm');
+    const changePasswordError = document.getElementById('change-password-error');
+
+    // --- CREDENCIALES (SIMULACIÓN) ---
+    let currentUser = 'admin';
+    let currentPassword = 'admin123';
 
     // --- FUNCIÓN PARA MOSTRAR/OCULTAR SECCIONES ---
     const showApp = () => {
         loginContainer.style.display = 'none';
         appContainer.style.display = 'block';
-        fetchAndRenderLoans(); // Cargar datos cruciales solo después de iniciar sesión
+        fetchAndRenderLoans();
     };
 
     const showLogin = () => {
@@ -20,22 +31,19 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     // --- LÓGICA DE AUTENTICACIÓN ---
-    // Verificar si el usuario ya está autenticado al cargar la página
     if (sessionStorage.getItem('isAuthenticated') === 'true') {
         showApp();
     } else {
         showLogin();
     }
 
-    // Event listener para el formulario de login
     if(loginForm) {
         loginForm.addEventListener('submit', (event) => {
             event.preventDefault();
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
 
-            // Credenciales predeterminadas
-            if (username === 'admin' && password === 'admin123') {
+            if (username === currentUser && password === currentPassword) {
                 sessionStorage.setItem('isAuthenticated', 'true');
                 showApp();
             } else {
@@ -45,19 +53,75 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Event listener para el botón de cerrar sesión
     if(logoutBtn) {
         logoutBtn.addEventListener('click', () => {
             sessionStorage.removeItem('isAuthenticated');
             window.location.reload();
         });
     }
+
+    // --- LÓGICA PARA CAMBIO DE CONTRASEÑA ---
+    if (changePasswordLink) {
+        changePasswordLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            changePasswordError.style.display = 'none';
+            changePasswordForm.reset();
+            openModal(changePasswordModal);
+        });
+    }
+    
+    if (closeChangePasswordModalBtn) {
+        closeChangePasswordModalBtn.addEventListener('click', () => closeModal(changePasswordModal));
+    }
+
+    if (changePasswordForm) {
+        changePasswordForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const currentPasswordInput = document.getElementById('current_password').value;
+            const newPassword = document.getElementById('new_password').value;
+            const confirmNewPassword = document.getElementById('confirm_new_password').value;
+
+            // 1. Validar contraseña actual
+            if (currentPasswordInput !== currentPassword) {
+                changePasswordError.textContent = 'La contraseña actual es incorrecta.';
+                changePasswordError.style.display = 'block';
+                return;
+            }
+
+            // 2. Validar que la nueva contraseña sea segura (mínimo 6 caracteres)
+            if (newPassword.length < 6) {
+                changePasswordError.textContent = 'La nueva contraseña debe tener al menos 6 caracteres.';
+                changePasswordError.style.display = 'block';
+                return;
+            }
+
+            // 3. Validar que las nuevas contraseñas coincidan
+            if (newPassword !== confirmNewPassword) {
+                changePasswordError.textContent = 'Las nuevas contraseñas no coinciden.';
+                changePasswordError.style.display = 'block';
+                return;
+            }
+
+            // 4. Simular el cambio
+            currentPassword = newPassword;
+            changePasswordError.style.display = 'none';
+            
+            // Mostrar animación de éxito
+            document.getElementById('successText').textContent = "¡Contraseña Actualizada!";
+            document.getElementById('successAnimation').style.display = 'flex';
+            setTimeout(() => {
+                document.getElementById('successAnimation').style.display = 'none';
+                closeModal(changePasswordModal);
+            }, 2500);
+        });
+    }
 });
+
 
 // --- VARIABLES GLOBALES ---
 const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
 const VALOR_UIT = 5150;
-const TASA_INTERES_ANUAL = 10; // <-- TASA ANUAL FIJA (10%)
+const TASA_INTERES_ANUAL = 10;
 let loans = [];
 let clients = new Set();
 let currentLoanForDetails = null;
@@ -72,14 +136,12 @@ const detailsModal = document.getElementById('detailsModal');
 const closeDetailsModalBtn = document.getElementById('closeDetailsModalBtn');
 const printScheduleBtn = document.getElementById('printScheduleBtn');
 const shareBtn = document.getElementById('shareBtn');
-// Elementos del DOM para Pagos
 const paymentModal = document.getElementById('paymentModal');
 const closePaymentModalBtn = document.getElementById('closePaymentModalBtn');
 const paymentForm = document.getElementById('paymentForm');
 const paymentModalTitle = document.getElementById('paymentModalTitle');
 const paymentLoanIdInput = document.getElementById('paymentLoanId');
 const paymentAmountInput = document.getElementById('payment_amount');
-// Elementos del DOM para Confirmación de Eliminación
 const deleteConfirmationModal = document.getElementById('deleteConfirmationModal');
 const closeDeleteModalBtn = document.getElementById('closeDeleteModalBtn');
 const deleteConfirmationForm = document.getElementById('deleteConfirmationForm');
@@ -221,19 +283,21 @@ mesesSoloInteresInput.addEventListener('input', updateHibridoInfo);
 const openModal = (modal) => modal.style.display = 'flex';
 const closeModal = (modal) => {
     modal.style.display = 'none';
-    if (modal.id === 'loanModal') {
-        loanForm.reset();
+    // Se añade el nuevo modal a la lógica de cierre
+    const modalsToReset = ['loanModal', 'detailsModal', 'paymentModal', 'deleteConfirmationModal', 'changePasswordModal'];
+    if (modalsToReset.includes(modal.id)) {
+        const form = modal.querySelector('form');
+        if (form) form.reset();
+    }
+     if (modal.id === 'loanModal') {
         dniStatus.textContent = '';
         hibridoOptions.style.display = 'none';
         document.getElementById('hibrido-info').textContent = '';
         updateDeclaracionVisibility();
     }
     if (modal.id === 'detailsModal') currentLoanForDetails = null;
-    if (modal.id === 'paymentModal') paymentForm.reset();
-    if (modal.id === 'deleteConfirmationModal') {
-        deleteConfirmationForm.reset();
-        deleteErrorMessage.style.display = 'none';
-    }
+    if (modal.id === 'deleteConfirmationModal') deleteErrorMessage.style.display = 'none';
+    if (modal.id === 'changePasswordModal') document.getElementById('change-password-error').style.display = 'none';
 };
 
 addLoanBtn.addEventListener('click', () => openModal(loanModal));
@@ -245,10 +309,12 @@ printScheduleBtn.addEventListener('click', printSchedule);
 shareBtn.addEventListener('click', compartirPDF);
 
 window.addEventListener('click', (event) => {
-    if (event.target === loanModal) closeModal(loanModal);
-    if (event.target === detailsModal) closeModal(detailsModal);
-    if (event.target === paymentModal) closeModal(paymentModal);
-    if (event.target === deleteConfirmationModal) closeModal(deleteConfirmationModal);
+    const modals = document.querySelectorAll('.modal');
+    modals.forEach(modal => {
+        if (event.target === modal) {
+            closeModal(modal);
+        }
+    });
 });
 
 function toggleFormLock(locked) {
@@ -311,7 +377,7 @@ loanForm.addEventListener('submit', async function(event) {
     const newLoanData = {
         client: { dni: dniInput.value, nombres: nombresInput.value, apellidos: apellidosInput.value, is_pep: isPepCheckbox.checked },
         monto: parseFloat(montoInput.value),
-        interes: TASA_INTERES_ANUAL / 12, // Se envía la tasa MENSUAL al backend
+        interes: TASA_INTERES_ANUAL / 12,
         fecha: document.getElementById('fecha').value,
         plazo: parseInt(document.getElementById('plazo').value),
         status: 'Activo',
@@ -346,7 +412,6 @@ paymentForm.addEventListener('submit', async function(event) {
         }
         await fetchAndRenderLoans();
         showSuccessAnimation('¡Pago Registrado!');
-        closeModal(paymentModal);
     } catch (error) { 
         alert(`No se pudo registrar el pago: ${error.message}`); 
     }
@@ -372,7 +437,8 @@ function showSuccessAnimation(message) {
     document.getElementById('successAnimation').style.display = 'flex';
     setTimeout(() => {
         document.getElementById('successAnimation').style.display = 'none';
-        closeModal(loanModal);
+        if(message.includes("Préstamo")) closeModal(loanModal);
+        if(message.includes("Pago")) closeModal(paymentModal);
     }, 2500);
 }
 
@@ -444,8 +510,6 @@ function populateDetailsModal(loan) {
         day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC'
     });
     
-    // ===== ¡CAMBIO AQUÍ! =====
-    // Se usa la constante TASA_INTERES_ANUAL para evitar errores de cálculo flotante.
     const interesAnualMostrado = TASA_INTERES_ANUAL.toFixed(2);
 
     document.getElementById('scheduleSummary').innerHTML = `
@@ -680,8 +744,6 @@ function compartirPDF() {
         const doc = new jsPDF();
         let finalY = 0;
         
-        // ===== ¡CAMBIO AQUÍ! =====
-        // Se usa la constante TASA_INTERES_ANUAL también para el PDF.
         const interesAnualMostrado = TASA_INTERES_ANUAL.toFixed(2);
 
         doc.setFontSize(22); doc.setTextColor(0, 93, 255); doc.text("PRESTAPRO", 105, 20, { align: 'center' });
