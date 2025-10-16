@@ -743,6 +743,3 @@ function descargarPDF(doc, fileName) {
     console.log('PDF descargado:', fileName);
 }
 
-// --- Carga Inicial ---
-document.addEventListener('DOMContentLoaded', fetchAndRenderLoans);
-
