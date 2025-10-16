@@ -444,8 +444,9 @@ function populateDetailsModal(loan) {
         day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC'
     });
     
-    // El valor 'loan.interes' es mensual, lo multiplicamos por 12 para mostrar el anual
-    const interesAnualMostrado = (parseFloat(loan.interes) * 12).toFixed(2);
+    // ===== ¡CAMBIO AQUÍ! =====
+    // Se usa la constante TASA_INTERES_ANUAL para evitar errores de cálculo flotante.
+    const interesAnualMostrado = TASA_INTERES_ANUAL.toFixed(2);
 
     document.getElementById('scheduleSummary').innerHTML = `
         <p><strong>Cliente:</strong> ${loan.nombres} ${loan.apellidos} ${loan.is_pep ? '<strong style="color: #D92D20;">(PEP)</strong>' : ''}</p>
@@ -679,7 +680,9 @@ function compartirPDF() {
         const doc = new jsPDF();
         let finalY = 0;
         
-        const interesAnualMostrado = (parseFloat(loan.interes) * 12).toFixed(2);
+        // ===== ¡CAMBIO AQUÍ! =====
+        // Se usa la constante TASA_INTERES_ANUAL también para el PDF.
+        const interesAnualMostrado = TASA_INTERES_ANUAL.toFixed(2);
 
         doc.setFontSize(22); doc.setTextColor(0, 93, 255); doc.text("PRESTAPRO", 105, 20, { align: 'center' });
         doc.setFontSize(16); doc.setTextColor(52, 64, 84); doc.text("Detalles del Préstamo", 105, 30, { align: 'center' });
