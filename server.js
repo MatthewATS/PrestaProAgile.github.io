@@ -6,8 +6,7 @@ const axios = require('axios');
 const crypto = require('crypto'); // Necesario para la firma SHA-256
 
 const app = express();
-// Se recomienda usar el puerto 3000 para desarrollo
-const PORT = process.env.PORT || 3000; 
+const PORT = process.env.PORT || 3000;
 
 // === CONFIGURACIÓN DE LA APLICACIÓN Y MIDDLEWARE ===
 app.use(cors());
@@ -23,12 +22,11 @@ const pool = mysql.createPool(process.env.DATABASE_URL);
 const TASA_INTERES_ANUAL = 10;
 const TASA_MORA_MENSUAL = 1; 
 
-// ⚠️ CLAVES INTEGRADAS (Corregidas con las nuevas claves)
+// ⚠️ CLAVES INTEGRADAS (Deberían ser variables de entorno seguras)
 const FLOW_API_KEY = process.env.FLOW_API_KEY || '1FF50655-0135-4F50-9A60-774ABDBL14C7'; 
-const FLOW_SECRET = process.env.FLOW_SECRET || '1FF50655-0135-4F50-9A60-774ABDBL14C7'; // ¡CORREGIDO!
-// Usamos localhost para desarrollo si no está definido en el entorno
-const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000'; 
+const FLOW_SECRET = process.env.FLOW_SECRET || '1b7e761342e5525b8a294499bde19d29cfa76090'; 
 const FLOW_ENDPOINT = 'https://flow.cl/api/payment/start'; 
+const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app'; 
 
 // ==========================================================
 // 1. UTILIDADES DE CÁLCULO Y HASHING
@@ -73,8 +71,6 @@ function calculateSchedule(loan) {
     if (loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
         const interestOnlyPayment = principal * monthlyInterestRate;
         const remainingTerm = loan.plazo - loan.meses_solo_interes;
-        
-        // La cuota mensual para la parte amortizada debe calcularse con el término restante
         monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -remainingTerm));
         
         for (let i = 1; i <= loan.plazo; i++) {
@@ -135,11 +131,7 @@ function calculateMora(loan, totalPaid) {
 function verifyFlowSignature(data, secret) {
     // Implementación de verificación de firma del Webhook (Usando la misma lógica de hashing)
     const receivedSignature = data.s;
-    // CRÍTICO: Eliminar el campo 's' de los datos antes de computar el hash
-    const dataToHash = { ...data };
-    delete dataToHash.s;
-    
-    const computedSignature = createFlowSignature(dataToHash, secret);
+    const computedSignature = createFlowSignature(data, secret);
     
     console.log(`[FLOW WEBHOOK] Received Sig: ${receivedSignature}, Computed Sig: ${computedSignature}`);
 
@@ -159,20 +151,6 @@ async function registerPaymentInternal(loanId, paymentData) {
         
         await connection.query('INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method) VALUES (?, ?, ?, ?, ?)', 
             [loanId, payment_amount, payment_date, mora_amount, payment_method]);
-        
-        // ⚠️ Lógica de actualización de estado del préstamo (similar a POST /payments)
-        const [loanRows] = await connection.query('SELECT * FROM loans WHERE id = ?', [loanId]);
-        if (loanRows.length === 0) throw new Error('Préstamo no encontrado en registerPaymentInternal');
-        const loan = loanRows[0];
-        const { totalDue } = calculateSchedule(loan);
-        
-        const [paymentsRows] = await connection.query('SELECT SUM(payment_amount) as totalPaid FROM payments WHERE loan_id = ?', [loanId]);
-        const newTotalPaid = parseFloat(paymentsRows[0].totalPaid || 0);
-        
-        if (newTotalPaid >= totalDue) {
-            await connection.query("UPDATE loans SET status = 'Pagado' WHERE id = ?", [loanId]);
-        }
-        // Fin de la lógica de actualización de estado
         
         await connection.commit();
         connection.release();
@@ -248,7 +226,7 @@ app.post('/api/loans', async (req, res) => {
 
         const { client, monto, fecha, plazo, status, declaracion_jurada = false, tipo_calculo = 'Amortizado', meses_solo_interes = 0 } = req.body;
         const { dni, nombres, apellidos, is_pep = false } = client;
-        const interes = TASA_INTERES_ANUAL / 12; // Se convierte a tasa mensual
+        const interes = TASA_INTERES_ANUAL / 12;
 
         if (monto < 100 || monto > 20000) {
             return res.status(400).json({ error: 'El monto del préstamo debe estar entre S/ 100 y S/ 20,000.' });
@@ -311,27 +289,17 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
         }
         const loan = loanRows[0];
 
-        // Obtener pagos previos para calcular totalDue y totalPaid correctamente
-        const [paymentsRowsTotal] = await connection.query('SELECT SUM(payment_amount) as totalPaid FROM payments WHERE loan_id = ?', [loanId]);
-        const totalPaid = parseFloat(paymentsRowsTotal[0].totalPaid || 0);
+        const [paymentsRows] = await connection.query('SELECT SUM(payment_amount) as totalPaid FROM payments WHERE loan_id = ?', [loanId]);
+        const totalPaid = parseFloat(paymentsRows[0].totalPaid || 0);
         const { totalDue } = calculateSchedule(loan);
 
         const remainingBalanceCI = totalDue - totalPaid;
         const roundedRemainingBalanceCI = parseFloat(remainingBalanceCI.toFixed(2));
 
-        // Validación CRÍTICA: El pago de Capital/Interés no debe exceder el saldo restante.
         if (CiPayment > roundedRemainingBalanceCI) {
             await connection.rollback();
             return res.status(400).json({ error: `El pago (Capital/Interés) de S/ ${CiPayment.toFixed(2)} excede el saldo pendiente de S/ ${roundedRemainingBalanceCI.toFixed(2)}.` });
         }
-        
-        // **Nueva Validación de Mora:** Si hay mora pendiente, el monto de mora a pagar debe ser al menos el calculado por el sistema (si aplica).
-        const calculatedMora = calculateMora(loan, totalPaid);
-        if (calculatedMora > 0 && moraToRegister < calculatedMora) {
-            await connection.rollback();
-            return res.status(400).json({ error: `El préstamo tiene S/ ${calculatedMora.toFixed(2)} de mora pendiente. El pago de mora debe ser al menos ese valor.` });
-        }
-
 
         // Registrar el pago en la base de datos
         await connection.query('INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method) VALUES (?, ?, ?, ?, ?)',
@@ -391,37 +359,21 @@ app.get('/api/dni/:dni', async (req, res) => {
     const token = process.env.DNI_API_TOKEN;
 
     if (!token) {
-        // En un entorno de desarrollo, simular una respuesta si el token no está
-        if (app.get('env') === 'development') {
-            console.warn("⚠️ Advertencia: DNI_API_TOKEN no configurado. Usando datos simulados.");
-            // Simulación de datos exitosa para permitir el flujo de registro
-            return res.status(200).json({
-                dni: dni,
-                nombres: "Cliente",
-                apellidoPaterno: "Simulado",
-                apellidoMaterno: "Prueba",
-                full_name: "Cliente Simulado Prueba"
-            });
-        }
         return res.status(500).json({ error: 'El token de la API de DNI no está configurado en el servidor.' });
     }
 
     try {
-        // CORRECCIÓN CRÍTICA: Se usó 'fetch' en un contexto de Node.js que no soporta fetch nativo en versiones antiguas. Usaremos 'axios' que ya está importado.
-        const apiResponse = await axios.get(`https://dniruc.apisperu.com/api/v1/dni/${dni}`, {
+        const apiResponse = await fetch(`https://dniruc.apisperu.com/api/v1/dni/${dni}`, {
+            method: 'GET',
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
             },
         });
-        const data = apiResponse.data;
+        const data = await apiResponse.json();
         res.status(apiResponse.status).json(data);
     } catch (error) {
         console.error("Error en el proxy de DNI:", error);
-        // Manejo específico si es un error de la API externa
-        if (error.response) {
-             return res.status(error.response.status).json(error.response.data);
-        }
         res.status(500).json({ error: 'Error interno al consultar la API de DNI.' });
     }
 });
@@ -435,15 +387,12 @@ app.post('/api/flow/create-order', async (req, res) => {
         return res.status(400).json({ error: 'Faltan campos requeridos: amount, loanId y clientDni.' });
     }
     
-    // Convertir el monto total a un número y luego a string con 2 decimales, como lo espera Flow
-    const finalAmount = parseFloat(amount).toFixed(2);
-    
     const commerceOrder = `PRESTAPRO-${loanId}-${Date.now()}`;
     const subject = `Pago Cuota Préstamo ID #${loanId}`;
     
     const optionalData = JSON.stringify({ 
         loanId: loanId, 
-        amount_ci: amount_ci,
+        amount_ci: amount_ci, 
         amount_mora: amount_mora,
         payment_date: payment_date 
     });
@@ -453,7 +402,7 @@ app.post('/api/flow/create-order', async (req, res) => {
         apiKey: FLOW_API_KEY,
         commerceOrder: commerceOrder,
         subject: subject,
-        amount: finalAmount, // CRÍTICO: Debe ser un string con 2 decimales
+        amount: amount, 
         email: `${clientDni}@prestapro.com`,
         urlConfirmation: `${YOUR_BACKEND_URL}/api/flow/webhook`, 
         urlReturn: `${YOUR_BACKEND_URL}/payment-status.html`, 
@@ -499,26 +448,18 @@ app.post('/api/flow/create-order', async (req, res) => {
 app.post('/api/flow/webhook', async (req, res) => {
     const flowData = req.body;
 
-    // CRÍTICO: Usar flowData, no dataToHash, para la verificación
     if (!verifyFlowSignature(flowData, FLOW_SECRET)) {
         return res.status(401).send('Firma de Webhook no válida.');
     }
 
     if (flowData.status === 1) { 
         try {
-            // CRÍTICO: flowData.optional viene como string JSON, debe parsearse
             const optional = JSON.parse(flowData.optional);
-            
-            // Verificación del monto para evitar un ataque de "Monto inferior"
-            if(parseFloat(flowData.amount) !== (parseFloat(optional.amount_ci) + parseFloat(optional.amount_mora))) {
-                 console.warn("⚠️ Monto de Webhook no coincide con el registro original. Pago Rechazado.");
-                 return res.status(400).send('Monto de pago no válido.');
-            }
 
             const paymentData = {
                 payment_amount: parseFloat(flowData.amount), 
                 mora_amount: parseFloat(optional.amount_mora),
-                payment_date: optional.payment_date, // Usamos la fecha original enviada
+                payment_date: new Date().toISOString().split('T')[0],
                 payment_method: 'Transferencia'
             };
 
@@ -534,7 +475,6 @@ app.post('/api/flow/webhook', async (req, res) => {
         }
 
     } else {
-        // En caso de pago fallido o pendiente, solo responder OK para no reintentar
         res.status(200).send('Estado de pago no exitoso. OK');
     }
 });
@@ -569,7 +509,7 @@ const startServer = async () => {
   } catch (err) {
     console.error('❌ No se pudo conectar a la base de datos. Verifica la variable de entorno DATABASE_URL.');
     console.error(err.message);
-    // process.exit(1); // Descomentar en entorno de producción
+    process.exit(1);
   }
 };
 
