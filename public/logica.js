@@ -619,11 +619,11 @@ function openPaymentModal(loan) {
         paymentMoraInfo.style.display = 'flex';
         paymentMoraInfo.className = 'alert alert-warning';
         paymentMoraInfo.innerHTML = `
-            <span>⚠️</span>
-            <div>
-                <p style="margin: 0;"><strong>Préstamo con Atraso.</strong></p>
-                <p style="margin: 5px 0 0 0;">Mora pendiente: S/ ${moraInfo.totalMora.toFixed(2)}. (Se carga automáticamente).</p>
-            </div>
+             <span>⚠️</span>
+             <div>
+                 <p style="margin: 0;"><strong>Préstamo con Atraso.</strong></p>
+                 <p style="margin: 5px 0 0 0;">Mora pendiente: S/ ${moraInfo.totalMora.toFixed(2)}. (Se carga automáticamente).</p>
+             </div>
         `;
     } else {
         paymentMoraInfo.style.display = 'none';
@@ -672,6 +672,7 @@ async function handlePaymentSubmit(e) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    // CRÍTICO: Asegurar que los montos sean strings con dos decimales para la API
                     amount: totalToCollect.toFixed(2), 
                     loanId: loanId,
                     clientDni: loan.dni,
@@ -686,6 +687,7 @@ async function handlePaymentSubmit(e) {
                 let errorDetail = 'Error desconocido del servidor.';
                 try {
                     const errorData = await response.json();
+                    // Este es el objeto que contiene el error 101 de Flow
                     errorDetail = errorData.error || errorData.message || JSON.stringify(errorData);
                 } catch (e) {
                     errorDetail = `Error de formato (Estado: ${response.status} ${response.statusText})`;
@@ -966,8 +968,6 @@ function calculateSchedule(loan) {
    const schedule = [];
    let payments = {};
    const startDate = new Date(loan.fecha);
-
-   // ... (Resto de la lógica de calculateSchedule)
 
    if (loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
         const interestOnlyPayment = principal * monthlyInterestRate;
