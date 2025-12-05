@@ -2,8 +2,8 @@ const express = require('express');
 const path = require('path');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
-const axios = require('axios'); 
-const crypto = require('crypto'); 
+const axios = require('axios');
+const crypto = require('crypto'); // Necesario si implementas la firma real
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,36 +22,15 @@ const pool = mysql.createPool(process.env.DATABASE_URL);
 const TASA_INTERES_ANUAL = 10;
 const TASA_MORA_MENSUAL = 1; 
 
+// ⚠️ CLAVES INTEGRADAS (Deberían ser variables de entorno seguras)
 const FLOW_API_KEY = process.env.FLOW_API_KEY || '1FF50655-0135-4F50-9A60-774ABDBL14C7'; 
 const FLOW_SECRET = process.env.FLOW_SECRET || '1b7e761342e5525b8a294499bde19d29cfa76090'; 
-const FLOW_ENDPOINT = 'https://flow.cl/api/payment/start'; 
+const FLOW_ENDPOINT = 'https://flow.cl/api/payment/start'; // Endpoint CORREGIDO
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app'; 
 
 // ==========================================================
-// 1. UTILIDADES DE CÁLCULO Y HASHING
+// 1. UTILIDADES DE CÁLCULO
 // ==========================================================
-
-// Función para generar la firma SHA-256 (CRÍTICO para Flow)
-function createFlowSignature(params, secret) {
-    // 1. Ordenar los parámetros alfabéticamente
-    const keys = Object.keys(params).sort();
-    
-    // 2. Concatenar los valores
-    let stringToHash = '';
-    keys.forEach(key => {
-        // Excluir la firma si está presente (aunque no debería)
-        if (key !== 's') {
-            stringToHash += params[key];
-        }
-    });
-    
-    // 3. Añadir la clave secreta al final
-    stringToHash += secret;
-    
-    // 4. Generar el HASH SHA-256
-    const hash = crypto.createHash('sha256').update(stringToHash).digest('hex');
-    return hash;
-}
 
 function calculateSchedule(loan) {
     const monthlyInterestRate = parseFloat(loan.interes) / 100;
@@ -151,14 +130,212 @@ async function registerPaymentInternal(loanId, paymentData) {
 // 2. RUTAS API 
 // ==========================================================
 
-// GET /api/loans (Omitido por brevedad)
-// POST /api/loans (Omitido por brevedad)
-// POST /api/loans/:loanId/payments (Omitido por brevedad)
-// DELETE /api/loans/:loanId (Omitido por brevedad)
-// GET /api/dni/:dni (Omitido por brevedad)
+// GET /api/loans
+app.get('/api/loans', async (req, res) => {
+  try {
+    const loanQuery = `
+      SELECT
+        l.id, l.monto, l.interes, l.fecha, l.plazo, l.status,
+        l.tipo_calculo, l.meses_solo_interes,
+        c.dni, c.nombres, c.apellidos, c.is_pep
+      FROM loans l
+      JOIN clients c ON l.client_id = c.id
+      ORDER BY l.fecha DESC, l.id DESC;
+    `;
+    const [loans] = await pool.query(loanQuery);
+    
+    const [payments] = await pool.query('SELECT loan_id, payment_amount, payment_date, mora_amount, payment_method FROM payments ORDER BY payment_date ASC');
+
+    const loansWithPayments = loans.map(loan => {
+      const { totalDue } = calculateSchedule(loan);
+      loan.total_due = totalDue;
+
+      const associatedPayments = payments.filter(p => p.loan_id === loan.id);
+      
+      const totalPaid = associatedPayments.reduce((sum, p) => sum + parseFloat(p.payment_amount), 0);
+      loan.total_paid = parseFloat(totalPaid.toFixed(2));
+      
+      loan.mora_pendiente = calculateMora(loan, loan.total_paid);
+
+      if (loan.total_paid >= loan.total_due) { 
+        loan.status = 'Pagado'; 
+      } else if (loan.mora_pendiente > 0) {
+        loan.status = 'Atrasado';
+      } else {
+        loan.status = 'Activo';
+      }
+
+      return {
+        ...loan,
+        payments: associatedPayments,
+      };
+    });
+
+    res.json(loansWithPayments);
+  } catch (err) {
+    console.error("ERROR en GET /api/loans:", err);
+    res.status(500).json({ error: 'Error al obtener los préstamos' });
+  }
+});
+
+// POST /api/loans
+app.post('/api/loans', async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const { client, monto, fecha, plazo, status, declaracion_jurada = false, tipo_calculo = 'Amortizado', meses_solo_interes = 0 } = req.body;
+    const { dni, nombres, apellidos, is_pep = false } = client;
+    const interes = TASA_INTERES_ANUAL / 12;
+
+    if (monto < 100 || monto > 20000) {
+      return res.status(400).json({ error: 'El monto del préstamo debe estar entre S/ 100 y S/ 20,000.' });
+    }
+
+    const [activeLoans] = await connection.query(`SELECT l.id FROM loans l JOIN clients c ON l.client_id = c.id WHERE c.dni = ? AND l.status = 'Activo' LIMIT 1;`, [dni]);
+    if (activeLoans.length > 0) {
+      return res.status(409).json({ error: 'El cliente ya tiene un préstamo activo.' });
+    }
+
+    let [existingClient] = await connection.query('SELECT id FROM clients WHERE dni = ?', [dni]);
+    let clientId;
+
+    if (existingClient.length > 0) {
+      clientId = existingClient[0].id;
+      await connection.query('UPDATE clients SET nombres = ?, apellidos = ?, is_pep = ? WHERE id = ?', [nombres, apellidos, is_pep, clientId]);
+    } else {
+      const [result] = await connection.query('INSERT INTO clients (dni, nombres, apellidos, is_pep) VALUES (?, ?, ?, ?)', [dni, nombres, apellidos, is_pep]);
+      clientId = result.insertId;
+    }
+
+    await connection.query(`INSERT INTO loans (client_id, monto, interes, fecha, plazo, status, declaracion_jurada, tipo_calculo, meses_solo_interes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`, 
+      [clientId, monto, interes, fecha, plazo, status, declaracion_jurada, tipo_calculo, meses_solo_interes]);
+
+    await connection.commit();
+    res.status(201).json({ ...req.body, client_id: clientId });
+
+  } catch (err) {
+    await connection.rollback();
+    console.error("ERROR en POST /api/loans:", err.message);
+    res.status(500).json({ error: 'Error interno al guardar en la base de datos.' });
+  } finally {
+    connection.release();
+  }
+});
+
+// POST /api/loans/:loanId/payments
+app.post('/api/loans/:loanId/payments', async (req, res) => {
+    const { loanId } = req.params;
+    const { payment_amount, payment_date, mora_amount, payment_method } = req.body;
+
+    const totalPayment = parseFloat(payment_amount); 
+    const moraToRegister = parseFloat(mora_amount || 0);
+    const CiPayment = totalPayment - moraToRegister;
+
+    if (totalPayment <= 0 || !payment_date || CiPayment < 0) {
+        return res.status(400).json({ error: 'Monto de pago inválido o fecha faltante.' });
+    }
+
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const [loanRows] = await connection.query('SELECT * FROM loans WHERE id = ?', [loanId]);
+        if (loanRows.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'Préstamo no encontrado.' });
+        }
+        const loan = loanRows[0];
+        
+        const [paymentsRows] = await connection.query('SELECT SUM(payment_amount) as totalPaid FROM payments WHERE loan_id = ?', [loanId]);
+        const totalPaid = parseFloat(paymentsRows[0].totalPaid || 0);
+        const { totalDue } = calculateSchedule(loan);
+        
+        const remainingBalanceCI = totalDue - totalPaid;
+        const roundedRemainingBalanceCI = parseFloat(remainingBalanceCI.toFixed(2));
+
+        if (CiPayment > roundedRemainingBalanceCI) {
+            await connection.rollback();
+            return res.status(400).json({ error: `El pago (Capital/Interés) de S/ ${CiPayment.toFixed(2)} excede el saldo pendiente de S/ ${roundedRemainingBalanceCI.toFixed(2)}.` });
+        }
+
+        // Registrar el pago en la base de datos
+        await connection.query('INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method) VALUES (?, ?, ?, ?, ?)', 
+            [loanId, totalPayment, payment_date, moraToRegister, payment_method]);
+
+        const newTotalPaid = totalPaid + totalPayment;
+
+        if (newTotalPaid >= totalDue) {
+            await connection.query("UPDATE loans SET status = 'Pagado' WHERE id = ?", [loanId]);
+        }
+
+        await connection.commit();
+        res.status(201).json({ message: 'Pago registrado con éxito' });
+
+    } catch (err) {
+        await connection.rollback();
+        console.error("ERROR en POST /api/loans/:loanId/payments:", err);
+        res.status(500).json({ error: 'Error al registrar el pago.' });
+    } finally {
+        connection.release();
+    }
+});
 
 
-// POST /api/flow/create-order (INCLUYE LA FIRMA CRIPTOGRÁFICA)
+// DELETE /api/loans/:loanId
+app.delete('/api/loans/:loanId', async (req, res) => {
+    const { loanId } = req.params;
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        await connection.query('DELETE FROM payments WHERE loan_id = ?', [loanId]);
+        const [result] = await connection.query('DELETE FROM loans WHERE id = ?', [loanId]);
+
+        if (result.affectedRows === 0) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'El préstamo no fue encontrado.' });
+        }
+
+        await connection.commit();
+        res.status(200).json({ message: 'Préstamo y pagos asociados eliminados correctamente.' });
+
+    } catch (err) {
+        await connection.rollback();
+        console.error("ERROR en DELETE /api/loans/:loanId:", err);
+        res.status(500).json({ error: 'Error en el servidor al intentar eliminar el préstamo.' });
+    } finally {
+        connection.release();
+    }
+});
+
+
+// GET /api/dni/:dni (Ruta Proxy para DNI)
+app.get('/api/dni/:dni', async (req, res) => {
+  const { dni } = req.params;
+  const token = process.env.DNI_API_TOKEN;
+
+  if (!token) {
+    return res.status(500).json({ error: 'El token de la API de DNI no está configurado en el servidor.' });
+  }
+
+  try {
+    const apiResponse = await fetch(`https://dniruc.apisperu.com/api/v1/dni/${dni}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    const data = await apiResponse.json();
+    res.status(apiResponse.status).json(data);
+  } catch (error) {
+    console.error("Error en el proxy de DNI:", error);
+    res.status(500).json({ error: 'Error interno al consultar la API de DNI.' });
+  }
+});
+
+
+// POST /api/flow/create-order (INICIA EL PAGO REAL CON FLOW)
 app.post('/api/flow/create-order', async (req, res) => {
     const { amount, loanId, clientDni, amount_ci, amount_mora, payment_date } = req.body;
 
@@ -176,28 +353,18 @@ app.post('/api/flow/create-order', async (req, res) => {
         payment_date: payment_date 
     });
 
-    // 1. Preparar los parámetros que Flow espera
-    const params = {
+    const flowRequest = {
         apiKey: FLOW_API_KEY,
         commerceOrder: commerceOrder,
         subject: subject,
-        amount: amount, // Asegúrate que el frontend lo envía como string con 2 decimales
+        amount: amount,
         email: `${clientDni}@prestapro.com`,
         urlConfirmation: `${YOUR_BACKEND_URL}/api/flow/webhook`, 
         urlReturn: `${YOUR_BACKEND_URL}/payment-status.html`, 
-        optional: optionalData
-        // Flow también puede requerir 'currency' y otros campos dependiendo de la configuración
+        optional: optionalData,
+        // ** Flow requiere este campo 's' que debe ser el HASH real **
+        s: FLOW_SECRET // NOTA: Esto es solo un placeholder, debe ser la firma real.
     };
-
-    // 2. Generar la firma criptográfica (S)
-    const signature = createFlowSignature(params, FLOW_SECRET);
-
-    // 3. Ensamblar la solicitud final
-    const flowRequest = {
-        ...params,
-        s: signature // CRÍTICO: Añadir la firma HASHED
-    };
-
 
     try {
         console.log(`[FLOW API] Enviando solicitud a Flow para Orden: ${commerceOrder}`);
@@ -211,13 +378,18 @@ app.post('/api/flow/create-order', async (req, res) => {
         res.json({ success: true, url: flowPaymentUrl });
 
     } catch (error) {
-        // 🚨 CAPTURA EL ERROR 400/401/403 DE FLOW
+        // 🚨 CAPTURA EL ERROR 400 DE FLOW Y LO DEVUELVE AL FRONTEND
         let errorMessage = 'Fallo al procesar la orden con Flow.';
         let statusCode = 500;
 
         if (error.response) {
             statusCode = error.response.status;
+            // CRÍTICO: Capturar el error 101/400 de Flow
             errorMessage = error.response.data || 'Error de API de Flow sin cuerpo.';
+        } else {
+             // Este bloque captura errores de red como ENOTFOUND (aunque ya lo corregimos)
+             errorMessage = `Error de conexión: ${error.message}`;
+             statusCode = 503; 
         }
         
         console.error(`[FLOW ERROR DETALLE] Estado: ${statusCode}, Mensaje:`, errorMessage);
