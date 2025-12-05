@@ -2,15 +2,15 @@ const express = require('express');
 const path = require('path');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
-const axios = require('axios');
-const crypto = require('crypto');
+const axios = require('axios'); 
+const crypto = require('crypto'); // Necesario para la firma SHA-256
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // === CONFIGURACIÓN DE LA APLICACIÓN Y MIDDLEWARE ===
 app.use(cors());
-app.use(express.json());
+app.use(express.json()); // CRÍTICO: Para leer JSON en el body
 app.use((req, res, next) => {
     console.log(`[REQUEST] ${req.method} ${req.originalUrl}`);
     next();
@@ -20,18 +20,46 @@ const pool = mysql.createPool(process.env.DATABASE_URL);
 
 // --- CONSTANTES DE NEGOCIO Y API DE FLOW ---
 const TASA_INTERES_ANUAL = 10;
-const TASA_MORA_MENSUAL = 1;
+const TASA_MORA_MENSUAL = 1; 
 
-const FLOW_API_KEY = process.env.FLOW_API_KEY || '1FF50655-0135-4F50-9A60-774ABDBL14C7';
-const FLOW_SECRET = process.env.FLOW_SECRET || '1b7e761342e5525b8a294499bde19d29cfa76090';
-const FLOW_ENDPOINT = 'https://api.flow.cl/payment/start';
-const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app';
+// ⚠️ CLAVES INTEGRADAS (Deberían ser variables de entorno seguras)
+const FLOW_API_KEY = process.env.FLOW_API_KEY || '1FF50655-0135-4F50-9A60-774ABDBL14C7'; 
+const FLOW_SECRET = process.env.FLOW_SECRET || '1b7e761342e5525b8a294499bde19d29cfa76090'; 
+const FLOW_ENDPOINT = 'https://flow.cl/api/payment/start'; 
+const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app'; 
 
 // ==========================================================
-// 1. UTILIDADES DE CÁLCULO (Se mantienen igual)
+// 1. UTILIDADES DE CÁLCULO Y HASHING
 // ==========================================================
+
+// CRÍTICO: Función para generar la firma SHA-256
+function createFlowSignature(params, secret) {
+    // 1. Obtener las claves y ordenarlas alfabéticamente
+    const keys = Object.keys(params).sort();
+    
+    // 2. Concatenar los valores (Flow requiere valores concatenados, NO JSON)
+    let stringToHash = '';
+    keys.forEach(key => {
+        // Asegurarse de que el valor no sea null/undefined antes de concatenar
+        let value = params[key];
+        if (value !== null && value !== undefined) {
+             // Si es un objeto (como 'optional'), Flow espera el JSON String (como lo enviamos)
+             if (typeof value === 'object') {
+                 value = JSON.stringify(value);
+             }
+             stringToHash += value;
+        }
+    });
+    
+    // 3. Añadir la clave secreta al final
+    stringToHash += secret;
+    
+    // 4. Generar el HASH SHA-256
+    const hash = crypto.createHash('sha256').update(stringToHash).digest('hex');
+    return hash;
+}
+
 function calculateSchedule(loan) {
-    // ... Código de calculateSchedule ...
     const monthlyInterestRate = parseFloat(loan.interes) / 100;
     const principal = parseFloat(loan.monto);
     const schedule = [];
@@ -39,12 +67,12 @@ function calculateSchedule(loan) {
 
     let monthlyPayment;
     let totalDue;
-
+    
     if (loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
         const interestOnlyPayment = principal * monthlyInterestRate;
         const remainingTerm = loan.plazo - loan.meses_solo_interes;
         monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -remainingTerm));
-
+        
         for (let i = 1; i <= loan.plazo; i++) {
             const paymentDate = new Date(startDate);
             paymentDate.setUTCMonth(paymentDate.getUTCMonth() + i);
@@ -62,7 +90,7 @@ function calculateSchedule(loan) {
         }
         totalDue = monthlyPayment * loan.plazo;
     }
-
+    
     return { schedule, totalDue: parseFloat(totalDue.toFixed(2)) };
 }
 
@@ -92,7 +120,7 @@ function calculateMora(loan, totalPaid) {
                 totalMora = outstandingBalanceForMora * (TASA_MORA_MENSUAL / 100) * monthsToCharge;
                 totalAmountOverdue = cumulativeExpected - totalPaid;
                 latestDueDate = dueDate;
-                break;
+                break; 
             }
         }
     }
@@ -101,8 +129,18 @@ function calculateMora(loan, totalPaid) {
 }
 
 function verifyFlowSignature(data, secret) {
-    console.log("⚠️ Advertencia: La verificación de firma de Flow está deshabilitada/simulada. ¡Implementar en producción!");
-    return true;
+    // Implementación de verificación de firma del Webhook (Usando la misma lógica de hashing)
+    const receivedSignature = data.s;
+    const computedSignature = createFlowSignature(data, secret);
+    
+    console.log(`[FLOW WEBHOOK] Received Sig: ${receivedSignature}, Computed Sig: ${computedSignature}`);
+
+    if (receivedSignature === computedSignature) {
+        return true;
+    }
+    
+    console.log("⚠️ Advertencia: La verificación de firma de Flow falló. ¡POSIBLE ATAQUE!");
+    return false;
 }
 
 async function registerPaymentInternal(loanId, paymentData) {
@@ -110,10 +148,10 @@ async function registerPaymentInternal(loanId, paymentData) {
     try {
         await connection.beginTransaction();
         const { payment_amount, payment_date, mora_amount, payment_method } = paymentData;
-
-        await connection.query('INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method) VALUES (?, ?, ?, ?, ?)',
+        
+        await connection.query('INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method) VALUES (?, ?, ?, ?, ?)', 
             [loanId, payment_amount, payment_date, mora_amount, payment_method]);
-
+        
         await connection.commit();
         connection.release();
 
@@ -126,48 +164,49 @@ async function registerPaymentInternal(loanId, paymentData) {
 
 
 // ==========================================================
-// 2. DEFINICIÓN DE RUTAS API
+// 2. RUTAS API 
 // ==========================================================
 
-// GET /api/loans
+// GET /api/loans (Omitido por brevedad)
 app.get('/api/loans', async (req, res) => {
+    // ... Código de la ruta /api/loans ...
     try {
         const loanQuery = `
-            SELECT
-                l.id, l.monto, l.interes, l.fecha, l.plazo, l.status,
-                l.tipo_calculo, l.meses_solo_interes,
-                c.dni, c.nombres, c.apellidos, c.is_pep
-            FROM loans l
-                     JOIN clients c ON l.client_id = c.id
-            ORDER BY l.fecha DESC, l.id DESC;
+          SELECT
+            l.id, l.monto, l.interes, l.fecha, l.plazo, l.status,
+            l.tipo_calculo, l.meses_solo_interes,
+            c.dni, c.nombres, c.apellidos, c.is_pep
+          FROM loans l
+          JOIN clients c ON l.client_id = c.id
+          ORDER BY l.fecha DESC, l.id DESC;
         `;
         const [loans] = await pool.query(loanQuery);
-
+        
         const [payments] = await pool.query('SELECT loan_id, payment_amount, payment_date, mora_amount, payment_method FROM payments ORDER BY payment_date ASC');
 
         const loansWithPayments = loans.map(loan => {
-            const { totalDue } = calculateSchedule(loan);
-            loan.total_due = totalDue;
+          const { totalDue } = calculateSchedule(loan);
+          loan.total_due = totalDue;
 
-            const associatedPayments = payments.filter(p => p.loan_id === loan.id);
+          const associatedPayments = payments.filter(p => p.loan_id === loan.id);
+          
+          const totalPaid = associatedPayments.reduce((sum, p) => sum + parseFloat(p.payment_amount), 0);
+          loan.total_paid = parseFloat(totalPaid.toFixed(2));
+          
+          loan.mora_pendiente = calculateMora(loan, loan.total_paid);
 
-            const totalPaid = associatedPayments.reduce((sum, p) => sum + parseFloat(p.payment_amount), 0);
-            loan.total_paid = parseFloat(totalPaid.toFixed(2));
+          if (loan.total_paid >= loan.total_due) { 
+            loan.status = 'Pagado'; 
+          } else if (loan.mora_pendiente > 0) {
+            loan.status = 'Atrasado';
+          } else {
+            loan.status = 'Activo';
+          }
 
-            loan.mora_pendiente = calculateMora(loan, loan.total_paid);
-
-            if (loan.total_paid >= loan.total_due) {
-                loan.status = 'Pagado';
-            } else if (loan.mora_pendiente > 0) {
-                loan.status = 'Atrasado';
-            } else {
-                loan.status = 'Activo';
-            }
-
-            return {
-                ...loan,
-                payments: associatedPayments,
-            };
+          return {
+            ...loan,
+            payments: associatedPayments,
+          };
         });
 
         res.json(loansWithPayments);
@@ -177,8 +216,10 @@ app.get('/api/loans', async (req, res) => {
     }
 });
 
-// POST /api/loans
+
+// POST /api/loans (Omitido por brevedad)
 app.post('/api/loans', async (req, res) => {
+    // ... Código de la ruta POST /api/loans ...
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
@@ -222,8 +263,10 @@ app.post('/api/loans', async (req, res) => {
     }
 });
 
-// POST /api/loans/:loanId/payments
+
+// POST /api/loans/:loanId/payments (Omitido por brevedad)
 app.post('/api/loans/:loanId/payments', async (req, res) => {
+    // ... Código de la ruta POST /api/loans/:loanId/payments ...
     const { loanId } = req.params;
     const { payment_amount, payment_date, mora_amount, payment_method } = req.body;
 
@@ -281,8 +324,9 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
 });
 
 
-// DELETE /api/loans/:loanId
+// DELETE /api/loans/:loanId (Omitido por brevedad)
 app.delete('/api/loans/:loanId', async (req, res) => {
+    // ... Código de la ruta DELETE /api/loans/:loanId ...
     const { loanId } = req.params;
     const connection = await pool.getConnection();
     try {
@@ -308,13 +352,14 @@ app.delete('/api/loans/:loanId', async (req, res) => {
 });
 
 
-// GET /api/dni/:dni (Ruta Proxy para DNI)
+// GET /api/dni/:dni (Omitido por brevedad)
 app.get('/api/dni/:dni', async (req, res) => {
+    // ... Código de la ruta GET /api/dni/:dni ...
     const { dni } = req.params;
     const token = process.env.DNI_API_TOKEN;
 
     if (!token) {
-        return res.status(500).json({ message: 'El token de la API de DNI no está configurado en el servidor.' });
+        return res.status(500).json({ error: 'El token de la API de DNI no está configurado en el servidor.' });
     }
 
     try {
@@ -329,55 +374,73 @@ app.get('/api/dni/:dni', async (req, res) => {
         res.status(apiResponse.status).json(data);
     } catch (error) {
         console.error("Error en el proxy de DNI:", error);
-        res.status(500).json({ message: 'Error interno al consultar la API de DNI.' });
+        res.status(500).json({ error: 'Error interno al consultar la API de DNI.' });
     }
 });
 
 
-// POST /api/flow/create-order (INICIA EL PAGO REAL CON FLOW)
+// POST /api/flow/create-order (CORREGIDO CON HASHING)
 app.post('/api/flow/create-order', async (req, res) => {
     const { amount, loanId, clientDni, amount_ci, amount_mora, payment_date } = req.body;
 
     if (!amount || !loanId || !clientDni) {
-        return res.status(400).json({ message: 'Faltan campos requeridos: amount, loanId y clientDni.' });
+        return res.status(400).json({ error: 'Faltan campos requeridos: amount, loanId y clientDni.' });
     }
-
+    
     const commerceOrder = `PRESTAPRO-${loanId}-${Date.now()}`;
     const subject = `Pago Cuota Préstamo ID #${loanId}`;
-
-    const optionalData = JSON.stringify({
-        loanId: loanId,
-        amount_ci: amount_ci,
+    
+    const optionalData = JSON.stringify({ 
+        loanId: loanId, 
+        amount_ci: amount_ci, 
         amount_mora: amount_mora,
-        payment_date: payment_date
+        payment_date: payment_date 
     });
 
-    const flowRequest = {
+    // 1. Parámetros sin firma
+    const params = {
         apiKey: FLOW_API_KEY,
         commerceOrder: commerceOrder,
         subject: subject,
-        amount: amount,
+        amount: amount, 
         email: `${clientDni}@prestapro.com`,
-        urlConfirmation: `${YOUR_BACKEND_URL}/api/flow/webhook`,
-        urlReturn: `${YOUR_BACKEND_URL}/payment-status.html`,
-        optional: optionalData,
-        s: 'simulated_signature'
+        urlConfirmation: `${YOUR_BACKEND_URL}/api/flow/webhook`, 
+        urlReturn: `${YOUR_BACKEND_URL}/payment-status.html`, 
+        optional: optionalData
+    };
+
+    // 2. Generar la firma
+    const signature = createFlowSignature(params, FLOW_SECRET);
+
+    // 3. Ensamblar la solicitud final
+    const flowRequest = {
+        ...params,
+        s: signature // CRÍTICO: Adjuntar la firma HASHED
     };
 
     try {
         console.log(`[FLOW API] Enviando solicitud a Flow para Orden: ${commerceOrder}`);
-
-        // ** LLAMADA REAL A LA API DE FLOW **
+        
         const flowResponse = await axios.post(FLOW_ENDPOINT, flowRequest);
 
         const flowToken = flowResponse.data.token;
-        const flowPaymentUrl = `https://flow.cl/app/payment/start?token=${flowToken}`;
+        const flowPaymentUrl = `https://flow.cl/app/payment/start?token=${flowToken}`; 
 
         res.json({ success: true, url: flowPaymentUrl });
 
     } catch (error) {
-        console.error('Error al comunicarse con Flow API:', error.response ? error.response.data : error.message);
-        res.status(500).json({ success: false, message: 'Fallo al procesar la orden con Flow.' });
+        // 🚨 CRÍTICO: Capturar el error 400 de Flow y loguear el detalle
+        let errorMessage = 'Fallo al procesar la orden con Flow.';
+        let statusCode = 500;
+
+        if (error.response) {
+            statusCode = error.response.status;
+            // Devolver el objeto de error de Flow para depuración: { code: 101, message: "..." }
+            errorMessage = error.response.data || 'Error de API de Flow sin cuerpo.';
+        }
+        
+        console.error(`[FLOW ERROR DETALLE] Estado: ${statusCode}, Mensaje:`, errorMessage);
+        res.status(statusCode).json({ success: false, error: errorMessage, status: statusCode });
     }
 });
 
@@ -389,21 +452,21 @@ app.post('/api/flow/webhook', async (req, res) => {
         return res.status(401).send('Firma de Webhook no válida.');
     }
 
-    if (flowData.status === 1) {
+    if (flowData.status === 1) { 
         try {
             const optional = JSON.parse(flowData.optional);
 
             const paymentData = {
-                payment_amount: parseFloat(flowData.amount),
+                payment_amount: parseFloat(flowData.amount), 
                 mora_amount: parseFloat(optional.amount_mora),
                 payment_date: new Date().toISOString().split('T')[0],
                 payment_method: 'Transferencia'
             };
 
-            await registerPaymentInternal(optional.loanId, paymentData);
-
+            await registerPaymentInternal(optional.loanId, paymentData); 
+            
             console.log(`✅ Webhook Exitoso. Pago registrado para Préstamo ID: ${optional.loanId}`);
-
+            
             res.status(200).send('OK');
 
         } catch (e) {
@@ -418,36 +481,36 @@ app.post('/api/flow/webhook', async (req, res) => {
 
 
 // ==========================================================
-// 4. CONFIGURACIÓN FINAL DEL SERVIDOR Y MANEJO DE ESTATICOS
+// 3. CONFIGURACIÓN FINAL DEL SERVIDOR Y MANEJO DE ESTATICOS
 // ==========================================================
 
 // Sirve archivos estáticos (index.html, logica.js, diseño.css)
-// CORRECCIÓN FINAL: Usamos la raíz del proyecto para compatibilidad máxima
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(path.join(__dirname))); 
 
 
 // Manejador de errores 404 (Último middleware, captura todo lo que no fue API o archivo estático)
 app.use((req, res, next) => {
-    res.status(404).json({ success: false, message: 'Ruta de API o Recurso no encontrado', endpoint: req.originalUrl });
+    // ⚠️ Si llega aquí, significa que la ruta /api/flow/create-order no se encontró.
+    res.status(404).json({ success: false, error: 'Ruta de API o Recurso no encontrado', endpoint: req.originalUrl });
 });
 
 // INICIO DEL SERVIDOR
 const startServer = async () => {
-    try {
-        const connection = await pool.getConnection();
-        console.log('✅ Conexión a la base de datos establecida con éxito.');
-        connection.release();
+  try {
+    const connection = await pool.getConnection();
+    console.log('✅ Conexión a la base de datos establecida con éxito.');
+    connection.release();
 
-        app.listen(PORT, () => {
-            console.log(`🚀 Servidor PrestaPro escuchando en el puerto ${PORT}`);
-            console.log(`URL de Backend (Flow Webhook): ${YOUR_BACKEND_URL}`);
-        });
+    app.listen(PORT, () => {
+      console.log(`🚀 Servidor PrestaPro escuchando en el puerto ${PORT}`);
+      console.log(`URL de Backend (Flow Webhook): ${YOUR_BACKEND_URL}`);
+    });
 
-    } catch (err) {
-        console.error('❌ No se pudo conectar a la base de datos. Verifica la variable de entorno DATABASE_URL.');
-        console.error(err.message);
-        process.exit(1);
-    }
+  } catch (err) {
+    console.error('❌ No se pudo conectar a la base de datos. Verifica la variable de entorno DATABASE_URL.');
+    console.error(err.message);
+    process.exit(1);
+  }
 };
 
 startServer();
