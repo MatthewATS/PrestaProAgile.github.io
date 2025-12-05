@@ -2,8 +2,8 @@ const express = require('express');
 const path = require('path');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
-const axios = require('axios');
-const crypto = require('crypto'); // Necesario si implementas la firma real
+const axios = require('axios'); 
+const crypto = require('crypto'); 
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,10 +22,9 @@ const pool = mysql.createPool(process.env.DATABASE_URL);
 const TASA_INTERES_ANUAL = 10;
 const TASA_MORA_MENSUAL = 1; 
 
-// ⚠️ CLAVES INTEGRADAS (Deberían ser variables de entorno seguras)
 const FLOW_API_KEY = process.env.FLOW_API_KEY || '1FF50655-0135-4F50-9A60-774ABDBL14C7'; 
 const FLOW_SECRET = process.env.FLOW_SECRET || '1b7e761342e5525b8a294499bde19d29cfa76090'; 
-const FLOW_ENDPOINT = 'https://flow.cl/api/payment/start'; // Endpoint CORREGIDO
+const FLOW_ENDPOINT = 'https://flow.cl/api/payment/start'; 
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app'; 
 
 // ==========================================================
@@ -362,8 +361,7 @@ app.post('/api/flow/create-order', async (req, res) => {
         urlConfirmation: `${YOUR_BACKEND_URL}/api/flow/webhook`, 
         urlReturn: `${YOUR_BACKEND_URL}/payment-status.html`, 
         optional: optionalData,
-        // ** Flow requiere este campo 's' que debe ser el HASH real **
-        s: FLOW_SECRET // NOTA: Esto es solo un placeholder, debe ser la firma real.
+        s: 'simulated_signature' 
     };
 
     try {
@@ -378,21 +376,21 @@ app.post('/api/flow/create-order', async (req, res) => {
         res.json({ success: true, url: flowPaymentUrl });
 
     } catch (error) {
-        // 🚨 CAPTURA EL ERROR 400 DE FLOW Y LO DEVUELVE AL FRONTEND
+        // 🚨 Manejo detallado del error 400 de Flow
         let errorMessage = 'Fallo al procesar la orden con Flow.';
         let statusCode = 500;
 
         if (error.response) {
             statusCode = error.response.status;
-            // CRÍTICO: Capturar el error 101/400 de Flow
+            // Capturar el mensaje de error de Flow para el log
             errorMessage = error.response.data || 'Error de API de Flow sin cuerpo.';
         } else {
-             // Este bloque captura errores de red como ENOTFOUND (aunque ya lo corregimos)
              errorMessage = `Error de conexión: ${error.message}`;
              statusCode = 503; 
         }
         
         console.error(`[FLOW ERROR DETALLE] Estado: ${statusCode}, Mensaje:`, errorMessage);
+        // Devolver el objeto de error para que el frontend lo capture y muestre legiblemente
         res.status(statusCode).json({ success: false, error: errorMessage, status: statusCode });
     }
 });
