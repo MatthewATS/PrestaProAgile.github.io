@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
+// Asegúrate que esta dependencia esté instalada en Railway
 const axios = require('axios'); 
 const crypto = require('crypto'); 
 
@@ -28,7 +29,7 @@ const FLOW_ENDPOINT = 'https://api.flow.cl/payment/start';
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app'; 
 
 // ==========================================================
-// 1. UTILIDADES DE CÁLCULO
+// 1. UTILIDADES DE CÁLCULO (UNIFICADAS)
 // ==========================================================
 
 function calculateSchedule(loan) {
@@ -126,7 +127,7 @@ async function registerPaymentInternal(loanId, paymentData) {
 
 
 // ==========================================================
-// 2. DEFINICIÓN DE RUTAS API 
+// 2. RUTAS API (DEFINICIÓN DIRECTA EN APP)
 // ==========================================================
 
 // GET /api/loans
@@ -314,7 +315,7 @@ app.get('/api/dni/:dni', async (req, res) => {
   const token = process.env.DNI_API_TOKEN;
 
   if (!token) {
-    return res.status(500).json({ message: 'El token de la API de DNI no está configurado en el servidor.' });
+    return res.status(500).json({ error: 'El token de la API de DNI no está configurado en el servidor.' });
   }
 
   try {
@@ -376,8 +377,21 @@ app.post('/api/flow/create-order', async (req, res) => {
         res.json({ success: true, url: flowPaymentUrl });
 
     } catch (error) {
-        console.error('Error al comunicarse con Flow API:', error.response ? error.response.data : error.message);
-        res.status(500).json({ success: false, message: 'Fallo al procesar la orden con Flow.' });
+        // 🚨 CRÍTICO: Devolver el error detallado para depurar
+        let errorMessage = 'Fallo al procesar la orden con Flow.';
+        let statusCode = 500;
+
+        if (error.response) {
+            statusCode = error.response.status;
+            errorMessage = error.response.data || 'Error de API de Flow sin cuerpo.';
+        } else {
+             // Esto ocurre si la conexión a Flow falla completamente (Network/Timeout)
+             errorMessage = `Error de conexión: ${error.message}`;
+             statusCode = 503; // Service Unavailable
+        }
+        
+        console.error(`[FLOW ERROR DETALLE] Estado: ${statusCode}, Mensaje:`, errorMessage);
+        res.status(statusCode).json({ success: false, message: errorMessage, status: statusCode });
     }
 });
 
@@ -418,11 +432,11 @@ app.post('/api/flow/webhook', async (req, res) => {
 
 
 // ==========================================================
-// 4. CONFIGURACIÓN FINAL DEL SERVIDOR Y MANEJO DE ESTATICOS
+// 3. CONFIGURACIÓN FINAL DEL SERVIDOR Y MANEJO DE ESTATICOS
 // ==========================================================
 
 // Sirve archivos estáticos (index.html, logica.js, diseño.css)
-// CRÍTICO: Usamos la raíz del proyecto para máxima compatibilidad con el entorno de Railway
+// La raíz del proyecto es servida para asegurar que el frontend siempre cargue.
 app.use(express.static(path.join(__dirname))); 
 
 
