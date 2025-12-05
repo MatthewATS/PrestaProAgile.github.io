@@ -180,10 +180,10 @@ function initializeApp() {
 
     addLoanBtn?.addEventListener('click', () => {
         openModal(loanModal);
-        // Desbloquear por si estaba bloqueado
-        toggleFormLock(false);
-        // Limpiar para nuevo préstamo
-        resetLoanForm();
+        // CRÍTICO: Llamar a resetLoanForm para limpiar y asegurar que Nombres/Apellidos sean editables
+        resetLoanForm(); 
+        // Asegurar que el formulario esté desbloqueado por si un DNI previo lo bloqueó
+        toggleFormLock(false); 
     });
 
     deleteConfirmationForm?.addEventListener('submit', handleDeleteSubmit);
@@ -628,9 +628,9 @@ function resetLoanForm() {
     declaracionContainer.style.display = 'none';
     getDomElement('hibrido_options').style.display = 'none';
 
-    // Asegurar que nombres y apellidos son readonly por defecto
-    nombresInput.readOnly = true;
-    apellidosInput.readOnly = true;
+    // CORRECCIÓN CRÍTICA: Deben ser editables para el registro manual
+    nombresInput.readOnly = false; 
+    apellidosInput.readOnly = false; 
 }
 
 // --- LÓGICA DE PAGOS INDIVIDUALES (MODAL DE DETALLES) ---
@@ -905,7 +905,7 @@ function searchLoansByDni(dni) {
     statusEl.textContent = 'Buscando préstamos activos...';
     statusEl.style.color = 'var(--text-color)';
 
-    const activeLoans = loans.filter(loan => loan.dni === dni && loan.status === 'Activo');
+    const activeLoans = loans.filter(loan => loan.dni === dni && (loan.status === 'Activo' || loan.status === 'Atrasado'));
 
     if (activeLoans.length === 0) {
         statusEl.textContent = '❌ No se encontraron préstamos activos para este DNI.';
