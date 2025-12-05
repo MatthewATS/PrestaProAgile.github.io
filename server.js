@@ -2,8 +2,8 @@ const express = require('express');
 const path = require('path');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
-const axios = require('axios'); 
-const crypto = require('crypto'); 
+const axios = require('axios');
+const crypto = require('crypto'); // Necesario si implementas la firma real
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,10 +22,10 @@ const pool = mysql.createPool(process.env.DATABASE_URL);
 const TASA_INTERES_ANUAL = 10;
 const TASA_MORA_MENSUAL = 1; 
 
+// ⚠️ CLAVES INTEGRADAS (Deberían ser variables de entorno seguras)
 const FLOW_API_KEY = process.env.FLOW_API_KEY || '1FF50655-0135-4F50-9A60-774ABDBL14C7'; 
 const FLOW_SECRET = process.env.FLOW_SECRET || '1b7e761342e5525b8a294499bde19d29cfa76090'; 
-// 🚨 CORRECCIÓN FINAL: Cambiar el endpoint para evitar el error ENOTFOUND
-const FLOW_ENDPOINT = 'https://flow.cl/api/payment/start'; 
+const FLOW_ENDPOINT = 'https://flow.cl/api/payment/start'; // Endpoint CORREGIDO
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app'; 
 
 // ==========================================================
@@ -127,7 +127,7 @@ async function registerPaymentInternal(loanId, paymentData) {
 
 
 // ==========================================================
-// 2. RUTAS API
+// 2. RUTAS API 
 // ==========================================================
 
 // GET /api/loans
@@ -362,7 +362,8 @@ app.post('/api/flow/create-order', async (req, res) => {
         urlConfirmation: `${YOUR_BACKEND_URL}/api/flow/webhook`, 
         urlReturn: `${YOUR_BACKEND_URL}/payment-status.html`, 
         optional: optionalData,
-        s: 'simulated_signature' 
+        // ** Flow requiere este campo 's' que debe ser el HASH real **
+        s: FLOW_SECRET // NOTA: Esto es solo un placeholder, debe ser la firma real.
     };
 
     try {
@@ -377,21 +378,22 @@ app.post('/api/flow/create-order', async (req, res) => {
         res.json({ success: true, url: flowPaymentUrl });
 
     } catch (error) {
-        // 🚨 CRÍTICO: Devolver el error detallado para depurar
+        // 🚨 CAPTURA EL ERROR 400 DE FLOW Y LO DEVUELVE AL FRONTEND
         let errorMessage = 'Fallo al procesar la orden con Flow.';
         let statusCode = 500;
 
         if (error.response) {
             statusCode = error.response.status;
+            // CRÍTICO: Capturar el error 101/400 de Flow
             errorMessage = error.response.data || 'Error de API de Flow sin cuerpo.';
         } else {
-             // Este bloque captura el error ENOTFOUND (Error de DNS o conexión)
+             // Este bloque captura errores de red como ENOTFOUND (aunque ya lo corregimos)
              errorMessage = `Error de conexión: ${error.message}`;
              statusCode = 503; 
         }
         
         console.error(`[FLOW ERROR DETALLE] Estado: ${statusCode}, Mensaje:`, errorMessage);
-        res.status(statusCode).json({ success: false, message: errorMessage, status: statusCode });
+        res.status(statusCode).json({ success: false, error: errorMessage, status: statusCode });
     }
 });
 
@@ -441,7 +443,7 @@ app.use(express.static(path.join(__dirname)));
 
 // Manejador de errores 404 (Último middleware, captura todo lo que no fue API o archivo estático)
 app.use((req, res, next) => {
-    res.status(404).json({ success: false, message: 'Ruta de API o Recurso no encontrado', endpoint: req.originalUrl });
+    res.status(404).json({ success: false, error: 'Ruta de API o Recurso no encontrado', endpoint: req.originalUrl });
 });
 
 // INICIO DEL SERVIDOR
