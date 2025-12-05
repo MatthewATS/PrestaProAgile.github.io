@@ -141,7 +141,7 @@
                     </div>
 
                     <div id="quick-payment-summary-section" style="display: none; border-top: 1px solid var(--border-color); padding-top: 20px;">
-                        <h3 style="margin-bottom: 15px; color: var(--secondary-color);">3. Resumen y Pago Flexible</h3>
+                        <h3 style="margin-bottom: 15px; color: var(--secondary-color);">3. Resumen y Pago de Cuotas</h3>
 
                         <div class="payment-checkout-grid">
 
@@ -158,7 +158,6 @@
                                         <select id="payment_selection_type" class="payment-selection-type-select">
                                             <option value="single">Pagar 1 Cuota Pendiente</option>
                                             <option value="multiple">Pagar Múltiples Cuotas</option>
-                                            <option value="partial">Abono Parcial / Anticipo de Capital</option>
                                         </select>
                                     </div>
 
@@ -174,13 +173,6 @@
                                         </div>
                                     </div>
 
-                                    <div id="partial-payment-info" class="payment-option-detail" style="display: none;">
-                                        <div class="form-group">
-                                            <label for="partial_payment_amount">Monto del Abono (S/)</label>
-                                            <input type="number" id="partial_payment_amount" step="0.01" min="0.01" placeholder="Ej: 1500.00">
-                                        </div>
-                                    </div>
-
                                     <div class="form-group" style="margin-top: 15px;">
                                         <label for="quick_payment_date">Fecha de Registro</label>
                                         <input type="date" id="quick_payment_date" required>
@@ -192,14 +184,18 @@
 
                                 <div class="form-group" style="margin-top: 25px;">
                                     <h4>Selecciona el Método de Pago</h4>
-                                    <div class="form-row payment-methods-row" style="gap: 15px; grid-template-columns: 1fr 1fr;">
+                                    <div class="form-row payment-methods-row" style="gap: 15px; grid-template-columns: 1fr 1fr 1fr;">
                                         <div class="checkbox-container payment-method-card" data-method="Efectivo" style="border: 2px solid var(--border-color); padding: 20px; text-align: center;">
                                             <input type="radio" name="quick_payment_method" id="q_method_cash" value="Efectivo" required style="display:none;">
                                             <label for="q_method_cash" style="color: var(--secondary-color); font-weight: 600; display: block;">💵 Efectivo</label>
                                         </div>
                                         <div class="checkbox-container payment-method-card" data-method="Transferencia" style="border: 2px solid var(--border-color); padding: 20px; text-align: center;">
                                             <input type="radio" name="quick_payment_method" id="q_method_transfer" value="Transferencia" required style="display:none;">
-                                            <label for="q_method_transfer" style="color: var(--secondary-color); font-weight: 600; display: block;">📱 Transferencia/Tarjeta</label>
+                                            <label for="q_method_transfer" style="color: var(--secondary-color); font-weight: 600; display: block;">💳 Transferencia</label>
+                                        </div>
+                                        <div class="checkbox-container payment-method-card" data-method="Yape/Plin" style="border: 2px solid var(--border-color); padding: 20px; text-align: center;">
+                                            <input type="radio" name="quick_payment_method" id="q_method_yape" value="Yape/Plin" required style="display:none;">
+                                            <label for="q_method_yape" style="color: var(--secondary-color); font-weight: 600; display: block;">📱 Yape/Plin</label>
                                         </div>
                                     </div>
                                     <small style="margin-top: 10px;">*Solo los pagos en **Efectivo** entran en el cuadre de caja diario.</small>
@@ -366,14 +362,18 @@
 
             <h3 style="margin-bottom: 10px;">1. Seleccionar Método de Pago</h3>
             <div class="form-group">
-                <div class="form-row" style="gap: 10px; grid-template-columns: 1fr 1fr;">
+                <div class="form-row" style="gap: 10px; grid-template-columns: 1fr 1fr 1fr;">
                     <div class="checkbox-container payment-method-card" data-method="Efectivo" style="flex: 1; border: 1px solid var(--border-color); cursor: pointer; padding: 10px; text-align: center;">
                         <input type="radio" name="payment_method" id="method_cash" value="Efectivo" required>
                         <label for="method_cash" style="color: var(--secondary-color); font-weight: 600;">💵 Efectivo</label>
                     </div>
                     <div class="checkbox-container payment-method-card" data-method="Transferencia" style="flex: 1; border: 1px solid var(--border-color); cursor: pointer; padding: 10px; text-align: center;">
                         <input type="radio" name="payment_method" id="method_transfer" value="Transferencia" required>
-                        <label for="method_transfer" style="color: var(--secondary-color); font-weight: 600;">📱 Transferencia/Tarjeta</label>
+                        <label for="method_transfer" style="color: var(--secondary-color); font-weight: 600;">💳 Transferencia</label>
+                    </div>
+                    <div class="checkbox-container payment-method-card" data-method="Yape/Plin" style="flex: 1; border: 1px solid var(--border-color); cursor: pointer; padding: 10px; text-align: center;">
+                        <input type="radio" name="payment_method" id="method_yape" value="Yape/Plin" required>
+                        <label for="method_yape" style="color: var(--secondary-color); font-weight: 600;">📱 Yape/Plin</label>
                     </div>
                 </div>
                 <small style="margin-top: 10px;">*Solo los pagos en **Efectivo** serán considerados para el cuadre de caja diario.</small>
