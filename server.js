@@ -2,7 +2,6 @@ const express = require('express');
 const path = require('path');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
-// Asegúrate que esta dependencia esté instalada en Railway
 const axios = require('axios'); 
 const crypto = require('crypto'); 
 
@@ -25,11 +24,12 @@ const TASA_MORA_MENSUAL = 1;
 
 const FLOW_API_KEY = process.env.FLOW_API_KEY || '1FF50655-0135-4F50-9A60-774ABDBL14C7'; 
 const FLOW_SECRET = process.env.FLOW_SECRET || '1b7e761342e5525b8a294499bde19d29cfa76090'; 
-const FLOW_ENDPOINT = 'https://api.flow.cl/payment/start'; 
+// 🚨 CORRECCIÓN FINAL: Cambiar el endpoint para evitar el error ENOTFOUND
+const FLOW_ENDPOINT = 'https://flow.cl/api/payment/start'; 
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app'; 
 
 // ==========================================================
-// 1. UTILIDADES DE CÁLCULO (UNIFICADAS)
+// 1. UTILIDADES DE CÁLCULO
 // ==========================================================
 
 function calculateSchedule(loan) {
@@ -127,7 +127,7 @@ async function registerPaymentInternal(loanId, paymentData) {
 
 
 // ==========================================================
-// 2. RUTAS API (DEFINICIÓN DIRECTA EN APP)
+// 2. RUTAS API
 // ==========================================================
 
 // GET /api/loans
@@ -385,9 +385,9 @@ app.post('/api/flow/create-order', async (req, res) => {
             statusCode = error.response.status;
             errorMessage = error.response.data || 'Error de API de Flow sin cuerpo.';
         } else {
-             // Esto ocurre si la conexión a Flow falla completamente (Network/Timeout)
+             // Este bloque captura el error ENOTFOUND (Error de DNS o conexión)
              errorMessage = `Error de conexión: ${error.message}`;
-             statusCode = 503; // Service Unavailable
+             statusCode = 503; 
         }
         
         console.error(`[FLOW ERROR DETALLE] Estado: ${statusCode}, Mensaje:`, errorMessage);
@@ -436,7 +436,6 @@ app.post('/api/flow/webhook', async (req, res) => {
 // ==========================================================
 
 // Sirve archivos estáticos (index.html, logica.js, diseño.css)
-// La raíz del proyecto es servida para asegurar que el frontend siempre cargue.
 app.use(express.static(path.join(__dirname))); 
 
 
