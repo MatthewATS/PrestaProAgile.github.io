@@ -1,6 +1,6 @@
 // --- VARIABLES GLOBALES Y CONFIGURACIÓN ---
 // CORRECCIÓN: Usar la URL local por defecto para desarrollo
-const API_URL = 'http://localhost:3000'; 
+const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';; 
 const VALOR_UIT = 5150;
 const TASA_INTERES_ANUAL = 10;
 const TASA_MORA_MENSUAL = 1; // 1% de mora por mes
@@ -1643,3 +1643,4 @@ function descargarPDF(doc, fileName) {
     doc.save(fileName);
     console.log('PDF descargado:', fileName);
 }
+
