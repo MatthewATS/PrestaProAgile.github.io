@@ -177,6 +177,7 @@ function initializeApp() {
     backToMenuBtn?.addEventListener('click', () => { showModule('module-menu'); });
 
     addLoanBtn?.addEventListener('click', () => openModal(loanModal));
+
     deleteConfirmationForm?.addEventListener('submit', handleDeleteSubmit);
     
     // --- CAMBIO DE CONTRASEÑA ---
@@ -238,9 +239,9 @@ function initializeApp() {
     // --- INICIALIZACIÓN DE LÓGICA DE NEGOCIO ---
     initPaymentListeners();
     initQuickPaymentListeners();
-    initLoanFormLogic();
+    initLoanFormLogic(); // CRÍTICO: Inicializa el HTML del formulario
     initCashRegisterListeners();
-    initReceiptButtonListeners(); // Añadido listener para recibos en detalles
+    initReceiptButtonListeners();
 }
 
 function handleDeleteSubmit(e) {
@@ -476,7 +477,7 @@ function initLoanFormLogic() {
         const esPEP = isPepCheckbox.checked;
         const motivo = getDomElement('declaracion-motivo');
         const VALOR_UIT_LOCAL = 5150;
-        
+
         if (monto > VALOR_UIT_LOCAL || esPEP) {
             declaracionContainer.style.display = 'block';
             declaracionCheckbox.required = true;
@@ -489,7 +490,7 @@ function initLoanFormLogic() {
             declaracionCheckbox.checked = false;
         }
     }
-    
+
     function updateHibridoInfo() {
         const infoEl = getDomElement('hibrido-info');
         if (!infoEl) return;
@@ -501,7 +502,7 @@ function initLoanFormLogic() {
             infoEl.textContent = `Durante ${meses} mes(es), pagará S/ ${pagoSoloInteres.toFixed(2)} (solo interés).`;
         } else { infoEl.textContent = ''; }
     }
-    
+
     montoInput.addEventListener('input', () => { updateDeclaracionVisibility(); updateHibridoInfo(); });
     isPepCheckbox.addEventListener('change', updateDeclaracionVisibility);
     mesesSoloInteresInput.addEventListener('input', updateHibridoInfo);
@@ -510,7 +511,7 @@ function initLoanFormLogic() {
         toggleFormLock(false);
         nombresInput.value = '';
         apellidosInput.value = '';
-        
+
         const dni = dniInput.value;
 
         if (dni.length !== 8) { dniStatus.textContent = ''; return; }
@@ -522,10 +523,10 @@ function initLoanFormLogic() {
             dniStatus.style.color = 'orange';
             toggleFormLock(true);
             return;
-        } 
-        
+        }
+
         dniStatus.textContent = 'Buscando...'; dniStatus.style.color = '#667085';
-        
+
         try {
             const response = await fetch(`${API_URL}/api/dni/${dni}`);
             const data = await response.json();
@@ -612,18 +613,18 @@ function openPaymentModal(loan) {
     paymentAmountHint.textContent = `Monto máximo a pagar (Capital/Interés): S/ ${remainingCapitalInterest.toFixed(2)}`;
 
     moraAmountInput.value = moraInfo.totalMora.toFixed(2);
-    moraAmountInput.readOnly = moraInfo.totalMora > 0; 
+    moraAmountInput.readOnly = moraInfo.totalMora > 0;
 
     // 3. Mostrar alerta de Mora
     if (moraInfo.totalMora > 0) {
         paymentMoraInfo.style.display = 'flex';
         paymentMoraInfo.className = 'alert alert-warning';
         paymentMoraInfo.innerHTML = `
-            <span>⚠️</span>
-            <div>
-                <p style="margin: 0;"><strong>Préstamo con Atraso.</strong></p>
-                <p style="margin: 5px 0 0 0;">Mora pendiente: S/ ${moraInfo.totalMora.toFixed(2)}. (Se carga automáticamente).</p>
-            </div>
+             <span>⚠️</span>
+             <div>
+                 <p style="margin: 0;"><strong>Préstamo con Atraso.</strong></p>
+                 <p style="margin: 5px 0 0 0;">Mora pendiente: S/ ${moraInfo.totalMora.toFixed(2)}. (Se carga automáticamente).</p>
+             </div>
         `;
     } else {
         paymentMoraInfo.style.display = 'none';
@@ -658,22 +659,22 @@ async function handlePaymentSubmit(e) {
     // Data completa, incluyendo la mora y el método
     const paymentData = {
         payment_amount: totalToCollect, // Total que se envía
-        mora_amount: moraAmount,        
-        payment_method: selectedMethod, 
+        mora_amount: moraAmount,
+        payment_method: selectedMethod,
         payment_date: paymentDate
     };
 
     if (selectedMethod === 'Transferencia') {
         // --- INICIO DE FLUJO DE PAGO REAL CON FLOW ---
         const loan = loans.find(l => l.id == loanId);
-        
+
         try {
-            const response = await fetch(`${API_URL}/api/flow/create-order`, { 
+            const response = await fetch(`${API_URL}/api/flow/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     // CRÍTICO: Asegurar que los montos sean strings con dos decimales para la API
-                    amount: totalToCollect.toFixed(2), 
+                    amount: totalToCollect.toFixed(2),
                     loanId: loanId,
                     clientDni: loan.dni,
                     amount_ci: paymentAmount.toFixed(2),
@@ -683,29 +684,36 @@ async function handlePaymentSubmit(e) {
             });
 
             if (!response.ok) {
-                const errorBody = await response.json().catch(() => ({ message: 'Error desconocido del servidor.' }));
-                // CRÍTICO: Mostrar un mensaje legible del error 400/500
-                throw new Error(`(${response.status}) ${errorBody.error || errorBody.message || 'Error al procesar la orden.'}`);
+                // Captura el objeto de error para que sea legible
+                let errorDetail = 'Error desconocido del servidor.';
+                try {
+                    const errorData = await response.json();
+                    // Este es el objeto que contiene el error 101 de Flow
+                    errorDetail = errorData.error || errorData.message || JSON.stringify(errorData);
+                } catch (e) {
+                    errorDetail = `Error de formato (Estado: ${response.status} ${response.statusText})`;
+                }
+                throw new Error(`(${response.status}) ${errorDetail}`);
             }
 
             const flowData = await response.json();
-            const flowUrl = flowData.url; 
-            
+            const flowUrl = flowData.url;
+
             if (flowUrl) {
                 // *** REDIRECCIÓN AL PAGO REAL EN FLOW ***
                 window.location.href = flowUrl;
-                return; 
+                return;
             } else {
-                 throw new Error("El backend no proporcionó un URL de pago válido.");
+                throw new Error("El backend no proporcionó un URL de pago válido.");
             }
 
         } catch (error) {
             alert(`❌ Error Crítico: No se pudo iniciar el pago con Flow. Detalles: ${error.message}`);
-            return; 
+            return;
         }
 
-    } 
-    
+    }
+
     // Si es Efectivo: Registro directo en DB
     if (selectedMethod === 'Efectivo') {
         try {
@@ -714,19 +722,26 @@ async function handlePaymentSubmit(e) {
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(paymentData)
             });
-            
-            if (!response.ok) { 
-                const errorData = await response.json();
-                throw new Error(errorData.error || `Error ${response.status}`); 
+
+            if (!response.ok) {
+                // Captura el objeto de error para que sea legible
+                let errorDetail = 'Error desconocido del servidor.';
+                try {
+                    const errorData = await response.json();
+                    errorDetail = errorData.error || errorData.message || JSON.stringify(errorData);
+                } catch (e) {
+                    errorDetail = `Error de formato (Estado: ${response.status} ${response.statusText})`;
+                }
+                throw new Error(`(${response.status}) ${errorDetail}`);
             }
-            
+
             const loan = loans.find(l => l.id == loanId);
             showReceipt(paymentData, loan);
 
             await fetchAndRenderLoans();
             showSuccessAnimation('¡Pago Registrado!');
-        } catch (error) { 
-            alert(`No se pudo registrar el pago: ${error.message}`); 
+        } catch (error) {
+            alert(`No se pudo registrar el pago: ${error.message}`);
         }
     }
 }
@@ -745,7 +760,7 @@ function initQuickPaymentListeners() {
         if (event.key === 'Enter') {
             event.preventDefault();
             searchLoansByDni(searchDniInput.value);
-            getDomElement('quick-payment-summary-section').style.display = 'none'; 
+            getDomElement('quick-payment-summary-section').style.display = 'none';
         }
     });
 
@@ -756,7 +771,7 @@ function initQuickPaymentListeners() {
         const loanId = target.getAttribute('data-loan-id');
         const loan = loans.find(l => l.id == loanId);
         if (loan) {
-            populateQuickPaymentSummary(loan); 
+            populateQuickPaymentSummary(loan);
         }
     });
 
@@ -788,190 +803,6 @@ function initQuickPaymentListeners() {
     });
 }
 
-async function searchLoansByDni(dni) {
-    const statusEl = getDomElement('search-dni-status');
-    const quickPaymentTableBody = getDomElement('quickPaymentTableBody');
-    const quickPaymentResultSection = getDomElement('quick-payment-result-section');
-    quickPaymentTableBody.innerHTML = '';
-
-    if (dni.length !== 8) {
-        statusEl.textContent = 'Ingresa 8 dígitos de DNI.';
-        statusEl.style.color = 'var(--danger-color)';
-        quickPaymentResultSection.style.display = 'none';
-        return;
-    }
-
-    const foundLoans = loans.filter(loan => loan.dni === dni && loan.status === 'Activo');
-
-    if (foundLoans.length === 0) {
-        statusEl.textContent = '❌ No se encontraron préstamos activos para este DNI.';
-        statusEl.style.color = 'var(--danger-color)';
-        quickPaymentResultSection.style.display = 'none';
-        quickPaymentTableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #9CA3AF;">No se encontraron préstamos activos.</td></tr>';
-    } else {
-        statusEl.textContent = `✅ Encontrados ${foundLoans.length} préstamo(s) activo(s).`;
-        statusEl.style.color = 'var(--success-color)';
-        quickPaymentResultSection.style.display = 'block';
-
-        foundLoans.forEach(loan => {
-            const remainingCapitalInterest = loan.total_due - loan.total_paid;
-            const moraInfo = calculateMora(loan);
-            const totalDue = remainingCapitalInterest + moraInfo.totalMora;
-
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${loan.nombres} ${loan.apellidos}</td>
-                <td>S/ ${parseFloat(loan.monto).toFixed(2)}</td>
-                <td>S/ ${totalDue.toFixed(2)} ${moraInfo.totalMora > 0 ? `<span class="mora-badge">+ Mora</span>` : ''}</td>
-                <td>
-                    <button class="button button-primary register-payment-btn" data-loan-id="${loan.id}">Seleccionar</button>
-                </td>
-            `;
-            quickPaymentTableBody.appendChild(row);
-        });
-    }
-}
-
-function togglePaymentOptionDetail() {
-    const type = getDomElement('payment_selection_type').value;
-    ['single-payment-info', 'multiple-payment-info', 'partial-payment-info'].forEach(id => {
-        const el = getDomElement(id);
-        if (el) el.style.display = 'none';
-    });
-
-    getDomElement('summary-capital-interest').textContent = 'S/ 0.00';
-    getDomElement('summary-mora').textContent = 'S/ 0.00';
-    getDomElement('summary-total').textContent = 'S/ 0.00';
-    getDomElement('payment_description').textContent = 'Seleccione una opción de pago y presione "Calcular Monto Total".';
-    getDomElement('confirmQuickPaymentBtn').disabled = true;
-    calculatedPaymentData = { amount: 0, mora: 0 };
-
-
-    if (type === 'single') {
-        getDomElement('single-payment-info').style.display = 'block';
-    } else if (type === 'multiple') {
-        getDomElement('multiple-payment-info').style.display = 'block';
-    } else if (type === 'partial') {
-        getDomElement('partial-payment-info').style.display = 'block';
-    }
-}
-
-function populateQuickPaymentSummary(loan) {
-    const quickPaymentSummarySection = getDomElement('quick-payment-summary-section');
-    currentLoanForQuickPayment = loan;
-
-    const moraInfo = calculateMora(loan);
-    const { schedule } = calculateSchedule(loan);
-
-    const pendingInstallments = schedule.filter(item => {
-        const cumulativeExpected = schedule.slice(0, item.cuota).reduce((sum, s) => sum + parseFloat(s.monto), 0);
-        return loan.total_paid < cumulativeExpected;
-    });
-
-    const moraAlertSummary = getDomElement('mora-alert-summary');
-    if (moraInfo.totalMora > 0) {
-        moraAlertSummary.style.display = 'flex';
-        getDomElement('payment_selection_type').value = 'single';
-    } else {
-        moraAlertSummary.style.display = 'none';
-        getDomElement('payment_selection_type').value = 'single';
-    }
-
-    const nextInstallment = pendingInstallments[0];
-
-    if (nextInstallment) {
-        getDomElement('next_installment_date').textContent = nextInstallment.fecha;
-        getDomElement('next_installment_amount').textContent = `S/ ${parseFloat(nextInstallment.monto).toFixed(2)}`;
-    } else {
-        getDomElement('payment_selection_type').value = 'partial';
-        getDomElement('payment_description').textContent = '¡Préstamo al día! Solo se permite Abono/Anticipo.';
-    }
-
-    const maxAvailable = pendingInstallments.length;
-    getDomElement('max_installments_available').textContent = maxAvailable;
-    const numInstallmentsInput = getDomElement('num_installments_to_pay');
-    numInstallmentsInput.value = maxAvailable > 0 ? 1 : 0;
-    numInstallmentsInput.max = maxAvailable;
-
-    togglePaymentOptionDetail(); 
-    quickPaymentSummarySection.style.display = 'grid';
-}
-
-function calculateFlexiblePayment(loan) {
-    const paymentType = getDomElement('payment_selection_type').value;
-    const { schedule } = calculateSchedule(loan);
-    const moraInfo = calculateMora(loan);
-    let amountToPayCapitalInterest = 0;
-    let paymentDescriptionText = '';
-    const totalRemainingCI = loan.total_due - loan.total_paid;
-
-    const pendingInstallments = schedule.filter(item => {
-        const cumulativeExpected = schedule.slice(0, item.cuota).reduce((sum, s) => sum + parseFloat(s.monto), 0);
-        return loan.total_paid < cumulativeExpected;
-    });
-
-    if (paymentType === 'single' && pendingInstallments.length > 0) {
-        const nextInstallment = pendingInstallments[0];
-        amountToPayCapitalInterest = parseFloat(nextInstallment.monto);
-        paymentDescriptionText = `Pagando 1 Cuota completa (N° ${nextInstallment.cuota}).`;
-
-    } else if (paymentType === 'multiple' && pendingInstallments.length > 0) {
-        const numInstallments = parseInt(getDomElement('num_installments_to_pay').value);
-        const maxAvailable = parseInt(getDomElement('max_installments_available').textContent);
-
-        if (isNaN(numInstallments) || numInstallments < 1 || numInstallments > maxAvailable) {
-            alert(`Número de cuotas no válido. Debe ser entre 1 y ${maxAvailable}.`);
-            return;
-        }
-
-        amountToPayCapitalInterest = pendingInstallments.slice(0, numInstallments)
-            .reduce((sum, item) => sum + parseFloat(item.monto), 0);
-
-        paymentDescriptionText = `Pagando ${numInstallments} cuota(s) consecutiva(s).`;
-
-    } else if (paymentType === 'partial') {
-        const partialAmount = parseFloat(getDomElement('partial_payment_amount').value);
-
-        if (isNaN(partialAmount) || partialAmount <= 0) {
-            alert("Por favor, ingrese un monto de abono válido (mayor a S/ 0.01).");
-            return;
-        }
-
-        amountToPayCapitalInterest = Math.min(partialAmount, totalRemainingCI);
-
-        if (amountToPayCapitalInterest < partialAmount) {
-            paymentDescriptionText = `¡El monto ingresado excede la deuda! Solo se aplicará S/ ${amountToPayCapitalInterest.toFixed(2)} a Cap/Int.`;
-        } else {
-            paymentDescriptionText = `Abono/Anticipo de Capital: S/ ${amountToPayCapitalInterest.toFixed(2)}.`;
-        }
-
-    } else {
-        alert("No hay cuotas pendientes para este tipo de pago. Considere 'Abono Parcial'.");
-        return;
-    }
-
-    const moraToCharge = (amountToPayCapitalInterest > 0) ? moraInfo.totalMora : 0;
-
-    calculatedPaymentData = {
-        amount: amountToPayCapitalInterest,
-        mora: moraToCharge
-    };
-
-    const totalToCollect = calculatedPaymentData.amount + calculatedPaymentData.mora;
-
-    getDomElement('summary-capital-interest').textContent = `S/ ${calculatedPaymentData.amount.toFixed(2)}`;
-    getDomElement('summary-mora').textContent = `S/ ${calculatedPaymentData.mora.toFixed(2)}`;
-    getDomElement('summary-total').textContent = `S/ ${totalToCollect.toFixed(2)}`;
-    getDomElement('payment_description').textContent = paymentDescriptionText;
-
-    if (totalToCollect > 0) {
-        const selectedMethod = document.querySelector('input[name="quick_payment_method"]:checked');
-        getDomElement('confirmQuickPaymentBtn').disabled = !selectedMethod;
-    } else {
-        getDomElement('confirmQuickPaymentBtn').disabled = true;
-    }
-}
-
 async function handleQuickPaymentSubmit() {
     if (!currentLoanForQuickPayment || calculatedPaymentData.amount === 0) {
         alert("Error: El monto a pagar no ha sido calculado o es cero. Presione 'Calcular Monto Total'.");
@@ -989,27 +820,26 @@ async function handleQuickPaymentSubmit() {
         alert("Por favor, selecciona una fecha de pago.");
         return;
     }
-    
+
     const totalToCollect = calculatedPaymentData.amount + calculatedPaymentData.mora;
 
     const paymentData = {
         payment_amount: totalToCollect, // Total que se envía
-        mora_amount: calculatedPaymentData.mora,     
-        payment_method: selectedMethod, 
+        mora_amount: calculatedPaymentData.mora,
+        payment_method: selectedMethod,
         payment_date: paymentDate
     };
 
     if (selectedMethod === 'Transferencia') {
         // --- INICIO DE FLUJO DE PAGO REAL CON FLOW ---
         const loan = currentLoanForQuickPayment;
-        
+
         try {
-            const response = await fetch(`${API_URL}/api/flow/create-order`, { 
+            const response = await fetch(`${API_URL}/api/flow/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    // CRÍTICO: Asegurar que los montos sean strings con dos decimales para la API
-                    amount: totalToCollect.toFixed(2), 
+                    amount: totalToCollect.toFixed(2),
                     loanId: loan.id,
                     clientDni: loan.dni,
                     amount_ci: calculatedPaymentData.amount.toFixed(2),
@@ -1019,29 +849,35 @@ async function handleQuickPaymentSubmit() {
             });
 
             if (!response.ok) {
-                const errorBody = await response.json().catch(() => ({ message: 'Error desconocido del servidor.' }));
-                // CRÍTICO: Mostrar un mensaje legible del error 400/500
-                throw new Error(`(${response.status}) ${errorBody.error || errorBody.message || 'Error al procesar la orden.'}`);
+                // Captura el objeto de error para que sea legible
+                let errorDetail = 'Error desconocido del servidor.';
+                try {
+                    const errorData = await response.json();
+                    errorDetail = errorData.error || errorData.message || JSON.stringify(errorData);
+                } catch (e) {
+                    errorDetail = `Error de formato (Estado: ${response.status} ${response.statusText})`;
+                }
+                throw new Error(`(${response.status}) ${errorDetail}`);
             }
 
             const flowData = await response.json();
-            const flowUrl = flowData.url; 
-            
+            const flowUrl = flowData.url;
+
             if (flowUrl) {
                 // *** REDIRECCIÓN AL PAGO REAL EN FLOW ***
                 window.location.href = flowUrl;
-                return; 
+                return;
             } else {
-                 throw new Error("El backend no proporcionó un URL de pago válido.");
+                throw new Error("El backend no proporcionó un URL de pago válido.");
             }
 
         } catch (error) {
             alert(`❌ Error Crítico: No se pudo iniciar el pago con Flow. Detalles: ${error.message}`);
-            return; 
+            return;
         }
 
-    } 
-    
+    }
+
     if (selectedMethod === 'Efectivo') {
         try {
             const response = await fetch(`${API_URL}/api/loans/${currentLoanForQuickPayment.id}/payments`, {
@@ -1049,10 +885,17 @@ async function handleQuickPaymentSubmit() {
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(paymentData)
             });
-            
-            if (!response.ok) { 
-                const errorData = await response.json();
-                throw new Error(errorData.error || `Error ${response.status}`); 
+
+            if (!response.ok) {
+                // Captura el objeto de error para que sea legible
+                let errorDetail = 'Error desconocido del servidor.';
+                try {
+                    const errorData = await response.json();
+                    errorDetail = errorData.error || errorData.message || JSON.stringify(errorData);
+                } catch (e) {
+                    errorDetail = `Error de formato (Estado: ${response.status} ${response.statusText})`;
+                }
+                throw new Error(`(${response.status}) ${errorDetail}`);
             }
 
             const loan = currentLoanForQuickPayment;
@@ -1101,7 +944,7 @@ function calculateMora(loan) {
                 totalMora = outstandingBalanceForMora * (TASA_MORA_MENSUAL / 100) * monthsToCharge;
                 totalAmountOverdue = amountOverdue;
                 latestDueDate = dueDate;
-                break; 
+                break;
             }
         }
     }
@@ -1114,20 +957,20 @@ function calculateMora(loan) {
         if (today.getDate() < latestDueDate.getDate()) {
             mesesAtrasados -= 1;
         }
-        mesesAtrasados = Math.max(1, mesesAtrasados); 
+        mesesAtrasados = Math.max(1, mesesAtrasados);
     }
 
     return { totalMora: totalMora > 0 ? parseFloat(totalMora.toFixed(2)) : 0, mesesAtrasados, amountOverdue: totalAmountOverdue };
 }
 
 function calculateSchedule(loan) {
-   const monthlyInterestRate = parseFloat(loan.interes) / 100;
-   const principal = parseFloat(loan.monto);
-   const schedule = [];
-   const startDate = new Date(loan.fecha);
-   let payments = {};
+    const monthlyInterestRate = parseFloat(loan.interes) / 100;
+    const principal = parseFloat(loan.monto);
+    const schedule = [];
+    let payments = {};
+    const startDate = new Date(loan.fecha);
 
-   if (loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
+    if (loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
         const interestOnlyPayment = principal * monthlyInterestRate;
         payments.interestOnlyPayment = interestOnlyPayment;
 
@@ -1155,10 +998,10 @@ function calculateSchedule(loan) {
             });
         }
 
-   } else {
+    } else {
         const monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
         payments.amortizedPayment = monthlyPayment;
-        
+
         for (let i = 1; i <= loan.plazo; i++) {
             const paymentDate = new Date(startDate);
             paymentDate.setUTCMonth(paymentDate.getUTCMonth() + i);
@@ -1168,7 +1011,7 @@ function calculateSchedule(loan) {
                 monto: monthlyPayment.toFixed(2)
             });
         }
-   }
+    }
     return { payments, schedule };
 }
 
@@ -1188,20 +1031,20 @@ async function fetchAndRenderLoans() {
 function renderHistoryTable() {
     const historyTableBody = getDomElement('historyTableBody');
     historyTableBody.innerHTML = '';
-    
+
     // Asegurar que el thead de la tabla principal tenga la columna de Mora y Acciones
     const historyTable = getDomElement('historyTable');
     if (historyTable) {
         const thead = historyTable.querySelector('thead tr');
         // Esto previene duplicados en caso de re-render
-        if (thead && thead.cells.length < 6) { 
-             thead.innerHTML += `<th>Mora</th><th>Acciones</th>`;
+        if (thead && thead.cells.length < 6) {
+            thead.innerHTML += `<th>Mora</th><th>Acciones</th>`;
         }
     }
 
-    if (loans.length === 0) { 
+    if (loans.length === 0) {
         historyTableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #9CA3AF;">Aún no hay préstamos registrados.</td></tr>`;
-        return; 
+        return;
     }
     loans.forEach(loan => {
         const row = document.createElement('tr');
@@ -1257,7 +1100,7 @@ function renderHistoryTable() {
 function updateDashboard() {
     const totalLoaned = loans.reduce((sum, loan) => sum + parseFloat(loan.monto), 0);
     const activeLoans = loans.filter(loan => loan.status === 'Activo').length;
-    
+
     clients.clear();
     loans.forEach(loan => clients.add(loan.dni));
 
@@ -1284,7 +1127,7 @@ function showReceipt(payment, loan) {
     }
 
     const receiptContent = getDomElement('receiptContent');
-    
+
     const totalPagado = parseFloat(payment.payment_amount || 0);
     const moraPagada = parseFloat(payment.mora_amount || 0);
     const capitalInteresPagado = totalPagado - moraPagada;
@@ -1322,7 +1165,7 @@ function showReceipt(payment, loan) {
     `;
 
     openModal(getDomElement('receiptModal'));
-    currentReceiptData = { payment, loan, totalPagado, paymentMethod, capitalInteresPagado, moraPagada }; 
+    currentReceiptData = { payment, loan, totalPagado, paymentMethod, capitalInteresPagado, moraPagada };
 }
 
 function downloadReceipt() {
@@ -1357,7 +1200,7 @@ function downloadReceipt() {
         head: [['Concepto', 'Monto']],
         body: tableData,
         theme: 'grid',
-        headStyles: { fillColor: [55, 65, 81], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 11 }, 
+        headStyles: { fillColor: [55, 65, 81], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 11 },
         bodyStyles: { fontSize: 10, textColor: [52, 64, 84] },
         columnStyles: { 1: { halign: 'right' } }
     });
@@ -1489,7 +1332,7 @@ function populateDetailsModal(loan) {
 function printSchedule() {
     // Implementación de impresión
     const printableContent = document.querySelector('#detailsModal .printable').innerHTML;
-    
+
     const iframe = document.createElement('iframe');
     iframe.style.position = 'absolute';
     iframe.style.width = '0';
@@ -1550,7 +1393,7 @@ function compartirPDF() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         let finalY = 0;
-        
+
         const interesAnualMostrado = TASA_INTERES_ANUAL.toFixed(2);
 
         doc.setFontSize(22); doc.setTextColor(0, 93, 255); doc.text("PRESTAPRO", 105, 20, { align: 'center' });
@@ -1563,15 +1406,6 @@ function compartirPDF() {
         doc.text(`Fecha de Préstamo: ${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}`, 105, 58);
         doc.text(`Interés Anual: ${interesAnualMostrado}%`, 14, 64);
         doc.text(`Plazo: ${loan.plazo} meses`, 105, 64);
-
-        if (loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
-            doc.text(`Cuota 'Solo Interés': S/ ${payments.interestOnlyPayment.toFixed(2)}`, 14, 70);
-            doc.text(`Cuota Regular: S/ ${payments.amortizedPayment.toFixed(2)}`, 14, 76);
-            finalY = 86;
-        } else {
-            doc.text(`Cuota Mensual Fija: S/ ${payments.amortizedPayment.toFixed(2)}`, 14, 70);
-            finalY = 80;
-        }
 
         if (parseFloat(loan.monto) > VALOR_UIT || loan.is_pep) {
             doc.setFontSize(14); doc.setTextColor(52, 64, 84); doc.text("Declaración Jurada de Origen de Fondos", 105, finalY, { align: 'center' });
@@ -1588,7 +1422,7 @@ function compartirPDF() {
         }
 
         doc.setFontSize(14); doc.setTextColor(52, 64, 84); doc.text("Cronograma de Pagos", 105, finalY, { align: 'center' });
-        
+
         const tableData = schedule.map(item => [item.cuota.toString(), item.fecha, `S/ ${item.monto}`]);
         doc.autoTable({
             head: [['N° Cuota', 'Fecha de Vencimiento', 'Monto a Pagar']],
@@ -1597,7 +1431,7 @@ function compartirPDF() {
             bodyStyles: { fontSize: 10 },
             columnStyles: { 0: { halign: 'center' }, 2: { halign: 'right' } }
         });
-        
+
         const pageFinalY = doc.lastAutoTable.finalY || 250;
         doc.setFontSize(8); doc.setTextColor(150, 150, 150);
         doc.text('Generado por PrestaPro', 105, pageFinalY + 10, { align: 'center' });
@@ -1608,7 +1442,7 @@ function compartirPDF() {
         if (navigator.share) {
             const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
             navigator.share({ files: [file], title: 'Detalles del Préstamo', text: `Detalles del préstamo de ${loan.nombres} ${loan.apellidos}`})
-            .catch((error) => { console.log('Error al compartir, iniciando descarga:', error); descargarPDF(doc, fileName); });
+                .catch((error) => { console.log('Error al compartir, iniciando descarga:', error); descargarPDF(doc, fileName); });
         } else { descargarPDF(doc, fileName); }
     } catch (error) { console.error('Error al generar PDF:', error); alert('Hubo un error al generar el PDF.'); }
 }
