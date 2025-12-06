@@ -3,6 +3,7 @@ const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
 const VALOR_UIT = 5150;
 const TASA_INTERES_ANUAL = 10;
 const TASA_MORA_MENSUAL = 1; // 1% de mora por mes
+const MP_LIMIT_YAPE = 500; // Nuevo límite para Yape/Plin
 
 let loans = [];
 let clients = new Set();
@@ -766,7 +767,9 @@ function initQuickPaymentListeners() {
     const quickPaymentTableBody = getDomElement('quickPaymentTableBody');
     const confirmQuickPaymentBtn = getDomElement('confirmQuickPaymentBtn');
     const paymentSelectionType = getDomElement('payment_selection_type');
-    const calculatePaymentBtn = getDomElement('calculatePaymentBtn');
+    const numInstallmentsInput = getDomElement('num_installments_to_pay');
+
+    // El botón 'calculatePaymentBtn' ya no existe en el HTML.
 
     searchDniInput?.addEventListener('input', (e) => { e.target.value = e.target.value.replace(/[^0-9]/g, ''); });
 
@@ -790,12 +793,23 @@ function initQuickPaymentListeners() {
         }
     });
 
-    paymentSelectionType?.addEventListener('change', togglePaymentOptionDetail);
-    calculatePaymentBtn?.addEventListener('click', () => {
-        if (currentLoanForQuickPayment) {
-            calculateFlexiblePayment(currentLoanForQuickPayment);
-        }
+    // Eventos para el cálculo automático
+    paymentSelectionType?.addEventListener('change', () => {
+        togglePaymentOptionDetail();
+        if (currentLoanForQuickPayment) calculateFlexiblePayment(currentLoanForQuickPayment);
     });
+
+    numInstallmentsInput?.addEventListener('input', () => {
+        if (currentLoanForQuickPayment) calculateFlexiblePayment(currentLoanForQuickPayment);
+    });
+
+    // Listener para recalcular y habilitar el botón al cambiar el método de pago
+    document.querySelectorAll('input[name="quick_payment_method"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            if (currentLoanForQuickPayment) calculateFlexiblePayment(currentLoanForQuickPayment);
+        });
+    });
+
     confirmQuickPaymentBtn?.addEventListener('click', handleQuickPaymentSubmit);
 
     document.querySelectorAll('#quick-payment-summary-section .payment-methods-row .checkbox-container').forEach(card => {
@@ -810,10 +824,8 @@ function initQuickPaymentListeners() {
             const radio = card.querySelector('input[type="radio"]');
             if (radio) radio.checked = true;
 
-            const currentTotal = parseFloat(getDomElement('summary-total').textContent.replace('S/ ', '') || 0);
-            if (currentTotal > 0) {
-                getDomElement('confirmQuickPaymentBtn').disabled = false;
-            }
+            // Recalculo para aplicar restricción si es necesario
+            if (currentLoanForQuickPayment) calculateFlexiblePayment(currentLoanForQuickPayment);
         });
     });
 }
@@ -889,6 +901,11 @@ function populateQuickPaymentSummary(loan) {
     const quickPaymentSummarySection = getDomElement('quick-payment-summary-section');
     currentLoanForQuickPayment = loan;
 
+    // **MODIFICACIÓN 1: Establecer la fecha actual y mantenerla como string (DD/MM/YYYY)**
+    const today = new Date();
+    const formattedDate = today.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    getDomElement('quick_payment_date').value = formattedDate;
+
     const moraInfo = calculateMora(loan);
     const { schedule } = calculateSchedule(loan);
 
@@ -914,7 +931,10 @@ function populateQuickPaymentSummary(loan) {
     } else {
         getDomElement('payment_selection_type').value = 'single';
         getDomElement('payment_description').textContent = '¡Préstamo al día! No hay cuotas pendientes.';
+        // Aquí se debe deshabilitar el botón de Confirmar Pago
+        getDomElement('confirmQuickPaymentBtn').disabled = true;
         alert("¡Préstamo al día! No hay cuotas pendientes para pagar.");
+        return; // Salir si no hay cuotas
     }
 
     const maxAvailable = pendingInstallments.length;
@@ -925,6 +945,9 @@ function populateQuickPaymentSummary(loan) {
 
     togglePaymentOptionDetail();
     quickPaymentSummarySection.style.display = 'grid';
+
+    // **MODIFICACIÓN 2: Llamada al cálculo automático después de cargar**
+    calculateFlexiblePayment(loan);
 }
 
 function calculateFlexiblePayment(loan) {
@@ -941,35 +964,37 @@ function calculateFlexiblePayment(loan) {
 
     // CRÍTICO: Si no hay cuotas pendientes, avisar y salir.
     if (pendingInstallments.length === 0) {
-        alert("¡Préstamo al día! No hay cuotas pendientes para pagar.");
-        getDomElement('payment_description').textContent = "¡Préstamo al día! No hay cuotas pendientes para pagar.";
-        getDomElement('confirmQuickPaymentBtn').disabled = true;
-        return;
-    }
-
-    if (paymentType === 'single') {
-        const nextInstallment = pendingInstallments[0];
-        amountToPayCapitalInterest = parseFloat(nextInstallment.monto);
-        paymentDescriptionText = `Pagando 1 Cuota completa (N° ${nextInstallment.cuota}).`;
-
-    } else if (paymentType === 'multiple') {
-        const numInstallments = parseInt(getDomElement('num_installments_to_pay').value);
-        const maxAvailable = parseInt(getDomElement('max_installments_available').textContent);
-
-        if (isNaN(numInstallments) || numInstallments < 1 || numInstallments > maxAvailable) {
-            alert(`Número de cuotas no válido. Debe ser entre 1 y ${maxAvailable}.`);
-            return;
-        }
-
-        amountToPayCapitalInterest = pendingInstallments.slice(0, numInstallments)
-            .reduce((sum, item) => sum + parseFloat(item.monto), 0);
-
-        paymentDescriptionText = `Pagando ${numInstallments} cuota(s) consecutiva(s).`;
-
+        paymentDescriptionText = "¡Préstamo al día! No hay cuotas pendientes.";
+        amountToPayCapitalInterest = 0;
+        calculatedPaymentData = { amount: 0, mora: 0 };
     } else {
-        // En caso de que se intente seleccionar un tipo de pago no soportado
-        alert("Tipo de pago no soportado. Seleccione 'Pagar 1 Cuota' o 'Pagar Múltiples Cuotas'.");
-        return;
+        if (paymentType === 'single') {
+            const nextInstallment = pendingInstallments[0];
+            amountToPayCapitalInterest = parseFloat(nextInstallment.monto);
+            paymentDescriptionText = `Pagando 1 Cuota completa (N° ${nextInstallment.cuota}).`;
+
+        } else if (paymentType === 'multiple') {
+            const numInstallments = parseInt(getDomElement('num_installments_to_pay').value);
+            const maxAvailable = parseInt(getDomElement('max_installments_available').textContent);
+
+            if (isNaN(numInstallments) || numInstallments < 1 || numInstallments > maxAvailable) {
+                // Si el número es inválido o excede el máximo, usar el máximo disponible
+                const finalNum = Math.min(Math.max(1, numInstallments || 1), maxAvailable);
+                getDomElement('num_installments_to_pay').value = finalNum;
+                amountToPayCapitalInterest = pendingInstallments.slice(0, finalNum)
+                    .reduce((sum, item) => sum + parseFloat(item.monto), 0);
+                paymentDescriptionText = `Pagando ${finalNum} cuota(s) consecutiva(s). (Ajuste por máximo disponible)`;
+            } else {
+                amountToPayCapitalInterest = pendingInstallments.slice(0, numInstallments)
+                    .reduce((sum, item) => sum + parseFloat(item.monto), 0);
+                paymentDescriptionText = `Pagando ${numInstallments} cuota(s) consecutiva(s).`;
+            }
+
+        } else {
+            // Caso de fallback
+            paymentDescriptionText = "Tipo de pago no reconocido. Por favor, seleccione una opción válida.";
+            amountToPayCapitalInterest = 0;
+        }
     }
 
     const moraToCharge = (amountToPayCapitalInterest > 0) ? moraInfo.totalMora : 0;
@@ -980,15 +1005,24 @@ function calculateFlexiblePayment(loan) {
     };
 
     const totalToCollect = calculatedPaymentData.amount + calculatedPaymentData.mora;
+    const selectedMethod = document.querySelector('input[name="quick_payment_method"]:checked')?.value;
+
+    let isPaymentAllowed = true;
+
+    // **MODIFICACIÓN 3: Lógica de restricción de monto para Yape/Plin**
+    if (selectedMethod === 'Yape/Plin' && totalToCollect > MP_LIMIT_YAPE) {
+        isPaymentAllowed = false;
+        paymentDescriptionText = `❌ Monto (S/ ${totalToCollect.toFixed(2)}) excede el límite de Yape/Plin (S/ ${MP_LIMIT_YAPE.toFixed(2)}). Seleccione otro método.`;
+    }
 
     getDomElement('summary-capital-interest').textContent = `S/ ${calculatedPaymentData.amount.toFixed(2)}`;
     getDomElement('summary-mora').textContent = `S/ ${calculatedPaymentData.mora.toFixed(2)}`;
     getDomElement('summary-total').textContent = `S/ ${totalToCollect.toFixed(2)}`;
     getDomElement('payment_description').textContent = paymentDescriptionText;
 
-    if (totalToCollect > 0) {
-        const selectedMethod = document.querySelector('input[name="quick_payment_method"]:checked');
-        getDomElement('confirmQuickPaymentBtn').disabled = !selectedMethod;
+    // Habilitar el botón solo si hay un monto mayor a cero, se seleccionó un método Y no hay restricción.
+    if (totalToCollect > 0 && selectedMethod && isPaymentAllowed) {
+        getDomElement('confirmQuickPaymentBtn').disabled = false;
     } else {
         getDomElement('confirmQuickPaymentBtn').disabled = true;
     }
@@ -996,7 +1030,7 @@ function calculateFlexiblePayment(loan) {
 
 async function handleQuickPaymentSubmit() {
     if (!currentLoanForQuickPayment || calculatedPaymentData.amount === 0) {
-        alert("Error: El monto a pagar no ha sido calculado o es cero. Presione 'Calcular Monto Total'.");
+        alert("Error: El monto a pagar no ha sido calculado o es cero. Por favor, asegúrese de seleccionar un préstamo y cuotas.");
         return;
     }
 
@@ -1006,19 +1040,27 @@ async function handleQuickPaymentSubmit() {
         return;
     }
 
-    const paymentDate = getDomElement('quick_payment_date').value;
-    if (!paymentDate) {
-        alert("Por favor, selecciona una fecha de pago.");
-        return;
-    }
+    // La fecha de registro es la fecha actual no editable
+    const paymentDate = getTodayDateISO();
+
+    // if (!paymentDate) {
+    //     alert("Por favor, selecciona una fecha de pago.");
+    //     return;
+    // }
 
     const totalToCollect = calculatedPaymentData.amount + calculatedPaymentData.mora;
+
+    // Validar restricción de monto nuevamente antes del envío
+    if (selectedMethod === 'Yape/Plin' && totalToCollect > MP_LIMIT_YAPE) {
+        alert(`Operación cancelada: El monto total de S/ ${totalToCollect.toFixed(2)} excede el límite de S/ ${MP_LIMIT_YAPE.toFixed(2)} para Yape/Plin.`);
+        return;
+    }
 
     const paymentData = {
         payment_amount: totalToCollect, // Total que se envía
         mora_amount: calculatedPaymentData.mora,
         payment_method: selectedMethod,
-        payment_date: paymentDate
+        payment_date: paymentDate // Usamos la fecha ISO para enviar al backend
     };
 
     const loan = currentLoanForQuickPayment;
@@ -1208,6 +1250,10 @@ function calculateSchedule(loan) {
         }
     }
     return { payments, schedule };
+}
+
+function getTodayDateISO() {
+    return new Date().toISOString().split('T')[0];
 }
 
 // --- FETCH Y RENDER ---
