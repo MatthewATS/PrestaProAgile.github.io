@@ -2,16 +2,14 @@ const express = require('express');
 const path = require('path');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
-// Asegúrate que esta dependencia esté instalada en Railway
-const axios = require('axios'); 
-const crypto = require('crypto'); 
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // === CONFIGURACIÓN DE LA APLICACIÓN Y MIDDLEWARE ===
 app.use(cors());
-app.use(express.json()); 
+app.use(express.json());
 app.use((req, res, next) => {
     console.log(`[REQUEST] ${req.method} ${req.originalUrl}`);
     next();
@@ -19,17 +17,23 @@ app.use((req, res, next) => {
 
 const pool = mysql.createPool(process.env.DATABASE_URL);
 
-// --- CONSTANTES DE NEGOCIO Y API DE FLOW ---
+// --- CONSTANTES DE NEGOCIO Y API DE MERCADO PAGO ---
 const TASA_INTERES_ANUAL = 10;
-const TASA_MORA_MENSUAL = 1; 
+const TASA_MORA_MENSUAL = 1;
 
-const FLOW_API_KEY = process.env.FLOW_API_KEY || '1FF50655-0135-4F50-9A60-774ABDBL14C7'; 
-const FLOW_SECRET = process.env.FLOW_SECRET || '1b7e761342e5525b8a294499bde19d29cfa76090'; 
-const FLOW_ENDPOINT = 'https://api.flow.cl/payment/start'; 
-const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app'; 
+// 🚨 ACCESS TOKEN DE MERCADO PAGO
+const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN || 'APP_USR-8502136350427147-120617-fa6ecd27bc6386be9c1bd34ed3db33dd-3044195674';
+
+// URL base de la API de Mercado Pago
+const MP_ENDPOINT_BASE = 'https://api.mercadopago.com/checkout/preferences';
+
+const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app';
+
+console.log(`[CONFIG] Backend URL: ${YOUR_BACKEND_URL}`);
+console.log(`[CONFIG] Mercado Pago Token configurado: ${MP_ACCESS_TOKEN ? '✅' : '❌'}`);
 
 // ==========================================================
-// 1. UTILIDADES DE CÁLCULO (UNIFICADAS)
+// 1. UTILIDADES DE CÁLCULO Y DB
 // ==========================================================
 
 function calculateSchedule(loan) {
@@ -40,12 +44,12 @@ function calculateSchedule(loan) {
 
     let monthlyPayment;
     let totalDue;
-    
+
     if (loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
         const interestOnlyPayment = principal * monthlyInterestRate;
         const remainingTerm = loan.plazo - loan.meses_solo_interes;
         monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -remainingTerm));
-        
+
         for (let i = 1; i <= loan.plazo; i++) {
             const paymentDate = new Date(startDate);
             paymentDate.setUTCMonth(paymentDate.getUTCMonth() + i);
@@ -63,7 +67,7 @@ function calculateSchedule(loan) {
         }
         totalDue = monthlyPayment * loan.plazo;
     }
-    
+
     return { schedule, totalDue: parseFloat(totalDue.toFixed(2)) };
 }
 
@@ -93,7 +97,7 @@ function calculateMora(loan, totalPaid) {
                 totalMora = outstandingBalanceForMora * (TASA_MORA_MENSUAL / 100) * monthsToCharge;
                 totalAmountOverdue = cumulativeExpected - totalPaid;
                 latestDueDate = dueDate;
-                break; 
+                break;
             }
         }
     }
@@ -101,126 +105,178 @@ function calculateMora(loan, totalPaid) {
     return parseFloat(totalMora > 0 ? totalMora.toFixed(2) : 0);
 }
 
-function verifyFlowSignature(data, secret) {
-    console.log("⚠️ Advertencia: La verificación de firma de Flow está deshabilitada/simulada. ¡Implementar en producción!");
-    return true; 
-}
-
 async function registerPaymentInternal(loanId, paymentData) {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
         const { payment_amount, payment_date, mora_amount, payment_method } = paymentData;
-        
-        await connection.query('INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method) VALUES (?, ?, ?, ?, ?)', 
-            [loanId, payment_amount, payment_date, mora_amount, payment_method]);
-        
+
+        const finalMethod = payment_method || 'Mercado Pago';
+
+        console.log(`[PAYMENT INTERNAL] Registrando pago para préstamo ${loanId}:`, {
+            payment_amount,
+            payment_date,
+            mora_amount,
+            payment_method: finalMethod
+        });
+
+        await connection.query(
+            'INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method) VALUES (?, ?, ?, ?, ?)',
+            [loanId, payment_amount, payment_date, mora_amount, finalMethod]
+        );
+
+        // Verificar si el préstamo está totalmente pagado
+        const [paymentsRows] = await connection.query(
+            'SELECT SUM(payment_amount) as totalPaid FROM payments WHERE loan_id = ?',
+            [loanId]
+        );
+        const totalPaid = parseFloat(paymentsRows[0].totalPaid || 0);
+
+        const [loanRows] = await connection.query('SELECT * FROM loans WHERE id = ?', [loanId]);
+        const loan = loanRows[0];
+        const { totalDue } = calculateSchedule(loan);
+
+        if (totalPaid >= totalDue) {
+            await connection.query("UPDATE loans SET status = 'Pagado' WHERE id = ?", [loanId]);
+            console.log(`[PAYMENT INTERNAL] ✅ Préstamo ${loanId} marcado como PAGADO`);
+        }
+
         await connection.commit();
-        connection.release();
+        console.log(`[PAYMENT INTERNAL] ✅ Pago registrado exitosamente`);
 
     } catch (e) {
         await connection.rollback();
-        connection.release();
+        console.error(`[PAYMENT INTERNAL ERROR]`, e);
         throw e;
+    } finally {
+        connection.release();
     }
 }
 
-
 // ==========================================================
-// 2. RUTAS API (DEFINICIÓN DIRECTA EN APP)
+// 2. RUTAS API
 // ==========================================================
 
 // GET /api/loans
 app.get('/api/loans', async (req, res) => {
-  try {
-    const loanQuery = `
-      SELECT
-        l.id, l.monto, l.interes, l.fecha, l.plazo, l.status,
-        l.tipo_calculo, l.meses_solo_interes,
-        c.dni, c.nombres, c.apellidos, c.is_pep
-      FROM loans l
-      JOIN clients c ON l.client_id = c.id
-      ORDER BY l.fecha DESC, l.id DESC;
-    `;
-    const [loans] = await pool.query(loanQuery);
-    
-    const [payments] = await pool.query('SELECT loan_id, payment_amount, payment_date, mora_amount, payment_method FROM payments ORDER BY payment_date ASC');
+    try {
+        const loanQuery = `
+            SELECT
+                l.id, l.monto, l.interes, l.fecha, l.plazo, l.status,
+                l.tipo_calculo, l.meses_solo_interes,
+                c.dni, c.nombres, c.apellidos, c.is_pep
+            FROM loans l
+            JOIN clients c ON l.client_id = c.id
+            ORDER BY l.fecha DESC, l.id DESC;
+        `;
+        const [loans] = await pool.query(loanQuery);
 
-    const loansWithPayments = loans.map(loan => {
-      const { totalDue } = calculateSchedule(loan);
-      loan.total_due = totalDue;
+        const [payments] = await pool.query(
+            'SELECT loan_id, payment_amount, payment_date, mora_amount, payment_method FROM payments ORDER BY payment_date ASC'
+        );
 
-      const associatedPayments = payments.filter(p => p.loan_id === loan.id);
-      
-      const totalPaid = associatedPayments.reduce((sum, p) => sum + parseFloat(p.payment_amount), 0);
-      loan.total_paid = parseFloat(totalPaid.toFixed(2));
-      
-      loan.mora_pendiente = calculateMora(loan, loan.total_paid);
+        const loansWithPayments = loans.map(loan => {
+            const { totalDue } = calculateSchedule(loan);
+            loan.total_due = totalDue;
 
-      if (loan.total_paid >= loan.total_due) { 
-        loan.status = 'Pagado'; 
-      } else if (loan.mora_pendiente > 0) {
-        loan.status = 'Atrasado';
-      } else {
-        loan.status = 'Activo';
-      }
+            const associatedPayments = payments.filter(p => p.loan_id === loan.id);
 
-      return {
-        ...loan,
-        payments: associatedPayments,
-      };
-    });
+            const totalPaid = associatedPayments.reduce((sum, p) => sum + parseFloat(p.payment_amount), 0);
+            loan.total_paid = parseFloat(totalPaid.toFixed(2));
 
-    res.json(loansWithPayments);
-  } catch (err) {
-    console.error("ERROR en GET /api/loans:", err);
-    res.status(500).json({ error: 'Error al obtener los préstamos' });
-  }
+            loan.mora_pendiente = calculateMora(loan, loan.total_paid);
+
+            if (loan.total_paid >= loan.total_due) {
+                loan.status = 'Pagado';
+            } else if (loan.mora_pendiente > 0) {
+                loan.status = 'Atrasado';
+            } else {
+                loan.status = 'Activo';
+            }
+
+            return {
+                ...loan,
+                payments: associatedPayments,
+            };
+        });
+
+        res.json(loansWithPayments);
+    } catch (err) {
+        console.error("ERROR en GET /api/loans:", err);
+        res.status(500).json({ error: 'Error al obtener los préstamos' });
+    }
 });
 
 // POST /api/loans
 app.post('/api/loans', async (req, res) => {
-  const connection = await pool.getConnection();
-  try {
-    await connection.beginTransaction();
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
 
-    const { client, monto, fecha, plazo, status, declaracion_jurada = false, tipo_calculo = 'Amortizado', meses_solo_interes = 0 } = req.body;
-    const { dni, nombres, apellidos, is_pep = false } = client;
-    const interes = TASA_INTERES_ANUAL / 12;
+        const {
+            client,
+            monto,
+            fecha,
+            plazo,
+            status,
+            declaracion_jurada = false,
+            tipo_calculo = 'Amortizado',
+            meses_solo_interes = 0
+        } = req.body;
 
-    if (monto < 100 || monto > 20000) {
-      return res.status(400).json({ error: 'El monto del préstamo debe estar entre S/ 100 y S/ 20,000.' });
+        const { dni, nombres, apellidos, is_pep = false } = client;
+        const interes = TASA_INTERES_ANUAL / 12;
+
+        if (monto < 100 || monto > 20000) {
+            await connection.rollback();
+            connection.release();
+            return res.status(400).json({ error: 'El monto del préstamo debe estar entre S/ 100 y S/ 20,000.' });
+        }
+
+        let [activeLoans] = await connection.query(
+            `SELECT l.id FROM loans l JOIN clients c ON l.client_id = c.id WHERE c.dni = ? AND l.status = 'Activo' LIMIT 1;`,
+            [dni]
+        );
+
+        if (activeLoans.length > 0) {
+            await connection.rollback();
+            connection.release();
+            return res.status(409).json({ error: 'El cliente ya tiene un préstamo activo.' });
+        }
+
+        let [existingClient] = await connection.query('SELECT id FROM clients WHERE dni = ?', [dni]);
+        let clientId;
+
+        if (existingClient.length > 0) {
+            clientId = existingClient[0].id;
+            await connection.query(
+                'UPDATE clients SET nombres = ?, apellidos = ?, is_pep = ? WHERE id = ?',
+                [nombres, apellidos, is_pep, clientId]
+            );
+        } else {
+            const [result] = await connection.query(
+                'INSERT INTO clients (dni, nombres, apellidos, is_pep) VALUES (?, ?, ?, ?)',
+                [dni, nombres, apellidos, is_pep]
+            );
+            clientId = result.insertId;
+        }
+
+        await connection.query(
+            `INSERT INTO loans (client_id, monto, interes, fecha, plazo, status, declaracion_jurada, tipo_calculo, meses_solo_interes) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+            [clientId, monto, interes, fecha, plazo, status, declaracion_jurada, tipo_calculo, meses_solo_interes]
+        );
+
+        await connection.commit();
+        res.status(201).json({ ...req.body, client_id: clientId });
+
+    } catch (err) {
+        await connection.rollback();
+        console.error("ERROR en POST /api/loans:", err.message);
+        res.status(500).json({ error: 'Error interno al guardar en la base de datos.' });
+    } finally {
+        connection.release();
     }
-
-    const [activeLoans] = await connection.query(`SELECT l.id FROM loans l JOIN clients c ON l.client_id = c.id WHERE c.dni = ? AND l.status = 'Activo' LIMIT 1;`, [dni]);
-    if (activeLoans.length > 0) {
-      return res.status(409).json({ error: 'El cliente ya tiene un préstamo activo.' });
-    }
-
-    let [existingClient] = await connection.query('SELECT id FROM clients WHERE dni = ?', [dni]);
-    let clientId;
-
-    if (existingClient.length > 0) {
-      clientId = existingClient[0].id;
-      await connection.query('UPDATE clients SET nombres = ?, apellidos = ?, is_pep = ? WHERE id = ?', [nombres, apellidos, is_pep, clientId]);
-    } else {
-      const [result] = await connection.query('INSERT INTO clients (dni, nombres, apellidos, is_pep) VALUES (?, ?, ?, ?)', [dni, nombres, apellidos, is_pep]);
-      clientId = result.insertId;
-    }
-
-    await connection.query(`INSERT INTO loans (client_id, monto, interes, fecha, plazo, status, declaracion_jurada, tipo_calculo, meses_solo_interes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`, 
-      [clientId, monto, interes, fecha, plazo, status, declaracion_jurada, tipo_calculo, meses_solo_interes]);
-
-    await connection.commit();
-    res.status(201).json({ ...req.body, client_id: clientId });
-
-  } catch (err) {
-    await connection.rollback();
-    console.error("ERROR en POST /api/loans:", err.message);
-    res.status(500).json({ error: 'Error interno al guardar en la base de datos.' });
-  } finally {
-    connection.release();
-  }
 });
 
 // POST /api/loans/:loanId/payments
@@ -228,7 +284,7 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
     const { loanId } = req.params;
     const { payment_amount, payment_date, mora_amount, payment_method } = req.body;
 
-    const totalPayment = parseFloat(payment_amount); 
+    const totalPayment = parseFloat(payment_amount);
     const moraToRegister = parseFloat(mora_amount || 0);
     const CiPayment = totalPayment - moraToRegister;
 
@@ -243,25 +299,33 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
         const [loanRows] = await connection.query('SELECT * FROM loans WHERE id = ?', [loanId]);
         if (loanRows.length === 0) {
             await connection.rollback();
+            connection.release();
             return res.status(404).json({ error: 'Préstamo no encontrado.' });
         }
         const loan = loanRows[0];
-        
-        const [paymentsRows] = await connection.query('SELECT SUM(payment_amount) as totalPaid FROM payments WHERE loan_id = ?', [loanId]);
+
+        const [paymentsRows] = await connection.query(
+            'SELECT SUM(payment_amount) as totalPaid FROM payments WHERE loan_id = ?',
+            [loanId]
+        );
         const totalPaid = parseFloat(paymentsRows[0].totalPaid || 0);
         const { totalDue } = calculateSchedule(loan);
-        
+
         const remainingBalanceCI = totalDue - totalPaid;
         const roundedRemainingBalanceCI = parseFloat(remainingBalanceCI.toFixed(2));
 
         if (CiPayment > roundedRemainingBalanceCI) {
             await connection.rollback();
-            return res.status(400).json({ error: `El pago (Capital/Interés) de S/ ${CiPayment.toFixed(2)} excede el saldo pendiente de S/ ${roundedRemainingBalanceCI.toFixed(2)}.` });
+            connection.release();
+            return res.status(400).json({
+                error: `El pago (Capital/Interés) de S/ ${CiPayment.toFixed(2)} excede el saldo pendiente de S/ ${roundedRemainingBalanceCI.toFixed(2)}.`
+            });
         }
 
-        // Registrar el pago en la base de datos
-        await connection.query('INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method) VALUES (?, ?, ?, ?, ?)', 
-            [loanId, totalPayment, payment_date, moraToRegister, payment_method]);
+        await connection.query(
+            'INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method) VALUES (?, ?, ?, ?, ?)',
+            [loanId, totalPayment, payment_date, moraToRegister, payment_method]
+        );
 
         const newTotalPaid = totalPaid + totalPayment;
 
@@ -281,7 +345,6 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
     }
 });
 
-
 // DELETE /api/loans/:loanId
 app.delete('/api/loans/:loanId', async (req, res) => {
     const { loanId } = req.params;
@@ -293,7 +356,8 @@ app.delete('/api/loans/:loanId', async (req, res) => {
 
         if (result.affectedRows === 0) {
             await connection.rollback();
-            return res.status(404).json({ error: 'El préstamo no fue encontrado.' });
+            connection.release();
+            return res.status(404).json({ error: 'Préstamo no fue encontrado.' });
         }
 
         await connection.commit();
@@ -308,160 +372,272 @@ app.delete('/api/loans/:loanId', async (req, res) => {
     }
 });
 
-
 // GET /api/dni/:dni (Ruta Proxy para DNI)
 app.get('/api/dni/:dni', async (req, res) => {
-  const { dni } = req.params;
-  const token = process.env.DNI_API_TOKEN;
+    const { dni } = req.params;
+    const token = process.env.DNI_API_TOKEN;
 
-  if (!token) {
-    return res.status(500).json({ error: 'El token de la API de DNI no está configurado en el servidor.' });
-  }
+    if (!token) {
+        return res.status(500).json({ error: 'El token de la API de DNI no está configurado en el servidor.' });
+    }
 
-  try {
-    const apiResponse = await fetch(`https://dniruc.apisperu.com/api/v1/dni/${dni}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-    const data = await apiResponse.json();
-    res.status(apiResponse.status).json(data);
-  } catch (error) {
-    console.error("Error en el proxy de DNI:", error);
-    res.status(500).json({ error: 'Error interno al consultar la API de DNI.' });
-  }
+    try {
+        const apiResponse = await fetch(`https://dniruc.apisperu.com/api/v1/dni/${dni}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+        const data = await apiResponse.json();
+        res.status(apiResponse.status).json(data);
+    } catch (error) {
+        console.error("Error en el proxy de DNI:", error);
+        res.status(500).json({ error: 'Error interno al consultar la API de DNI.' });
+    }
 });
 
+// ==========================================================
+// 3. RUTAS DE MERCADO PAGO (CORREGIDAS)
+// ==========================================================
 
-// POST /api/flow/create-order (INICIA EL PAGO REAL CON FLOW)
-app.post('/api/flow/create-order', async (req, res) => {
-    const { amount, loanId, clientDni, amount_ci, amount_mora, payment_date } = req.body;
+// POST /api/mp/create-order (CREAR PREFERENCIA DE PAGO)
+app.post('/api/mp/create-order', async (req, res) => {
+    console.log('[MP] 📥 Recibida solicitud de creación de orden:', req.body);
 
+    const { amount, loanId, clientDni, clientName, clientLastName, payment_date, amount_ci, amount_mora } = req.body;
+
+    // Validación de campos
     if (!amount || !loanId || !clientDni) {
-        return res.status(400).json({ error: 'Faltan campos requeridos: amount, loanId y clientDni.' });
+        console.error('[MP ERROR] ❌ Faltan campos requeridos');
+        return res.status(400).json({
+            success: false,
+            error: 'Faltan campos requeridos: amount, loanId, clientDni'
+        });
     }
-    
-    const commerceOrder = `PRESTAPRO-${loanId}-${Date.now()}`;
-    const subject = `Pago Cuota Préstamo ID #${loanId}`;
-    
-    const optionalData = JSON.stringify({ 
-        loanId: loanId, 
-        amount_ci: amount_ci, 
-        amount_mora: amount_mora,
-        payment_date: payment_date 
-    });
 
-    const flowRequest = {
-        apiKey: FLOW_API_KEY,
-        commerceOrder: commerceOrder,
-        subject: subject,
-        amount: amount,
-        email: `${clientDni}@prestapro.com`,
-        urlConfirmation: `${YOUR_BACKEND_URL}/api/flow/webhook`, 
-        urlReturn: `${YOUR_BACKEND_URL}/payment-status.html`, 
-        optional: optionalData,
-        s: 'simulated_signature' 
+    const externalReference = `PRESTAPRO-${loanId}-${Date.now()}`;
+    const totalAmount = parseFloat(amount);
+
+    // Verificar que el monto sea válido
+    if (isNaN(totalAmount) || totalAmount <= 0) {
+        console.error('[MP ERROR] ❌ Monto inválido:', amount);
+        return res.status(400).json({
+            success: false,
+            error: 'El monto debe ser un número válido mayor a 0'
+        });
+    }
+
+    const preferenceData = {
+        items: [
+            {
+                id: loanId.toString(),
+                title: `Pago Préstamo PrestaPro #${loanId}`,
+                description: `Cliente: ${clientName} ${clientLastName}`,
+                quantity: 1,
+                unit_price: totalAmount,
+                currency_id: 'PEN'
+            }
+        ],
+        payer: {
+            name: clientName,
+            surname: clientLastName,
+            identification: {
+                type: 'DNI',
+                number: clientDni
+            }
+        },
+        back_urls: {
+            success: `${YOUR_BACKEND_URL}/payment-status.html?status=success&loanId=${loanId}`,
+            pending: `${YOUR_BACKEND_URL}/payment-status.html?status=pending&loanId=${loanId}`,
+            failure: `${YOUR_BACKEND_URL}/payment-status.html?status=failure&loanId=${loanId}`
+        },
+        external_reference: externalReference,
+        notification_url: `${YOUR_BACKEND_URL}/api/mp/webhook`,
+        auto_return: 'approved',
+        statement_descriptor: 'PRESTAPRO',
+        metadata: {
+            loanId: loanId.toString(),
+            payment_date: payment_date,
+            amount_ci: amount_ci || '0',
+            amount_mora: amount_mora || '0'
+        }
     };
 
     try {
-        console.log(`[FLOW API] Enviando solicitud a Flow para Orden: ${commerceOrder}`);
-        
-        // ** LLAMADA REAL A LA API DE FLOW **
-        const flowResponse = await axios.post(FLOW_ENDPOINT, flowRequest);
+        console.log('[MP] 🚀 Enviando solicitud a Mercado Pago...');
+        console.log('[MP] 📋 Datos de preferencia:', JSON.stringify(preferenceData, null, 2));
 
-        const flowToken = flowResponse.data.token;
-        const flowPaymentUrl = `https://flow.cl/app/payment/start?token=${flowToken}`; 
+        const mpResponse = await fetch(MP_ENDPOINT_BASE, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${MP_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(preferenceData)
+        });
 
-        res.json({ success: true, url: flowPaymentUrl });
+        const mpData = await mpResponse.json();
+        console.log('[MP] 📨 Respuesta de Mercado Pago:', JSON.stringify(mpData, null, 2));
+
+        if (mpResponse.ok && mpData.id) {
+            // Priorizar sandbox en desarrollo, init_point en producción
+            const checkoutUrl = mpData.sandbox_init_point || mpData.init_point;
+
+            if (checkoutUrl) {
+                console.log('[MP] ✅ Orden creada exitosamente');
+                console.log('[MP] 🔗 URL de checkout:', checkoutUrl);
+                console.log('[MP] 🆔 Preference ID:', mpData.id);
+
+                return res.json({
+                    success: true,
+                    url: checkoutUrl,
+                    preferenceId: mpData.id,
+                    externalReference: externalReference
+                });
+            } else {
+                throw new Error("Mercado Pago no devolvió una URL de inicialización válida.");
+            }
+
+        } else {
+            console.error('[MP ERROR] ❌ Respuesta no exitosa:', mpData);
+            throw new Error(mpData.message || JSON.stringify(mpData));
+        }
 
     } catch (error) {
-        // 🚨 CRÍTICO: Devolver el error detallado para depurar
-        let errorMessage = 'Fallo al procesar la orden con Flow.';
-        let statusCode = 500;
-
-        if (error.response) {
-            statusCode = error.response.status;
-            errorMessage = error.response.data || 'Error de API de Flow sin cuerpo.';
-        } else {
-             // Esto ocurre si la conexión a Flow falla completamente (Network/Timeout)
-             errorMessage = `Error de conexión: ${error.message}`;
-             statusCode = 503; // Service Unavailable
-        }
-        
-        console.error(`[FLOW ERROR DETALLE] Estado: ${statusCode}, Mensaje:`, errorMessage);
-        res.status(statusCode).json({ success: false, message: errorMessage, status: statusCode });
+        console.error(`[MP ERROR CRÍTICO] 💥`, error);
+        return res.status(500).json({
+            success: false,
+            error: error.message,
+            details: error.toString()
+        });
     }
 });
 
-// POST /api/flow/webhook (RECIBE CONFIRMACIÓN REAL DE FLOW)
-app.post('/api/flow/webhook', async (req, res) => {
-    const flowData = req.body;
+// POST /api/mp/webhook (RECIBIR NOTIFICACIONES DE MERCADO PAGO)
+app.post('/api/mp/webhook', async (req, res) => {
+    console.log('[MP WEBHOOK] 📥 Recibida notificación completa:', JSON.stringify(req.body, null, 2));
+    console.log('[MP WEBHOOK] 🔍 Query params:', req.query);
 
-    if (!verifyFlowSignature(flowData, FLOW_SECRET)) {
-        return res.status(401).send('Firma de Webhook no válida.');
-    }
+    // 🚨 CRÍTICO: Responder inmediatamente a Mercado Pago
+    res.status(200).send('OK');
 
-    if (flowData.status === 1) { 
+    const notification = req.body;
+
+    // Mercado Pago envía notificaciones de tipo 'payment'
+    if (notification.type === 'payment' && notification.data && notification.data.id) {
+        const paymentId = notification.data.id;
+
         try {
-            const optional = JSON.parse(flowData.optional);
+            console.log('[MP WEBHOOK] 🔎 Consultando detalles del pago ID:', paymentId);
 
-            const paymentData = {
-                payment_amount: parseFloat(flowData.amount), 
-                mora_amount: parseFloat(optional.amount_mora),
-                payment_date: new Date().toISOString().split('T')[0],
-                payment_method: 'Transferencia'
-            };
+            // OBTENER DETALLES COMPLETOS DEL PAGO DESDE MERCADO PAGO
+            const paymentDetailsUrl = `https://api.mercadopago.com/v1/payments/${paymentId}`;
 
-            await registerPaymentInternal(optional.loanId, paymentData); 
-            
-            console.log(`✅ Webhook Exitoso. Pago registrado para Préstamo ID: ${optional.loanId}`);
-            
-            res.status(200).send('OK');
+            const paymentResponse = await fetch(paymentDetailsUrl, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${MP_ACCESS_TOKEN}`,
+                    'Content-Type': 'application/json',
+                }
+            });
 
-        } catch (e) {
-            console.error('Error al procesar datos del webhook:', e);
-            res.status(500).send('Error interno al registrar pago.');
+            if (!paymentResponse.ok) {
+                throw new Error(`Error al obtener detalles del pago: ${paymentResponse.status}`);
+            }
+
+            const paymentData = await paymentResponse.json();
+            console.log('[MP WEBHOOK] 📄 Detalles del pago:', JSON.stringify(paymentData, null, 2));
+
+            // VERIFICAR QUE EL PAGO FUE APROBADO
+            if (paymentData.status === 'approved') {
+                console.log('[MP WEBHOOK] ✅ Pago APROBADO');
+
+                // Extraer el loanId del external_reference (formato: PRESTAPRO-123-1234567890)
+                const externalRef = paymentData.external_reference;
+                const loanId = externalRef ? externalRef.split('-')[1] : null;
+
+                const paymentAmount = paymentData.transaction_amount;
+                const paymentDate = paymentData.date_approved?.split('T')[0] || new Date().toISOString().split('T')[0];
+
+                // Obtener metadata si existe
+                const amountMora = paymentData.metadata?.amount_mora || '0';
+
+                console.log('[MP WEBHOOK] 📊 Datos extraídos:', {
+                    loanId,
+                    paymentAmount,
+                    paymentDate,
+                    amountMora
+                });
+
+                if (loanId && paymentAmount) {
+                    const paymentDataToRegister = {
+                        payment_amount: parseFloat(paymentAmount),
+                        mora_amount: parseFloat(amountMora),
+                        payment_date: paymentDate,
+                        payment_method: 'Mercado Pago'
+                    };
+
+                    await registerPaymentInternal(loanId, paymentDataToRegister);
+                    console.log(`[MP WEBHOOK] ✅ Pago registrado exitosamente para Préstamo ID: ${loanId}`);
+                } else {
+                    console.warn(`[MP WEBHOOK] ⚠️ Datos insuficientes para registrar el pago. ID de Pago: ${paymentId}`);
+                }
+            } else {
+                console.log(`[MP WEBHOOK] ℹ️ Pago no aprobado. Estado: ${paymentData.status}`);
+            }
+
+        } catch (error) {
+            console.error('[MP WEBHOOK ERROR] 💥', error);
         }
-
     } else {
-        res.status(200).send('Estado de pago no exitoso. OK');
+        console.log('[MP WEBHOOK] ℹ️ Notificación ignorada (no es de tipo payment)');
     }
 });
 
-
 // ==========================================================
-// 3. CONFIGURACIÓN FINAL DEL SERVIDOR Y MANEJO DE ESTATICOS
+// 4. CONFIGURACIÓN FINAL DEL SERVIDOR
 // ==========================================================
 
-// Sirve archivos estáticos (index.html, logica.js, diseño.css)
-// La raíz del proyecto es servida para asegurar que el frontend siempre cargue.
-app.use(express.static(path.join(__dirname))); 
+// Sirve archivos estáticos (HTML, CSS, JS)
+app.use(express.static(path.join(__dirname)));
 
+// Ruta para servir el front.html como index
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'front.html'));
+});
 
-// Manejador de errores 404 (Último middleware, captura todo lo que no fue API o archivo estático)
+// Manejador de errores 404
 app.use((req, res, next) => {
-    res.status(404).json({ success: false, message: 'Ruta de API o Recurso no encontrado', endpoint: req.originalUrl });
+    console.log('[404] Ruta no encontrada:', req.originalUrl);
+    res.status(404).json({
+        success: false,
+        message: 'Ruta de API o Recurso no encontrado',
+        endpoint: req.originalUrl
+    });
 });
 
 // INICIO DEL SERVIDOR
 const startServer = async () => {
-  try {
-    const connection = await pool.getConnection();
-    console.log('✅ Conexión a la base de datos establecida con éxito.');
-    connection.release();
+    try {
+        const connection = await pool.getConnection();
+        console.log('✅ Conexión a la base de datos establecida con éxito.');
+        connection.release();
 
-    app.listen(PORT, () => {
-      console.log(`🚀 Servidor PrestaPro escuchando en el puerto ${PORT}`);
-      console.log(`URL de Backend (Flow Webhook): ${YOUR_BACKEND_URL}`);
-    });
+        app.listen(PORT, () => {
+            console.log(`\n${'='.repeat(60)}`);
+            console.log(`🚀 Servidor PrestaPro escuchando en el puerto ${PORT}`);
+            console.log(`📡 URL de Backend: ${YOUR_BACKEND_URL}`);
+            console.log(`💳 Mercado Pago configurado: ${MP_ACCESS_TOKEN ? '✅' : '❌'}`);
+            console.log(`${'='.repeat(60)}\n`);
+        });
 
-  } catch (err) {
-    console.error('❌ No se pudo conectar a la base de datos. Verifica la variable de entorno DATABASE_URL.');
-    console.error(err.message);
-    process.exit(1);
-  }
+    } catch (err) {
+        console.error('❌ No se pudo conectar a la base de datos.');
+        console.error('Verifica la variable de entorno DATABASE_URL.');
+        console.error(err.message);
+        process.exit(1);
+    }
 };
 
 startServer();
