@@ -122,16 +122,16 @@
                 <div class="modal-body">
 
                     <div id="quick-payment-search-section" style="margin-bottom: 25px;">
-                        <h3 style="margin-bottom: 10px; color: var(--secondary-color);">1. Identificar Préstamo</h3>
-                        <div class="form-group" style="max-width: 400px;">
+                        <h3 class="step-header">1. Identificar Préstamo por DNI</h3>
+                        <div class="form-group">
                             <label for="search-dni-pago">DNI del Cliente</label>
                             <input type="text" id="search-dni-pago" placeholder="Ingresa 8 dígitos y presiona Enter" pattern="\d{8}" maxlength="8" inputmode="numeric">
                             <small id="search-dni-status" style="margin-top: 5px; display: block;"></small>
                         </div>
                     </div>
 
-                    <div id="quick-payment-result-section" style="display: none; border-top: 1px solid var(--border-color); padding-top: 20px;">
-                        <h3 style="margin-bottom: 15px; color: var(--secondary-color);">2. Seleccionar Préstamo a Pagar</h3>
+                    <div id="quick-payment-result-section" style="display: none;">
+                        <h3 class="step-header">2. Seleccionar Préstamo Activo</h3>
                         <div class="table-container" style="margin-top: 10px;">
                             <table class="main-table">
                                 <thead><tr><th>Cliente</th><th>Monto Original</th><th>Deuda Pendiente</th><th>Acción</th></tr></thead>
@@ -140,28 +140,29 @@
                         </div>
                     </div>
 
-                    <div id="quick-payment-summary-section" style="display: none; border-top: 1px solid var(--border-color); padding-top: 20px;">
-                        <h3 style="margin-bottom: 15px; color: var(--secondary-color);">3. Resumen y Pago de Cuotas</h3>
+                    <div id="quick-payment-summary-section" style="display: none;">
+                        <h3 class="step-header">3. Configurar y Confirmar Pago</h3>
 
                         <div class="payment-checkout-grid">
 
                             <div class="checkout-actions">
-                                <h4>Seleccionar Cuotas y Monto</h4>
 
                                 <div id="mora-alert-summary" class="alert alert-warning" style="display:none; margin-bottom: 15px; font-size: 13px;">
-                                    <span>⚠️</span> <div>El préstamo tiene cuotas vencidas. ¡Cobre la mora primero!</div>
+                                    <span>⚠️</span> <div>El préstamo tiene cuotas vencidas. ¡La mora se aplicará al total a cobrar!</div>
                                 </div>
+
+                                <h4>Seleccionar Cuotas y Monto</h4>
 
                                 <div class="checkout-installments">
                                     <div class="form-group">
-                                        <label>Selección de Pago</label>
+                                        <label>Tipo de Abono</label>
                                         <select id="payment_selection_type" class="payment-selection-type-select">
                                             <option value="single">Pagar 1 Cuota Pendiente</option>
                                             <option value="multiple">Pagar Múltiples Cuotas</option>
                                         </select>
                                     </div>
 
-                                    <div id="single-payment-info" class="payment-option-detail" style="display: block;">
+                                    <div id="single-payment-info" class="payment-option-detail">
                                         <p>Cuota a vencer o más antigua: <strong id="next_installment_date">N/A</strong></p>
                                         <p>Monto requerido: <strong id="next_installment_amount" style="color: var(--primary-color);">S/ 0.00</strong></p>
                                     </div>
@@ -175,30 +176,28 @@
 
                                     <div class="form-group" style="margin-top: 15px;">
                                         <label for="quick_payment_date">Fecha de Registro</label>
-                                        <input type="date" id="quick_payment_date" required>
+                                        <input type="text" id="quick_payment_date" required readonly>
                                     </div>
-
-                                    <button class="button button-secondary" id="calculatePaymentBtn">Calcular Monto Total</button>
 
                                 </div>
 
-                                <div class="form-group" style="margin-top: 25px;">
-                                    <h4>Selecciona el Método de Pago</h4>
+                                <div class="form-group" style="margin-top: 30px;">
+                                    <h4>Seleccionar Método de Pago</h4>
                                     <div class="form-row payment-methods-row" style="gap: 15px; grid-template-columns: 1fr 1fr 1fr;">
-                                        <div class="checkbox-container payment-method-card" data-method="Efectivo" style="border: 2px solid var(--border-color); padding: 20px; text-align: center;">
-                                            <input type="radio" name="quick_payment_method" id="q_method_cash" value="Efectivo" required style="display:none;">
-                                            <label for="q_method_cash" style="color: var(--secondary-color); font-weight: 600; display: block;">💵 Efectivo</label>
+                                        <div class="checkbox-container payment-method-card" data-method="Efectivo" style="padding: 20px;">
+                                            <input type="radio" name="quick_payment_method" id="q_method_cash" value="Efectivo" required>
+                                            <label for="q_method_cash">💵 Efectivo</label>
                                         </div>
-                                        <div class="checkbox-container payment-method-card" data-method="Transferencia" style="border: 2px solid var(--border-color); padding: 20px; text-align: center;">
-                                            <input type="radio" name="quick_payment_method" id="q_method_transfer" value="Transferencia" required style="display:none;">
-                                            <label for="q_method_transfer" style="color: var(--secondary-color); font-weight: 600; display: block;">💳 Transferencia</label>
+                                        <div class="checkbox-container payment-method-card" data-method="Transferencia" style="padding: 20px;">
+                                            <input type="radio" name="quick_payment_method" id="q_method_transfer" value="Transferencia" required>
+                                            <label for="q_method_transfer">💳 Transferencia</label>
                                         </div>
-                                        <div class="checkbox-container payment-method-card" data-method="Yape/Plin" style="border: 2px solid var(--border-color); padding: 20px; text-align: center;">
-                                            <input type="radio" name="quick_payment_method" id="q_method_yape" value="Yape/Plin" required style="display:none;">
-                                            <label for="q_method_yape" style="color: var(--secondary-color); font-weight: 600; display: block;">📱 Yape/Plin</label>
+                                        <div class="checkbox-container payment-method-card" data-method="Yape/Plin" style="padding: 20px;">
+                                            <input type="radio" name="quick_payment_method" id="q_method_yape" value="Yape/Plin" required>
+                                            <label for="q_method_yape">📱 Yape/Plin</label>
                                         </div>
                                     </div>
-                                    <small style="margin-top: 10px;">*Solo los pagos en **Efectivo** entran en el cuadre de caja diario.</small>
+                                    <small style="margin-top: 10px;">*Solo los pagos en **Efectivo** se consideran para el cuadre de caja diario. Monto máximo Yape/Plin: S/ 500.</small>
                                 </div>
 
                             </div>
@@ -208,13 +207,13 @@
                                 <div class="summary-item"><span>Capital / Interés</span><span id="summary-capital-interest">S/ 0.00</span></div>
                                 <div class="summary-item"><span>Mora Aplicada</span><span id="summary-mora" class="danger">S/ 0.00</span></div>
                                 <div class="summary-separator"></div>
-                                <div class="summary-item summary-total"><span>MONTO A COBRAR</span><span id="summary-total">S/ 0.00</span></div>
+                                <div class="summary-item summary-total"><span>MONTO A COBRAR</span><span id="summary-total" class="receipt-value">S/ 0.00</span></div>
 
-                                <p style="margin-top: 15px; font-size: 13px; color: #9CA3AF;">
-                                    <span id="payment_description">Seleccione una opción de pago y presione "Calcular Monto Total".</span>
+                                <p style="margin-top: 20px; font-size: 13px; color: var(--text-color);">
+                                    <span id="payment_description">Seleccione un tipo de abono, ingrese la fecha y presione "Calcular Monto Total".</span>
                                 </p>
 
-                                <button class="submit-button" id="confirmQuickPaymentBtn" disabled style="margin-top: 25px;">✅ Confirmar Pago</button>
+                                <button class="submit-button" id="confirmQuickPaymentBtn" disabled style="margin-top: 30px;">✅ Confirmar y Procesar Pago</button>
                             </div>
 
                         </div>
