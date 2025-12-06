@@ -323,8 +323,7 @@ function renderCashRegisterTable(movements) {
     movements.forEach(m => {
         const row = document.createElement('tr');
         const dateString = new Date(m.date).toLocaleDateString('es-PE', { timeZone: 'UTC' });
-        const isCash = m.method === 'Efectivo';
-        const methodColor = isCash ? 'var(--success-color)' : 'var(--primary-color)';
+        const methodColor = m.method === 'Efectivo' ? 'var(--success-color)' : 'var(--primary-color)';
 
         row.innerHTML = `
             <td>${dateString}</td>
@@ -660,7 +659,7 @@ async function handlePaymentSubmit(e) {
     const paymentAmount = parseFloat(getDomElement('payment_amount').value);
     const moraAmount = parseFloat(getDomElement('mora_amount').value) || 0;
     const paymentDate = getDomElement('payment_date').value;
-    const totalToCollect = paymentAmount + moraAmount; // Monto total que se enviará a la API
+    const totalToCollect = paymentAmount + moraAmount; // Monto total que se enviará
 
     // Data completa, incluyendo la mora y el método
     const paymentData = {
@@ -670,51 +669,59 @@ async function handlePaymentSubmit(e) {
         payment_date: paymentDate
     };
 
+    // Identificamos el préstamo y cliente para obtener datos necesarios para MP
+    const loan = loans.find(l => l.id == loanId);
+
+    // Si es Transferencia o Yape/Plin, ahora lo mapeamos a Mercado Pago
     if (selectedMethod === 'Transferencia' || selectedMethod === 'Yape/Plin') {
-        // --- INICIO DE FLUJO DE PAGO REAL CON FLOW ---
-        const loan = loans.find(l => l.id == loanId);
+        // --- INICIO DE FLUJO DE PAGO CON MERCADO PAGO ---
+
+        if (!loan) {
+            alert("Error: No se encontró la información del cliente para iniciar el pago.");
+            return;
+        }
 
         try {
-            const response = await fetch(`${API_URL}/api/flow/create-order`, {
+            // 🚨 Llamada a la nueva ruta de Mercado Pago
+            const response = await fetch(`${API_URL}/api/mp/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    // CRÍTICO: Asegurar que los montos sean strings con dos decimales para la API
                     amount: totalToCollect.toFixed(2),
                     loanId: loanId,
                     clientDni: loan.dni,
+                    clientName: loan.nombres,
+                    clientLastName: loan.apellidos,
+                    payment_date: paymentDate,
                     amount_ci: paymentAmount.toFixed(2),
-                    amount_mora: moraAmount.toFixed(2),
-                    payment_date: paymentDate
+                    amount_mora: moraAmount.toFixed(2)
                 })
             });
 
             if (!response.ok) {
-                // Captura el objeto de error para que sea legible
-                let errorDetail = 'Error desconocido del servidor.';
+                let errorData;
                 try {
-                    const errorData = await response.json();
-                    // Este es el objeto que contiene el error 101 de Flow
-                    errorDetail = errorData.error || errorData.message || JSON.stringify(errorData);
+                    errorData = await response.json();
                 } catch (e) {
-                    errorDetail = `Error de formato (Estado: ${response.status} ${response.statusText})`;
+                    errorData = { error: 'Error de formato (Estado: ' + response.status + ' ' + response.statusText + ')', status: response.status };
                 }
-                throw new Error(`(${response.status}) ${errorDetail}`);
+
+                throw new Error(`(${response.status}) ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
             }
 
-            const flowData = await response.json();
-            const flowUrl = flowData.url;
+            const mpData = await response.json();
+            const mpUrl = mpData.url;
 
-            if (flowUrl) {
-                // *** REDIRECCIÓN AL PAGO REAL EN FLOW ***
-                window.location.href = flowUrl;
+            if (mpUrl) {
+                // *** REDIRECCIÓN AL PAGO REAL EN MERCADO PAGO ***
+                window.location.href = mpUrl;
                 return;
             } else {
-                throw new Error("El backend no proporcionó un URL de pago válido.");
+                throw new Error("El backend no proporcionó un URL de pago válido de Mercado Pago.");
             }
 
         } catch (error) {
-            alert(`❌ Error Crítico: No se pudo iniciar el pago con Flow. Detalles: ${error.message}`);
+            alert(`❌ Error al iniciar el pago con Mercado Pago. Detalles: ${error.message}`);
             return;
         }
 
@@ -875,7 +882,6 @@ function togglePaymentOptionDetail() {
     } else if (type === 'multiple') {
         getDomElement('multiple-payment-info').style.display = 'block';
     }
-    // Lógica de pago parcial eliminada
 }
 
 function populateQuickPaymentSummary(loan) {
@@ -1014,50 +1020,53 @@ async function handleQuickPaymentSubmit() {
         payment_date: paymentDate
     };
 
-    // Si es Transferencia o Yape/Plin, se usa Flow.
+    const loan = currentLoanForQuickPayment;
+
+    // Si es Transferencia o Yape/Plin, se usa Mercado Pago.
     if (selectedMethod === 'Transferencia' || selectedMethod === 'Yape/Plin') {
-        // --- INICIO DE FLUJO DE PAGO REAL CON FLOW ---
-        const loan = currentLoanForQuickPayment;
+        // --- INICIO DE FLUJO DE PAGO CON MERCADO PAGO ---
 
         try {
-            const response = await fetch(`${API_URL}/api/flow/create-order`, {
+            // 🚨 Llamada a la nueva ruta de Mercado Pago
+            const response = await fetch(`${API_URL}/api/mp/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     amount: totalToCollect.toFixed(2),
                     loanId: loan.id,
                     clientDni: loan.dni,
+                    clientName: loan.nombres,
+                    clientLastName: loan.apellidos,
+                    payment_date: paymentDate,
                     amount_ci: calculatedPaymentData.amount.toFixed(2),
-                    amount_mora: calculatedPaymentData.mora.toFixed(2),
-                    payment_date: paymentDate
+                    amount_mora: calculatedPaymentData.mora.toFixed(2)
                 })
             });
 
             if (!response.ok) {
-                // Captura el objeto de error para que sea legible
-                let errorDetail = 'Error desconocido del servidor.';
+                let errorData;
                 try {
-                    const errorData = await response.json();
-                    errorDetail = errorData.error || errorData.message || JSON.stringify(errorData);
+                    errorData = await response.json();
                 } catch (e) {
-                    errorDetail = `Error de formato (Estado: ${response.status} ${response.statusText})`;
+                    errorData = { error: 'Error de formato (Estado: ' + response.status + ' ' + response.statusText + ')', status: response.status };
                 }
-                throw new Error(`(${response.status}) ${errorDetail}`);
+
+                throw new Error(`(${response.status}) ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
             }
 
-            const flowData = await response.json();
-            const flowUrl = flowData.url;
+            const mpData = await response.json();
+            const mpUrl = mpData.url;
 
-            if (flowUrl) {
-                // *** REDIRECCIÓN AL PAGO REAL EN FLOW ***
-                window.location.href = flowUrl;
+            if (mpUrl) {
+                // *** REDIRECCIÓN AL PAGO REAL EN MERCADO PAGO ***
+                window.location.href = mpUrl;
                 return;
             } else {
-                throw new Error("El backend no proporcionó un URL de pago válido.");
+                throw new Error("El backend no proporcionó un URL de pago válido de Mercado Pago.");
             }
 
         } catch (error) {
-            alert(`❌ Error Crítico: No se pudo iniciar el pago con Flow. Detalles: ${error.message}`);
+            alert(`❌ Error al iniciar el pago con Mercado Pago. Detalles: ${error.message}`);
             return;
         }
 
