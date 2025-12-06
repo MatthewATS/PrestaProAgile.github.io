@@ -705,7 +705,7 @@ async function handlePaymentSubmit(e) {
                 } catch (e) {
                     errorData = { error: 'Error de formato (Estado: ' + response.status + ' ' + response.statusText + ')', status: response.status };
                 }
-                
+
                 // Muestra un mensaje genérico, evitando la confusión con Flow
                 throw new Error(`(${response.status}) Ruta no encontrada o error de Mercado Pago. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
             }
@@ -1268,7 +1268,7 @@ function renderHistoryTable() {
             finalStatusClass = 'status-paid';
         }
 
-        // Renderizado de botones de acción
+        // Renderizado de botones de acción (MODIFICADO: Se eliminó el botón Pagar)
         row.innerHTML = `
             <td>${loan.nombres} ${loan.apellidos}${pepLabel}${hibridoLabel}</td>
             <td><strong>S/ ${parseFloat(loan.monto).toFixed(2)}</strong></td>
@@ -1283,7 +1283,6 @@ function renderHistoryTable() {
             <td>
                 <div class="action-buttons">
                     <button class="button button-secondary view-details-btn" data-loan-id="${loan.id}">👁️ Detalles</button>
-                    <button class="button button-success register-payment-btn" data-loan-id="${loan.id}" ${payButtonDisabled}>💳 Pagar</button>
                     <button class="button button-danger delete-loan-btn" data-loan-id="${loan.id}">🗑️ Eliminar</button>
                 </div>
             </td>
