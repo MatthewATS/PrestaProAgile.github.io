@@ -682,7 +682,7 @@ async function handlePaymentSubmit(e) {
         }
 
         try {
-            // 🚨 Llamada a la nueva ruta de Mercado Pago
+            // 🚨 Llamada a la ruta correcta de Mercado Pago
             const response = await fetch(`${API_URL}/api/mp/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -705,8 +705,9 @@ async function handlePaymentSubmit(e) {
                 } catch (e) {
                     errorData = { error: 'Error de formato (Estado: ' + response.status + ' ' + response.statusText + ')', status: response.status };
                 }
-
-                throw new Error(`(${response.status}) ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
+                
+                // Muestra un mensaje genérico, evitando la confusión con Flow
+                throw new Error(`(${response.status}) Ruta no encontrada o error de Mercado Pago. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
             }
 
             const mpData = await response.json();
@@ -780,7 +781,7 @@ function initQuickPaymentListeners() {
 
     quickPaymentTableBody?.addEventListener('click', function(event) {
         const target = event.target.closest('button');
-        if (!target || !target.classList.contains('register-payment-btn')) return;
+        if (!target) return;
 
         const loanId = target.getAttribute('data-loan-id');
         const loan = loans.find(l => l.id == loanId);
@@ -1027,7 +1028,7 @@ async function handleQuickPaymentSubmit() {
         // --- INICIO DE FLUJO DE PAGO CON MERCADO PAGO ---
 
         try {
-            // 🚨 Llamada a la nueva ruta de Mercado Pago
+            // 🚨 Llamada a la ruta correcta de Mercado Pago
             const response = await fetch(`${API_URL}/api/mp/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1051,7 +1052,7 @@ async function handleQuickPaymentSubmit() {
                     errorData = { error: 'Error de formato (Estado: ' + response.status + ' ' + response.statusText + ')', status: response.status };
                 }
 
-                throw new Error(`(${response.status}) ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
+                throw new Error(`(${response.status}) Ruta no encontrada o error de Mercado Pago. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
             }
 
             const mpData = await response.json();
