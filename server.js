@@ -21,9 +21,8 @@ const pool = mysql.createPool(process.env.DATABASE_URL);
 const TASA_INTERES_ANUAL = 10;
 const TASA_MORA_MENSUAL = 1;
 
-// 🚨 CREDENCIALES DE MERCADO PAGO PROPORCIONADAS 🚨
-// NOTA: Se usa el Access Token para las llamadas de backend (API)
-const MP_ACCESS_TOKEN = 'APP_USR-8502136350427147-120617-fa6ecd27bc6386be9c1bd34ed3db33dd-3044195674'; 
+// 🚨 CREDENCIALES DE MERCADO PAGO DE PRODUCCIÓN 🚨
+const MP_ACCESS_TOKEN = 'APP_USR-1246920437893290-120617-768190e0a707195da7806e0964a2f70a-3045510589'; 
 const MP_PUBLIC_KEY = 'APP_USR-11b6bf25-952a-4b6e-a2e1-f2d387b9c8d8'; 
 const MP_ENDPOINT_BASE = 'https://api.mercadopago.com/checkout/preferences';
 
@@ -31,7 +30,7 @@ const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithu
 
 
 // ==========================================================
-// 1. UTILIDADES DE CÁLCULO Y DB (Mantenidas)
+// 1. UTILIDADES DE CÁLCULO Y DB
 // ==========================================================
 
 function calculateSchedule(loan) {
@@ -111,8 +110,17 @@ async function registerPaymentInternal(loanId, paymentData) {
 
         const finalMethod = payment_method || 'Mercado Pago'; 
 
-        await connection.query('INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method) VALUES (?, ?, ?, ?, ?)',
-            [loanId, payment_amount, payment_date, mora_amount, finalMethod]);
+        console.log(`[PAYMENT INTERNAL] Registrando pago para préstamo ${loanId}:`, {
+            payment_amount,
+            payment_date,
+            mora_amount,
+            payment_method: finalMethod
+        });
+
+        await connection.query(
+            'INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method) VALUES (?, ?, ?, ?, ?)',
+            [loanId, payment_amount, payment_date, mora_amount, finalMethod]
+        );
 
         // Verificar si el préstamo está totalmente pagado
         const [paymentsRows] = await connection.query(
@@ -132,12 +140,14 @@ async function registerPaymentInternal(loanId, paymentData) {
 
 
         await connection.commit();
-        connection.release();
+        console.log(`[PAYMENT INTERNAL] ✅ Pago registrado exitosamente`);
 
     } catch (e) {
         await connection.rollback();
-        connection.release();
+        console.error(`[PAYMENT INTERNAL ERROR]`, e);
         throw e;
+    } finally {
+        connection.release();
     }
 }
 
@@ -155,12 +165,14 @@ app.get('/api/loans', async (req, res) => {
                 l.tipo_calculo, l.meses_solo_interes,
                 c.dni, c.nombres, c.apellidos, c.is_pep
             FROM loans l
-                     JOIN clients c ON l.client_id = c.id
+            JOIN clients c ON l.client_id = c.id
             ORDER BY l.fecha DESC, l.id DESC;
         `;
         const [loans] = await pool.query(loanQuery);
 
-        const [payments] = await pool.query('SELECT loan_id, payment_amount, payment_date, mora_amount, payment_method FROM payments ORDER BY payment_date ASC');
+        const [payments] = await pool.query(
+            'SELECT loan_id, payment_amount, payment_date, mora_amount, payment_method FROM payments ORDER BY payment_date ASC'
+        );
 
         const loansWithPayments = loans.map(loan => {
             const { totalDue } = calculateSchedule(loan);
@@ -379,7 +391,7 @@ app.get('/api/dni/:dni', async (req, res) => {
         const data = await apiResponse.json();
         res.status(apiResponse.status).json(data);
     } catch (error) {
-        console.error("Error en el proxy de DNI:", error);
+        console.error("ERROR en el proxy de DNI:", error);
         res.status(500).json({ error: 'Error interno al consultar la API de DNI.' });
     }
 });
@@ -408,7 +420,7 @@ app.post('/api/mp/create-order', async (req, res) => {
 
     // Verificar que el monto sea válido
     if (isNaN(totalAmount) || totalAmount <= 0) {
-        console.error('[MP ERROR] ❌ Monto inválido');
+        console.error('[MP ERROR] ❌ Monto inválido:', amount);
         return res.status(400).json({
             success: false,
             error: 'El monto debe ser un número válido mayor a 0'
@@ -420,7 +432,7 @@ app.post('/api/mp/create-order', async (req, res) => {
             {
                 id: loanId.toString(),
                 title: `Pago Préstamo PrestaPro #${loanId}`,
-                description: `Cuota Capital/Interés: S/ ${amount_ci} | Mora: S/ ${amount_mora}`,
+                description: `Cliente: ${clientName} ${clientLastName}`,
                 quantity: 1,
                 unit_price: totalAmount,
                 currency_id: 'PEN'
@@ -439,8 +451,8 @@ app.post('/api/mp/create-order', async (req, res) => {
             pending: `${YOUR_BACKEND_URL}/payment-status.html?status=pending&loanId=${loanId}`,
             failure: `${YOUR_BACKEND_URL}/payment-status.html?status=failure&loanId=${loanId}`
         },
-        external_reference: externalReference, 
-        notification_url: `${YOUR_BACKEND_URL}/api/mp/webhook`, 
+        external_reference: externalReference,
+        notification_url: `${YOUR_BACKEND_URL}/api/mp/webhook`,
         auto_return: 'approved',
         statement_descriptor: 'PRESTAPRO',
         metadata: {
@@ -466,8 +478,9 @@ app.post('/api/mp/create-order', async (req, res) => {
         const mpData = await mpResponse.json();
 
         if (mpResponse.ok && mpData.id) {
-            const checkoutUrl = mpData.sandbox_init_point || mpData.init_point;
-            
+            // Mercado Pago en producción usa init_point
+            const checkoutUrl = mpData.init_point; 
+
             if (checkoutUrl) {
                 console.log('[MP] ✅ Orden creada exitosamente');
                 return res.json({
@@ -477,11 +490,16 @@ app.post('/api/mp/create-order', async (req, res) => {
                     externalReference: externalReference
                 });
             } else {
-                throw new Error("Mercado Pago no devolvió una URL de inicialización válida.");
+                // Esto podría ocurrir si hay problemas de configuración de URLs en MP Dashboard
+                throw new Error("Mercado Pago no devolvió una URL de inicialización válida. Revise su configuración de URLs de retorno.");
             }
 
         } else {
             console.error('[MP ERROR] ❌ Respuesta no exitosa:', mpData);
+            // Si el error es de autenticación (401), se captura aquí.
+            if (mpResponse.status === 401) {
+                throw new Error("Error de Autenticación (401). Revise su Access Token de Producción.");
+            }
             throw new Error(mpData.message || JSON.stringify(mpData));
         }
 
@@ -495,17 +513,22 @@ app.post('/api/mp/create-order', async (req, res) => {
     }
 });
 
+
 // POST /api/mp/webhook (RECIBIR NOTIFICACIONES DE MERCADO PAGO)
 app.post('/api/mp/webhook', async (req, res) => {
+    // 🚨 CRÍTICO: Responder inmediatamente a Mercado Pago
     res.status(200).send('OK');
 
     const notification = req.body;
     
+    // MP envia notificaciones de tipo 'payment'
     if (notification.type === 'payment' && notification.data && notification.data.id) {
         const paymentId = notification.data.id;
         
         try {
-            // 🚨 CONSULTAR DETALLES COMPLETOS DEL PAGO DESDE MERCADO PAGO
+            console.log('[MP WEBHOOK] 🔎 Consultando detalles del pago ID:', paymentId);
+
+            // OBTENER DETALLES COMPLETOS DEL PAGO DESDE MERCADO PAGO
             const paymentDetailsUrl = `https://api.mercadopago.com/v1/payments/${paymentId}`;
 
             const paymentResponse = await fetch(paymentDetailsUrl, {
@@ -522,11 +545,11 @@ app.post('/api/mp/webhook', async (req, res) => {
 
             const paymentData = await paymentResponse.json();
 
-            // VERIFICAR QUE EL PAGO FUE APROBADO
+            // VERIFICAR QUE EL PAGO FUE APROBADO (status 'approved')
             if (paymentData.status === 'approved') {
                 console.log('[MP WEBHOOK] ✅ Pago APROBADO');
 
-                // Extraer loanId y montos del external_reference o metadata
+                // Extraer loanId del external_reference (formato: PRESTAPRO-123-1234567890)
                 const externalRef = paymentData.external_reference;
                 const loanId = externalRef ? externalRef.split('-')[1] : null;
 
@@ -562,7 +585,6 @@ app.post('/api/mp/webhook', async (req, res) => {
 
 // Sirve archivos estáticos (HTML, CSS, JS)
 app.use(express.static(path.join(__dirname)));
-
 
 // Ruta para servir el front.html como index
 app.get('/', (req, res) => {
