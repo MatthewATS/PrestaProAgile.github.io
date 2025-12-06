@@ -21,19 +21,17 @@ const pool = mysql.createPool(process.env.DATABASE_URL);
 const TASA_INTERES_ANUAL = 10;
 const TASA_MORA_MENSUAL = 1;
 
-// 🚨 ACCESS TOKEN DE MERCADO PAGO
-const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN || 'APP_USR-8502136350427147-120617-fa6ecd27bc6386be9c1bd34ed3db33dd-3044195674';
-
-// URL base de la API de Mercado Pago
+// 🚨 CREDENCIALES DE MERCADO PAGO PROPORCIONADAS 🚨
+// NOTA: Se usa el Access Token para las llamadas de backend (API)
+const MP_ACCESS_TOKEN = 'APP_USR-8502136350427147-120617-fa6ecd27bc6386be9c1bd34ed3db33dd-3044195674'; 
+const MP_PUBLIC_KEY = 'APP_USR-11b6bf25-952a-4b6e-a2e1-f2d387b9c8d8'; 
 const MP_ENDPOINT_BASE = 'https://api.mercadopago.com/checkout/preferences';
 
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app';
 
-console.log(`[CONFIG] Backend URL: ${YOUR_BACKEND_URL}`);
-console.log(`[CONFIG] Mercado Pago Token configurado: ${MP_ACCESS_TOKEN ? '✅' : '❌'}`);
 
 // ==========================================================
-// 1. UTILIDADES DE CÁLCULO Y DB
+// 1. UTILIDADES DE CÁLCULO Y DB (Mantenidas)
 // ==========================================================
 
 function calculateSchedule(loan) {
@@ -111,19 +109,10 @@ async function registerPaymentInternal(loanId, paymentData) {
         await connection.beginTransaction();
         const { payment_amount, payment_date, mora_amount, payment_method } = paymentData;
 
-        const finalMethod = payment_method || 'Mercado Pago';
+        const finalMethod = payment_method || 'Mercado Pago'; 
 
-        console.log(`[PAYMENT INTERNAL] Registrando pago para préstamo ${loanId}:`, {
-            payment_amount,
-            payment_date,
-            mora_amount,
-            payment_method: finalMethod
-        });
-
-        await connection.query(
-            'INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method) VALUES (?, ?, ?, ?, ?)',
-            [loanId, payment_amount, payment_date, mora_amount, finalMethod]
-        );
+        await connection.query('INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method) VALUES (?, ?, ?, ?, ?)',
+            [loanId, payment_amount, payment_date, mora_amount, finalMethod]);
 
         // Verificar si el préstamo está totalmente pagado
         const [paymentsRows] = await connection.query(
@@ -141,17 +130,17 @@ async function registerPaymentInternal(loanId, paymentData) {
             console.log(`[PAYMENT INTERNAL] ✅ Préstamo ${loanId} marcado como PAGADO`);
         }
 
+
         await connection.commit();
-        console.log(`[PAYMENT INTERNAL] ✅ Pago registrado exitosamente`);
+        connection.release();
 
     } catch (e) {
         await connection.rollback();
-        console.error(`[PAYMENT INTERNAL ERROR]`, e);
-        throw e;
-    } finally {
         connection.release();
+        throw e;
     }
 }
+
 
 // ==========================================================
 // 2. RUTAS API
@@ -166,14 +155,12 @@ app.get('/api/loans', async (req, res) => {
                 l.tipo_calculo, l.meses_solo_interes,
                 c.dni, c.nombres, c.apellidos, c.is_pep
             FROM loans l
-            JOIN clients c ON l.client_id = c.id
+                     JOIN clients c ON l.client_id = c.id
             ORDER BY l.fecha DESC, l.id DESC;
         `;
         const [loans] = await pool.query(loanQuery);
 
-        const [payments] = await pool.query(
-            'SELECT loan_id, payment_amount, payment_date, mora_amount, payment_method FROM payments ORDER BY payment_date ASC'
-        );
+        const [payments] = await pool.query('SELECT loan_id, payment_amount, payment_date, mora_amount, payment_method FROM payments ORDER BY payment_date ASC');
 
         const loansWithPayments = loans.map(loan => {
             const { totalDue } = calculateSchedule(loan);
@@ -398,7 +385,7 @@ app.get('/api/dni/:dni', async (req, res) => {
 });
 
 // ==========================================================
-// 3. RUTAS DE MERCADO PAGO (CORREGIDAS)
+// 3. RUTAS DE MERCADO PAGO
 // ==========================================================
 
 // POST /api/mp/create-order (CREAR PREFERENCIA DE PAGO)
@@ -421,7 +408,7 @@ app.post('/api/mp/create-order', async (req, res) => {
 
     // Verificar que el monto sea válido
     if (isNaN(totalAmount) || totalAmount <= 0) {
-        console.error('[MP ERROR] ❌ Monto inválido:', amount);
+        console.error('[MP ERROR] ❌ Monto inválido');
         return res.status(400).json({
             success: false,
             error: 'El monto debe ser un número válido mayor a 0'
@@ -433,7 +420,7 @@ app.post('/api/mp/create-order', async (req, res) => {
             {
                 id: loanId.toString(),
                 title: `Pago Préstamo PrestaPro #${loanId}`,
-                description: `Cliente: ${clientName} ${clientLastName}`,
+                description: `Cuota Capital/Interés: S/ ${amount_ci} | Mora: S/ ${amount_mora}`,
                 quantity: 1,
                 unit_price: totalAmount,
                 currency_id: 'PEN'
@@ -452,8 +439,8 @@ app.post('/api/mp/create-order', async (req, res) => {
             pending: `${YOUR_BACKEND_URL}/payment-status.html?status=pending&loanId=${loanId}`,
             failure: `${YOUR_BACKEND_URL}/payment-status.html?status=failure&loanId=${loanId}`
         },
-        external_reference: externalReference,
-        notification_url: `${YOUR_BACKEND_URL}/api/mp/webhook`,
+        external_reference: externalReference, 
+        notification_url: `${YOUR_BACKEND_URL}/api/mp/webhook`, 
         auto_return: 'approved',
         statement_descriptor: 'PRESTAPRO',
         metadata: {
@@ -466,7 +453,6 @@ app.post('/api/mp/create-order', async (req, res) => {
 
     try {
         console.log('[MP] 🚀 Enviando solicitud a Mercado Pago...');
-        console.log('[MP] 📋 Datos de preferencia:', JSON.stringify(preferenceData, null, 2));
 
         const mpResponse = await fetch(MP_ENDPOINT_BASE, {
             method: 'POST',
@@ -478,17 +464,12 @@ app.post('/api/mp/create-order', async (req, res) => {
         });
 
         const mpData = await mpResponse.json();
-        console.log('[MP] 📨 Respuesta de Mercado Pago:', JSON.stringify(mpData, null, 2));
 
         if (mpResponse.ok && mpData.id) {
-            // Priorizar sandbox en desarrollo, init_point en producción
             const checkoutUrl = mpData.sandbox_init_point || mpData.init_point;
-
+            
             if (checkoutUrl) {
                 console.log('[MP] ✅ Orden creada exitosamente');
-                console.log('[MP] 🔗 URL de checkout:', checkoutUrl);
-                console.log('[MP] 🆔 Preference ID:', mpData.id);
-
                 return res.json({
                     success: true,
                     url: checkoutUrl,
@@ -516,22 +497,15 @@ app.post('/api/mp/create-order', async (req, res) => {
 
 // POST /api/mp/webhook (RECIBIR NOTIFICACIONES DE MERCADO PAGO)
 app.post('/api/mp/webhook', async (req, res) => {
-    console.log('[MP WEBHOOK] 📥 Recibida notificación completa:', JSON.stringify(req.body, null, 2));
-    console.log('[MP WEBHOOK] 🔍 Query params:', req.query);
-
-    // 🚨 CRÍTICO: Responder inmediatamente a Mercado Pago
     res.status(200).send('OK');
 
     const notification = req.body;
-
-    // Mercado Pago envía notificaciones de tipo 'payment'
+    
     if (notification.type === 'payment' && notification.data && notification.data.id) {
         const paymentId = notification.data.id;
-
+        
         try {
-            console.log('[MP WEBHOOK] 🔎 Consultando detalles del pago ID:', paymentId);
-
-            // OBTENER DETALLES COMPLETOS DEL PAGO DESDE MERCADO PAGO
+            // 🚨 CONSULTAR DETALLES COMPLETOS DEL PAGO DESDE MERCADO PAGO
             const paymentDetailsUrl = `https://api.mercadopago.com/v1/payments/${paymentId}`;
 
             const paymentResponse = await fetch(paymentDetailsUrl, {
@@ -547,28 +521,18 @@ app.post('/api/mp/webhook', async (req, res) => {
             }
 
             const paymentData = await paymentResponse.json();
-            console.log('[MP WEBHOOK] 📄 Detalles del pago:', JSON.stringify(paymentData, null, 2));
 
             // VERIFICAR QUE EL PAGO FUE APROBADO
             if (paymentData.status === 'approved') {
                 console.log('[MP WEBHOOK] ✅ Pago APROBADO');
 
-                // Extraer el loanId del external_reference (formato: PRESTAPRO-123-1234567890)
+                // Extraer loanId y montos del external_reference o metadata
                 const externalRef = paymentData.external_reference;
                 const loanId = externalRef ? externalRef.split('-')[1] : null;
 
                 const paymentAmount = paymentData.transaction_amount;
                 const paymentDate = paymentData.date_approved?.split('T')[0] || new Date().toISOString().split('T')[0];
-
-                // Obtener metadata si existe
                 const amountMora = paymentData.metadata?.amount_mora || '0';
-
-                console.log('[MP WEBHOOK] 📊 Datos extraídos:', {
-                    loanId,
-                    paymentAmount,
-                    paymentDate,
-                    amountMora
-                });
 
                 if (loanId && paymentAmount) {
                     const paymentDataToRegister = {
@@ -580,8 +544,6 @@ app.post('/api/mp/webhook', async (req, res) => {
 
                     await registerPaymentInternal(loanId, paymentDataToRegister);
                     console.log(`[MP WEBHOOK] ✅ Pago registrado exitosamente para Préstamo ID: ${loanId}`);
-                } else {
-                    console.warn(`[MP WEBHOOK] ⚠️ Datos insuficientes para registrar el pago. ID de Pago: ${paymentId}`);
                 }
             } else {
                 console.log(`[MP WEBHOOK] ℹ️ Pago no aprobado. Estado: ${paymentData.status}`);
@@ -590,10 +552,9 @@ app.post('/api/mp/webhook', async (req, res) => {
         } catch (error) {
             console.error('[MP WEBHOOK ERROR] 💥', error);
         }
-    } else {
-        console.log('[MP WEBHOOK] ℹ️ Notificación ignorada (no es de tipo payment)');
     }
 });
+
 
 // ==========================================================
 // 4. CONFIGURACIÓN FINAL DEL SERVIDOR
@@ -601,6 +562,7 @@ app.post('/api/mp/webhook', async (req, res) => {
 
 // Sirve archivos estáticos (HTML, CSS, JS)
 app.use(express.static(path.join(__dirname)));
+
 
 // Ruta para servir el front.html como index
 app.get('/', (req, res) => {
