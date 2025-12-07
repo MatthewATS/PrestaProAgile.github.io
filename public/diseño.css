@@ -1308,11 +1308,27 @@ small {
     }
 }
 
-/* --- ESTILOS DE CHECKOUT TIPO STEAM PARA MÓDULO DE PAGOS RÁPIDO --- */
+/* --- ESTILOS DE CHECKOUT TIPO STEAM PARA MÓDULO DE PAGOS RÁPIDO (MEJORADO) --- */
+
+.step-header {
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--primary-color);
+    font-size: 18px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#quick-payment-search-section .form-group {
+    max-width: 400px;
+}
 
 .payment-checkout-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr; /* Dos columnas para resumen y acciones */
+    grid-template-columns: 1.5fr 1fr; /* 60/40 para más espacio a las acciones */
     gap: 30px;
     align-items: flex-start;
 }
@@ -1323,31 +1339,38 @@ small {
     }
 }
 
+.checkout-actions {
+    padding-right: 15px; /* Separación visual en desktop */
+}
+
 .checkout-summary {
-    background-color: var(--input-bg); /* Fondo sutil para el resumen */
-    padding: 20px;
-    border-radius: 10px;
-    border: 1px solid var(--primary-light);
-    box-shadow: var(--shadow-sm);
+    background-color: var(--primary-light); /* Fondo más contrastante para el resumen */
+    padding: 25px;
+    border-radius: 12px;
+    border: 1px solid var(--primary-color);
+    box-shadow: var(--shadow-lg);
+    position: sticky; /* Sticky para que se quede en pantalla si hay scroll */
+    top: 20px;
 }
 
 .checkout-summary h4 {
-    color: var(--primary-color);
-    font-size: 16px;
+    color: var(--secondary-color);
+    font-size: 18px;
     margin-bottom: 15px;
-    border-bottom: 1px solid var(--border-color);
     padding-bottom: 10px;
+    border-bottom: 1px solid var(--primary-dark);
 }
 
 .summary-item {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 8px;
-    font-size: 15px;
+    margin-bottom: 12px;
+    font-size: 16px;
 }
 
 .summary-item span:first-child {
-    color: #9CA3AF;
+    color: var(--secondary-color);
+    font-weight: 500;
 }
 
 .summary-item .danger {
@@ -1356,37 +1379,70 @@ small {
 }
 
 .summary-separator {
-    border-top: 1px dashed var(--light-gray);
+    border-top: 2px dashed var(--border-color);
     margin: 15px 0;
 }
 
 .summary-total {
-    font-size: 18px;
+    font-size: 24px; /* Más grande */
     font-weight: 700;
     color: var(--success-color);
     padding-top: 5px;
 }
 
-.checkout-actions h4 {
-    color: var(--secondary-color);
-    font-size: 16px;
-    margin-bottom: 15px;
+.summary-total .receipt-value {
+    font-size: 24px;
 }
 
 /* Estilo para la tarjeta de método de pago seleccionada */
 .payment-methods-row .checkbox-container {
     transition: all 0.2s ease;
+    cursor: pointer;
+    text-align: center;
+    border: 2px solid var(--border-color) !important;
+}
+
+.payment-methods-row .checkbox-container:hover {
+    border-color: var(--light-gray) !important;
 }
 
 .payment-methods-row .checkbox-container:has(input:checked) {
-    border-color: var(--primary-color) !important;
-    background-color: var(--primary-light) !important;
+    border-color: var(--success-color) !important; /* Resaltar con éxito/primary */
+    background-color: var(--bg-secondary) !important;
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(93, 136, 255, 0.2);
 }
 
+.payment-methods-row .checkbox-container input[type="radio"] {
+    display: none;
+}
+
 .payment-methods-row .checkbox-container label {
+    margin-bottom: 0;
     cursor: pointer;
+    display: block;
+}
+
+/* Detalle de opción de pago (cuotas) */
+.payment-option-detail {
+    background-color: var(--input-bg);
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid var(--light-gray);
+    margin-top: 15px;
+}
+
+/* Estilo para la tabla de resultados de búsqueda */
+#quick-payment-result-section {
+    border-top: 2px solid var(--primary-light);
+    padding-top: 20px;
+    margin-bottom: 30px;
+}
+
+/* Estilo para el botón Seleccionar */
+#quickPaymentTableBody .button-primary {
+    padding: 8px 14px;
+    font-size: 13px;
 }
 
 /* === LOGIN Y ERRORES (Adaptación al tema oscuro) === */
