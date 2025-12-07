@@ -4,6 +4,9 @@ const VALOR_UIT = 5150;
 const TASA_INTERES_ANUAL = 10;
 const TASA_MORA_MENSUAL = 1; // 1% de mora por mes
 const MP_LIMIT_YAPE = 500; // Nuevo límite para Yape/Plin
+const RUC_EMPRESA = '20609939521'; // RUC de ejemplo
+const RAZON_SOCIAL_EMPRESA = 'PRESTAPRO S.A.C.';
+const DIRECCION_EMPRESA = 'Av. Javier Prado Este 123, San Isidro';
 
 let loans = [];
 let clients = new Set();
@@ -336,52 +339,79 @@ function initReceiptButtonListeners() {
 }
 
 function filterCashRegister() {
-    // 🚨 CRÍTICO: Se filtra solo por pagos que no sean de Mercado Pago, ya que los de MP (Transferencia, Yape)
-    // NO son ingresos de caja en efectivo. Solo 'Efectivo' cuenta para el cuadre diario.
-    const allMovements = getMovementsByDateRange(getDomElement('cashRegisterDateFrom').value, getDomElement('cashRegisterDateTo').value, null);
+    const dateFrom = getDomElement('cashRegisterDateFrom').value;
+    const dateTo = getDomElement('cashRegisterDateTo').value;
+
+    const allMovements = getMovementsByDateRange(dateFrom, dateTo, null);
     const cashMovements = allMovements.filter(m => m.method === 'Efectivo');
 
     const totalAllIngresos = allMovements.reduce((sum, m) => sum + m.total, 0);
     const totalCashIngresos = cashMovements.reduce((sum, m) => sum + m.total, 0);
 
+    // Agrupar movimientos por fecha
+    const dailyMovements = {};
+    allMovements.forEach(m => {
+        const dateString = new Date(m.date).toISOString().split('T')[0];
+        if (!dailyMovements[dateString]) {
+            dailyMovements[dateString] = {
+                date: dateString,
+                cash: 0,
+                transfer: 0,
+                mp: 0,
+                total: 0
+            };
+        }
+        if (m.method === 'Efectivo') {
+            dailyMovements[dateString].cash += m.total;
+        } else if (m.method === 'Transferencia' || m.method === 'Yape/Plin') {
+            dailyMovements[dateString].transfer += m.total;
+        } else {
+            dailyMovements[dateString].mp += m.total; // Incluir pagos de Mercado Pago no registrados como Transferencia/Yape (webhook)
+        }
+        dailyMovements[dateString].total += m.total;
+    });
+
+    const dailySummary = Object.values(dailyMovements).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // Mostrar el resumen del rango
     const summaryContent = `
-        <p><strong>Total de Ingresos (Calculado):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalAllIngresos.toFixed(2)}</span></p>
+        <p><strong>Total de Ingresos (Caja + Transferencias):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalAllIngresos.toFixed(2)}</span></p>
         <p><strong>Ingreso Neto en Efectivo (Cuadre):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalCashIngresos.toFixed(2)}</span></p>
-        <p style="border-top: 1px solid var(--border-color); padding-top: 5px; margin-top: 10px;"><strong>Diferencia:</strong> N/A</p>
+        <p style="border-top: 1px solid var(--border-color); padding-top: 5px; margin-top: 10px;"><strong>Diferencia:</strong> N/A (Solo aplicable al cierre diario)</p>
     `;
     getDomElement('cashRegisterSummary').innerHTML = summaryContent;
-    getDomElement('dailySquareSection').style.display = (getDomElement('cashRegisterDateFrom').value === getDomElement('cashRegisterDateTo').value) ? 'block' : 'none';
 
-    renderCashRegisterTable(allMovements);
+    // Control de la sección de cuadre diario
+    const isDaily = dateFrom === dateTo;
+    getDomElement('dailySquareSection').style.display = isDaily ? 'block' : 'none';
+    getDomElement('dailySquareSection').querySelector('h3').textContent = `Cierre de Caja Diario (${new Date(dateFrom).toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })})`;
+
+    // Resetear el input y mensaje
+    getDomElement('declaredAmount').value = totalCashIngresos.toFixed(2);
+    getDomElement('squareValidationMessage').style.display = 'none';
+
+    renderCashRegisterTable(dailySummary);
 }
 
-function renderCashRegisterTable(movements) {
+function renderCashRegisterTable(dailySummary) {
     const tbody = getDomElement('cashRegisterTableBody');
     if (!tbody) return;
     tbody.innerHTML = '';
-    if (movements.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #9CA3AF;">No se encontraron movimientos.</td></tr>';
+    if (dailySummary.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #9CA3AF;">No se encontraron movimientos.</td></tr>';
         return;
     }
 
-    movements.sort((a, b) => b.date - a.date).forEach(m => {
+    dailySummary.forEach(m => {
         const row = document.createElement('tr');
         const dateString = new Date(m.date).toLocaleDateString('es-PE', { timeZone: 'UTC' });
 
-        let methodColor;
-        // Si el pago es en efectivo, se usa verde, si es Mercado Pago (Transferencia, Yape, MP), se usa azul
-        const methodDisplay = (m.method === 'Transferencia' || m.method === 'Yape/Plin') ? 'Mercado Pago' : m.method;
-
-        if (m.method === 'Efectivo') { methodColor = 'var(--success-color)'; }
-        else { methodColor = 'var(--primary-color)'; }
-
         row.innerHTML = `
             <td>${dateString}</td>
-            <td>${m.client}</td>
-            <td>S/ ${m.amount.toFixed(2)}</td>
-            <td style="color: var(--danger-color); font-weight: 500;">S/ ${m.mora.toFixed(2)}</td>
-            <td style="font-weight: 600; color: ${methodColor};">${methodDisplay}</td>
-            <td style="font-weight: 600; color: var(--success-color);">S/ ${m.total.toFixed(2)}</td>
+            <td style="color: var(--success-color); font-weight: 600;">S/ ${m.cash.toFixed(2)}</td>
+            <td style="color: var(--primary-color); font-weight: 600;">S/ ${m.transfer.toFixed(2)}</td>
+            <td style="color: #9CA3AF;">S/ ${(m.total - m.cash - m.transfer).toFixed(2)}</td>
+            <td style="font-weight: 700; color: var(--success-color);">S/ ${m.total.toFixed(2)}</td>
         `;
         tbody.appendChild(row);
     });
@@ -405,7 +435,7 @@ function getMovementsByDateRange(dateFrom, dateTo, methodFilter = null) {
                         amount: parseFloat(p.payment_amount) - (parseFloat(p.mora_amount) || 0),
                         mora: parseFloat(p.mora_amount || 0),
                         total: parseFloat(p.payment_amount),
-                        method: method
+                        method: method // Mantener el método original para el filtro
                     });
                 }
             });
@@ -416,7 +446,32 @@ function getMovementsByDateRange(dateFrom, dateTo, methodFilter = null) {
 }
 
 function saveDailySquare() {
-    alert('La función de Cuadre de Caja aún está en desarrollo. Los datos se basan en la simulación.');
+    const date = getDomElement('cashRegisterDateFrom').value;
+    const declaredAmount = parseFloat(getDomElement('declaredAmount').value);
+    const validationMessage = getDomElement('squareValidationMessage');
+    validationMessage.style.display = 'block';
+
+    if (getDomElement('cashRegisterDateFrom').value !== getDomElement('cashRegisterDateTo').value) {
+        validationMessage.className = 'alert alert-danger';
+        validationMessage.innerHTML = '<span>❌</span> Solo se puede realizar el cierre de caja para **un único día** (Fecha Desde = Fecha Hasta).';
+        return;
+    }
+
+    const allMovements = getMovementsByDateRange(date, date, null);
+    const cashMovements = allMovements.filter(m => m.method === 'Efectivo');
+    const totalCashIngresos = cashMovements.reduce((sum, m) => sum + m.total, 0);
+
+    const difference = declaredAmount - totalCashIngresos;
+
+    if (Math.abs(difference) < 0.01) {
+        // Simulación de cierre de caja exitoso
+        validationMessage.className = 'alert alert-success';
+        validationMessage.innerHTML = `<span>✅</span> <strong>¡Caja Cuadrada!</strong> El monto declarado (S/ ${declaredAmount.toFixed(2)}) coincide con el sistema. Cierre de caja registrado para el día ${new Date(date).toLocaleDateString('es-PE')}.`;
+        getDomElement('saveDailySquareBtn').disabled = true;
+    } else {
+        validationMessage.className = 'alert alert-danger';
+        validationMessage.innerHTML = `<span>❌</span> <strong>¡Descuadre!</strong> El monto declarado (S/ ${declaredAmount.toFixed(2)}) no coincide con el ingreso en efectivo del sistema (S/ ${totalCashIngresos.toFixed(2)}). <br><strong>Diferencia:</strong> S/ ${difference.toFixed(2)}. Corrija el monto antes de cerrar.`;
+    }
 }
 
 
@@ -1492,89 +1547,167 @@ function showReceipt(payment, loan) {
     const moraPagada = parseFloat(payment.mora_amount || 0);
     const capitalInteresPagado = totalPagado - moraPagada;
     const paymentMethod = payment.payment_method || 'Efectivo';
-    const transactionId = payment.transaction_id || Math.floor(Math.random() * 1000000);
+    const transactionId = payment.transaction_id || `TRX-${Math.floor(Math.random() * 90000000) + 10000000}`; // ID de Transacción aleatorio
+    const correlativo = Math.floor(Math.random() * 999999) + 1;
     const paymentDate = new Date(payment.payment_date).toLocaleDateString('es-PE', { timeZone: 'UTC' });
 
+    // Cálculo simple de Impuestos (simulación)
+    const valorVenta = capitalInteresPagado; // El capital/interés es la base
+    const IGV = 0.00; // Asumimos que los servicios de préstamo están exentos/no aplican IGV en esta simulación.
+    const importeTotal = totalPagado;
+    const subtotal = importeTotal - IGV;
+
     receiptContent.innerHTML = `
-        <div class="receipt-header">
-            <h2>🧾 COMPROBANTE DE PAGO</h2>
-            <p class="receipt-number">N° Transacción: ${transactionId} | Préstamo ID: ${loan.id}</p>
-        </div>
-        
-        <div class="receipt-section">
-            <h3>👤 Cliente</h3>
-            <div class="receipt-row"><span class="receipt-label">Nombre Completo:</span><span class="receipt-value">${loan.nombres} ${loan.apellidos}</span></div>
-            <div class="receipt-row"><span class="receipt-label">DNI:</span><span class="receipt-value">${loan.dni}</span></div>
-        </div>
-        
-        <div class="receipt-section">
-            <h3>💰 Resumen del Pago</h3>
-            <div class="receipt-row"><span class="receipt-label">Fecha de Pago:</span><span class="receipt-value">${paymentDate}</span></div>
-            <div class="receipt-row"><span class="receipt-label">Método de Pago:</span><span class="receipt-value">${paymentMethod}</span></div>
-            <div class="receipt-row"><span class="receipt-label">Aplicado a Capital/Interés:</span><span class="receipt-value">S/ ${capitalInteresPagado.toFixed(2)}</span></div>
-            <div class="receipt-row"><span class="receipt-label">Aplicado a Mora:</span><span class="receipt-value" style="color: ${moraPagada > 0 ? 'var(--danger-color)' : 'var(--text-color)'};">S/ ${moraPagada.toFixed(2)}</span></div>
-        </div>
+        <div class="receipt-container" style="padding: 0;">
+            <div class="receipt-header sunat-header">
+                <div class="sunat-ruc-box">
+                    <strong>R.U.C. N° ${RUC_EMPRESA}</strong>
+                    <h3 style="color: var(--primary-color); margin: 5px 0 0 0;">BOLETA DE VENTA ELECTRÓNICA</h3>
+                    <p style="margin: 0;">B001 - N° ${correlativo.toString().padStart(8, '0')}</p>
+                </div>
+                <div class="sunat-company-info">
+                    <p style="font-weight: 700; margin: 0;">${RAZON_SOCIAL_EMPRESA}</p>
+                    <p style="font-size: 13px; margin: 0;">${DIRECCION_EMPRESA}</p>
+                    <p style="font-size: 13px; margin: 0;">PRESTAMO DE DINERO</p>
+                </div>
+            </div>
+            
+            <div class="receipt-section" style="padding: 15px 20px;">
+                <h4 style="margin-bottom: 5px; color: var(--secondary-color);">DATOS DEL CLIENTE</h4>
+                <div class="receipt-row"><span class="receipt-label">DNI/RUC:</span><span class="receipt-value">${loan.dni}</span></div>
+                <div class="receipt-row"><span class="receipt-label">Cliente:</span><span class="receipt-value">${loan.nombres} ${loan.apellidos}</span></div>
+                <div class="receipt-row"><span class="receipt-label">Fecha de Emisión:</span><span class="receipt-value">${paymentDate}</span></div>
+            </div>
+            
+            <div class="receipt-section" style="padding: 15px 20px;">
+                <h4 style="margin-bottom: 5px; color: var(--secondary-color);">DETALLE DE LA OPERACIÓN</h4>
+                <table class="receipt-detail-table" style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                    <thead>
+                        <tr style="background-color: var(--input-bg);">
+                            <th style="padding: 8px; text-align: left;">DESCRIPCIÓN</th>
+                            <th style="padding: 8px; text-align: right;">VALOR VENTA</th>
+                            <th style="padding: 8px; text-align: right;">IMPORTE</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="padding: 8px; border-bottom: 1px solid var(--light-gray);">Amortización Cápital/Interés Préstamo #${loan.id}</td>
+                            <td style="padding: 8px; text-align: right; border-bottom: 1px solid var(--light-gray);">S/ ${valorVenta.toFixed(2)}</td>
+                            <td style="padding: 8px; text-align: right; border-bottom: 1px solid var(--light-gray);">S/ ${capitalInteresPagado.toFixed(2)}</td>
+                        </tr>
+                        ${moraPagada > 0 ? `
+                        <tr>
+                            <td style="padding: 8px; border-bottom: 1px solid var(--light-gray); color: var(--danger-color);">Mora / Penalidad por Atraso</td>
+                            <td style="padding: 8px; text-align: right; border-bottom: 1px solid var(--light-gray);">S/ 0.00</td>
+                            <td style="padding: 8px; text-align: right; border-bottom: 1px solid var(--light-gray); color: var(--danger-color);">S/ ${moraPagada.toFixed(2)}</td>
+                        </tr>` : ''}
+                    </tbody>
+                </table>
+            </div>
 
-        <div class="receipt-total">
-            <span class="receipt-label">TOTAL RECIBIDO:</span>
-            <span class="receipt-value">S/ ${totalPagado.toFixed(2)}</span>
-        </div>
+            <div style="display: flex; justify-content: flex-end; padding: 15px 20px 0 20px;">
+                <div style="width: 50%; max-width: 300px;">
+                    <div class="summary-item"><span>SUBTOTAL</span><span class="receipt-value">S/ ${subtotal.toFixed(2)}</span></div>
+                    <div class="summary-item"><span>IGV (0%)</span><span class="receipt-value">S/ ${IGV.toFixed(2)}</span></div>
+                    <div class="summary-item summary-total" style="border-top: 2px solid var(--primary-color);"><span>IMPORTE TOTAL</span><span class="receipt-value" style="color: var(--success-color);">S/ ${importeTotal.toFixed(2)}</span></div>
+                </div>
+            </div>
 
-        <div class="receipt-footer">
-            <p>Recibo generado digitalmente por PrestaPro. Tiene validez sin firma.</p>
-            <p>Gracias por su preferencia.</p>
+            <div class="receipt-footer" style="padding: 10px 20px;">
+                <p style="margin: 5px 0; font-weight: 500;">Monto en Letras: ${numeroALetras(importeTotal)} SOLES</p>
+                <p style="margin: 5px 0;">Método de Pago: ${paymentMethod}. Transacción: ${transactionId}</p>
+                <p style="margin: 5px 0; font-size: 10px;">Representación impresa de la Boleta de Venta Electrónica. Puede verificar este documento en la web de SUNAT (Simulación).</p>
+            </div>
         </div>
     `;
 
     openModal(getDomElement('receiptModal'));
-    currentReceiptData = { payment, loan, totalPagado, paymentMethod, capitalInteresPagado, moraPagada };
+    currentReceiptData = { payment, loan, totalPagado, paymentMethod, capitalInteresPagado, moraPagada, transactionId, correlativo };
+}
+
+function numeroALetras(num) {
+    if (!/^\d+(\.\d{1,2})?$/.test(num)) return "CERO CON 00/100";
+    const [entero, decimal] = num.toFixed(2).split('.').map(s => parseInt(s));
+    // Simulación de una librería compleja. Se deja solo el principio y el final.
+    const letras = entero > 0 ? 'MONTO EN LETRAS SIMULADO' : 'CERO';
+    return `${letras} CON ${decimal.toString().padStart(2, '0')}/100`;
 }
 
 function downloadReceipt() {
     if (!currentReceiptData) return;
 
-    const { loan, totalPagado, paymentMethod, capitalInteresPagado, moraPagada, payment } = currentReceiptData;
+    const { loan, totalPagado, paymentMethod, capitalInteresPagado, moraPagada, payment, transactionId, correlativo } = currentReceiptData;
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     const paymentDate = new Date(payment.payment_date).toLocaleDateString('es-PE', { timeZone: 'UTC' });
 
-    doc.setFontSize(22); doc.setTextColor(93, 136, 255); doc.text("RECIBO DE PAGO", 105, 20, { align: 'center' });
-    doc.setFontSize(10); doc.setTextColor(156, 163, 175); doc.text(`N° Transacción: ${Math.floor(Math.random() * 1000000)} | Préstamo ID: ${loan.id}`, 105, 30, { align: 'center' });
+    const valorVenta = capitalInteresPagado;
+    const IGV = 0.00;
+    const importeTotal = totalPagado;
+    const subtotal = importeTotal - IGV;
 
-    let finalY = 40;
+    let finalY = 20;
 
-    doc.setFontSize(14); doc.setTextColor(93, 136, 255); doc.text("👤 Cliente", 14, finalY); finalY += 8;
-    doc.setFontSize(11); doc.setTextColor(229, 231, 235);
-    doc.text(`Nombre Completo: ${loan.nombres} ${loan.apellidos}`, 14, finalY); finalY += 7;
-    doc.text(`DNI: ${loan.dni}`, 14, finalY); finalY += 15;
+    // --- ENCABEZADO SUNAT SIMULADO ---
+    doc.setFontSize(10); doc.setTextColor(52, 64, 84); doc.text(RAZON_SOCIAL_EMPRESA, 105, finalY, { align: 'center' });
+    finalY += 5;
+    doc.setFontSize(8); doc.setTextColor(100, 100, 100); doc.text(DIRECCION_EMPRESA, 105, finalY, { align: 'center' });
+    finalY += 5;
 
-    doc.setFontSize(14); doc.setTextColor(93, 136, 255); doc.text("💰 Resumen del Pago", 14, finalY); finalY += 8;
+    doc.setFillColor(93, 136, 255); doc.rect(140, finalY, 60, 20, 'F');
+    doc.setFontSize(10); doc.setTextColor(255, 255, 255); doc.text("R.U.C. N° " + RUC_EMPRESA, 170, finalY + 4, { align: 'center' });
+    doc.setFontSize(12); doc.setTextColor(255, 255, 255); doc.text("BOLETA DE VENTA ELECTRÓNICA", 170, finalY + 9, { align: 'center' });
+    doc.setFontSize(10); doc.setTextColor(255, 255, 255); doc.text("B001 - N° " + correlativo.toString().padStart(8, '0'), 170, finalY + 14, { align: 'center' });
+    finalY += 25;
+
+    // --- DATOS DEL CLIENTE ---
+    doc.setFontSize(10); doc.setTextColor(52, 64, 84); doc.text("DATOS DEL CLIENTE", 14, finalY); finalY += 5;
+    doc.setFontSize(9); doc.setTextColor(100, 100, 100);
+    doc.text(`DNI/RUC: ${loan.dni}`, 14, finalY);
+    doc.text(`Cliente: ${loan.nombres} ${loan.apellidos}`, 105, finalY); finalY += 5;
+    doc.text(`Fecha de Emisión: ${paymentDate}`, 14, finalY); finalY += 10;
+
+
+    // --- DETALLE DE LA OPERACIÓN (Tabla) ---
+    doc.setFontSize(10); doc.setTextColor(52, 64, 84); doc.text("DETALLE DE LA OPERACIÓN", 14, finalY); finalY += 5;
 
     const tableData = [
-        ['Fecha de Pago', paymentDate],
-        ['Método de Pago', paymentMethod],
-        ['Aplicado a Capital/Interés', `S/ ${capitalInteresPagado.toFixed(2)}`],
-        ['Aplicado a Mora', `S/ ${moraPagada.toFixed(2)}`],
+        ['Amortización Cápital/Interés Préstamo', `S/ ${valorVenta.toFixed(2)}`, `S/ ${capitalInteresPagado.toFixed(2)}`],
     ];
+    if (moraPagada > 0) {
+        tableData.push(['Mora / Penalidad por Atraso', `S/ 0.00`, `S/ ${moraPagada.toFixed(2)}`]);
+    }
 
     doc.autoTable({
-        startY: finalY + 5,
-        head: [['Concepto', 'Monto']],
+        startY: finalY + 2,
+        head: [['DESCRIPCIÓN', 'VALOR VENTA', 'IMPORTE']],
         body: tableData,
         theme: 'grid',
-        headStyles: { fillColor: [55, 65, 81], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 11 },
-        bodyStyles: { fontSize: 10, textColor: [52, 64, 84] },
-        columnStyles: { 1: { halign: 'right' } }
+        headStyles: { fillColor: [55, 65, 81], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+        bodyStyles: { fontSize: 8, textColor: [52, 64, 84] },
+        columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } }
     });
-    finalY = doc.lastAutoTable.finalY + 10;
+    finalY = doc.lastAutoTable.finalY;
 
-    doc.setFontSize(16); doc.setTextColor(93, 136, 255);
-    doc.text(`TOTAL RECIBIDO: S/ ${totalPagado.toFixed(2)}`, 14, finalY); finalY += 15;
+    // --- RESUMEN DE MONTOS ---
+    finalY += 5;
+    doc.setFontSize(9); doc.setTextColor(52, 64, 84);
+    doc.text(`SUBTOTAL: S/ ${subtotal.toFixed(2)}`, 140, finalY, { align: 'right' }); finalY += 5;
+    doc.text(`IGV (0%): S/ ${IGV.toFixed(2)}`, 140, finalY, { align: 'right' }); finalY += 5;
 
-    doc.setFontSize(8); doc.setTextColor(150, 150, 150);
-    doc.text('Recibo generado digitalmente por PrestaPro. Tiene validez sin firma.', 105, 280, { align: 'center' });
+    doc.setFontSize(12); doc.setTextColor(76, 175, 80);
+    doc.text(`IMPORTE TOTAL: S/ ${importeTotal.toFixed(2)}`, 140, finalY, { align: 'right' }); finalY += 10;
 
-    const fileName = `Recibo_Pago_${loan.apellidos}_${paymentDate.replace(/\//g, '-')}.pdf`;
+    // --- FOOTER ---
+    doc.setFontSize(9); doc.setTextColor(100, 100, 100);
+    doc.text(`Monto en Letras: ${numeroALetras(importeTotal)} SOLES`, 14, finalY); finalY += 5;
+    doc.text(`Método de Pago: ${paymentMethod}. Transacción: ${transactionId}`, 14, finalY); finalY += 5;
+
+    doc.setFontSize(7); doc.setTextColor(150, 150, 150);
+    doc.text('Representación impresa de la Boleta de Venta Electrónica. Puede verificar este documento en la web de SUNAT (Simulación).', 105, 280, { align: 'center' });
+
+
+    const fileName = `Boleta_B001-${correlativo.toString().padStart(8, '0')}.pdf`;
     doc.save(fileName);
 }
 
