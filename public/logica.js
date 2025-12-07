@@ -11,6 +11,8 @@ let currentLoanForDetails = null;
 let currentLoanForQuickPayment = null;
 let calculatedPaymentData = { amount: 0, mora: 0 }; // Guarda el último cálculo flexible
 let currentReceiptData = null;
+let currentMpUrl = null; // Almacena el URL de Mercado Pago generado
+let currentClientName = null; // Almacena el nombre del cliente para el mensaje compartido
 
 // --- CREDENCIALES (SIMULACIÓN) ---
 let currentUser = 'admin';
@@ -36,6 +38,19 @@ function closeModal(modal) {
         calculatedPaymentData = { amount: 0, mora: 0 };
     }
     if (modal.id === 'deleteConfirmationModal') getDomElement('delete-error-message').style.display = 'none';
+    if (modal.id === 'checkoutLinkModal') {
+        currentMpUrl = null;
+        currentClientName = null;
+        // Reiniciar la vista del módulo de pagos después de cerrar el link de checkout
+        if (getDomElement('module-pagos')?.classList.contains('active')) {
+            getDomElement('search-dni-pago').value = '';
+            getDomElement('search-dni-status').textContent = '';
+            getDomElement('quick-payment-result-section').style.display = 'none';
+            getDomElement('quick-payment-summary-section').style.display = 'none';
+            getDomElement('quickPaymentTableBody').innerHTML = '<tr><td colspan="4" style="text-align: center; color: #9CA3AF;">Busca un DNI para encontrar préstamos.</td></tr>';
+            currentLoanForQuickPayment = null;
+        }
+    }
 }
 
 function showSuccessAnimation(message) {
@@ -80,6 +95,13 @@ function initializeApp() {
 
     const moduleCards = document.querySelectorAll('.module-card');
     const backToMenuBtn = getDomElement('backToMenuBtn');
+
+    // Nuevo Modal Link
+    getDomElement('closeCheckoutLinkModalBtn')?.addEventListener('click', () => closeModal(getDomElement('checkoutLinkModal')));
+    getDomElement('copyLinkBtn')?.addEventListener('click', copyMpLink);
+    // CRÍTICO: Cambio de listener de 'openLinkInNewTabBtn' a 'shareMpLinkBtn'
+    getDomElement('shareMpLinkBtn')?.addEventListener('click', shareMpLink);
+
 
     // --- FUNCIÓN DE MOSTRAR APLICACIÓN ---
     const showApp = () => {
@@ -228,7 +250,7 @@ function initializeApp() {
         if (target.classList.contains('view-details-btn')) {
             populateDetailsModal(loan);
         } else if (target.classList.contains('register-payment-btn')) {
-            openPaymentModal(loan);
+            // openPaymentModal(loan); // Deshabilitado, el pago se hace desde el módulo 'pagos'
         } else if (target.classList.contains('delete-loan-btn')) {
             getDomElement('deleteLoanId').value = loan.id;
             getDomElement('deleteModalTitle').textContent = `⚠️ Confirmar Eliminación - ${loan.apellidos}`;
@@ -260,6 +282,20 @@ function handleDeleteSubmit(e) {
     }
 }
 
+async function deleteLoan(loanId) {
+    try {
+        const response = await fetch(`${API_URL}/api/loans/${loanId}`, { method: 'DELETE' });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `Error ${response.status}`);
+        }
+        await fetchAndRenderLoans();
+        showSuccessAnimation('¡Préstamo Eliminado!');
+    } catch (error) {
+        alert(`No se pudo eliminar el préstamo: ${error.message}`);
+    }
+}
+
 
 // --- LÓGICA DE CUADRE DE CAJA (Mínima) ---
 function openCashRegister() {
@@ -272,6 +308,8 @@ function openCashRegister() {
 function initCashRegisterListeners() {
     getDomElement('filterCashRegisterBtn')?.addEventListener('click', filterCashRegister);
     getDomElement('saveDailySquareBtn')?.addEventListener('click', saveDailySquare);
+    getDomElement('exportCashRegisterBtn')?.addEventListener('click', () => alert('Exportar a PDF: Función en desarrollo.'));
+    getDomElement('printCashRegisterBtn')?.addEventListener('click', () => alert('Imprimir: Función en desarrollo.'));
 }
 
 function initReceiptButtonListeners() {
@@ -298,16 +336,21 @@ function initReceiptButtonListeners() {
 }
 
 function filterCashRegister() {
+    // 🚨 CRÍTICO: Se filtra solo por pagos que no sean de Mercado Pago, ya que los de MP (Transferencia, Yape)
+    // NO son ingresos de caja en efectivo. Solo 'Efectivo' cuenta para el cuadre diario.
     const allMovements = getMovementsByDateRange(getDomElement('cashRegisterDateFrom').value, getDomElement('cashRegisterDateTo').value, null);
+    const cashMovements = allMovements.filter(m => m.method === 'Efectivo');
 
     const totalAllIngresos = allMovements.reduce((sum, m) => sum + m.total, 0);
+    const totalCashIngresos = cashMovements.reduce((sum, m) => sum + m.total, 0);
+
     const summaryContent = `
         <p><strong>Total de Ingresos (Calculado):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalAllIngresos.toFixed(2)}</span></p>
-        <p><strong>Ingreso Declarado (En Efectivo):</strong> N/A</p>
+        <p><strong>Ingreso Neto en Efectivo (Cuadre):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalCashIngresos.toFixed(2)}</span></p>
         <p style="border-top: 1px solid var(--border-color); padding-top: 5px; margin-top: 10px;"><strong>Diferencia:</strong> N/A</p>
     `;
     getDomElement('cashRegisterSummary').innerHTML = summaryContent;
-    getDomElement('dailySquareSection').style.display = 'none';
+    getDomElement('dailySquareSection').style.display = (getDomElement('cashRegisterDateFrom').value === getDomElement('cashRegisterDateTo').value) ? 'block' : 'none';
 
     renderCashRegisterTable(allMovements);
 }
@@ -321,17 +364,23 @@ function renderCashRegisterTable(movements) {
         return;
     }
 
-    movements.forEach(m => {
+    movements.sort((a, b) => b.date - a.date).forEach(m => {
         const row = document.createElement('tr');
         const dateString = new Date(m.date).toLocaleDateString('es-PE', { timeZone: 'UTC' });
-        const methodColor = m.method === 'Efectivo' ? 'var(--success-color)' : 'var(--primary-color)';
+
+        let methodColor;
+        // Si el pago es en efectivo, se usa verde, si es Mercado Pago (Transferencia, Yape, MP), se usa azul
+        const methodDisplay = (m.method === 'Transferencia' || m.method === 'Yape/Plin') ? 'Mercado Pago' : m.method;
+
+        if (m.method === 'Efectivo') { methodColor = 'var(--success-color)'; }
+        else { methodColor = 'var(--primary-color)'; }
 
         row.innerHTML = `
             <td>${dateString}</td>
             <td>${m.client}</td>
             <td>S/ ${m.amount.toFixed(2)}</td>
-            <td style="color: var(--warning-color); font-weight: 500;">S/ ${m.mora.toFixed(2)}</td>
-            <td style="font-weight: 600; color: ${methodColor};">${m.method}</td>
+            <td style="color: var(--danger-color); font-weight: 500;">S/ ${m.mora.toFixed(2)}</td>
+            <td style="font-weight: 600; color: ${methodColor};">${methodDisplay}</td>
             <td style="font-weight: 600; color: var(--success-color);">S/ ${m.total.toFixed(2)}</td>
         `;
         tbody.appendChild(row);
@@ -611,7 +660,7 @@ function openPaymentModal(loan) {
     const moraInfo = calculateMora(loan);
 
     // 2. Llenar campos
-    paymentDateInput.value = new Date().toISOString().split('T')[0];
+    paymentDateInput.value = getTodayDateISO(); // Usa la función auxiliar
 
     paymentAmountInput.value = remainingCapitalInterest.toFixed(2);
     paymentAmountInput.min = remainingCapitalInterest > 0 ? '0.01' : '0.00';
@@ -647,6 +696,64 @@ function openPaymentModal(loan) {
     openModal(getDomElement('paymentModal'));
 }
 
+// NUEVA FUNCIÓN: Muestra el modal del enlace de pago
+function showCheckoutLinkModal(mpUrl, totalAmount, paymentMethod, clientName) {
+    currentMpUrl = mpUrl;
+    currentClientName = clientName;
+    getDomElement('checkoutLinkAmount').textContent = `S/ ${totalAmount.toFixed(2)}`;
+    getDomElement('checkoutLinkMethod').textContent = paymentMethod;
+    getDomElement('mpLinkOutput').value = mpUrl;
+
+    // Asegurarse de que el input esté enfocado para copiar si es posible
+    const linkInput = getDomElement('mpLinkOutput');
+    linkInput.select();
+    linkInput.setSelectionRange(0, 99999);
+
+    // Verificar si la API de compartir está disponible para habilitar el botón
+    const shareBtn = getDomElement('shareMpLinkBtn');
+    if (navigator.share) {
+        shareBtn.disabled = false;
+        shareBtn.textContent = '🔗 Compartir Enlace';
+    } else {
+        shareBtn.disabled = true;
+        shareBtn.textContent = '❌ Compartir No Disp.';
+    }
+
+    openModal(getDomElement('checkoutLinkModal'));
+}
+
+function copyMpLink() {
+    const linkInput = getDomElement('mpLinkOutput');
+    linkInput.select();
+    linkInput.setSelectionRange(0, 99999);
+    navigator.clipboard.writeText(linkInput.value);
+    showSuccessAnimation('✅ Enlace copiado al portapapeles.');
+}
+
+// NUEVA FUNCIÓN: Utiliza la API nativa de compartir
+async function shareMpLink() {
+    if (!navigator.share || !currentMpUrl) {
+        alert('La función de compartir no está disponible en este dispositivo o navegador.');
+        return;
+    }
+
+    try {
+        await navigator.share({
+            title: `Pago Préstamo PrestaPro (S/ ${getDomElement('checkoutLinkAmount').textContent})`,
+            text: `¡Hola ${currentClientName || 'cliente'}! Tu enlace de pago para PrestaPro ha sido generado. Paga S/ ${getDomElement('checkoutLinkAmount').textContent} usando este link:`,
+            url: currentMpUrl,
+        });
+        // Opcional: Mostrar una animación de éxito aquí si la compartición fue exitosa (aunque la API de Share no lo garantiza)
+    } catch (error) {
+        if (error.name !== 'AbortError') {
+            console.error('Error al compartir:', error);
+            // Si falla la API nativa, se recomienda al usuario copiar
+            alert("No se pudo iniciar la función de compartir. Por favor, utiliza el botón 'Copiar Enlace' para enviarlo manualmente.");
+        }
+    }
+}
+
+
 async function handlePaymentSubmit(e) {
     e.preventDefault();
 
@@ -657,6 +764,7 @@ async function handlePaymentSubmit(e) {
     }
 
     const loanId = getDomElement('paymentLoanId').value;
+    // paymentAmount es Capital + Interés
     const paymentAmount = parseFloat(getDomElement('payment_amount').value);
     const moraAmount = parseFloat(getDomElement('mora_amount').value) || 0;
     const paymentDate = getDomElement('payment_date').value;
@@ -664,7 +772,8 @@ async function handlePaymentSubmit(e) {
 
     // Data completa, incluyendo la mora y el método
     const paymentData = {
-        payment_amount: totalToCollect, // Total que se envía
+        // 🚨 CRÍTICO: payment_amount debe ser el total (CI + MORA) para el backend
+        payment_amount: totalToCollect,
         mora_amount: moraAmount,
         payment_method: selectedMethod,
         payment_date: paymentDate
@@ -682,6 +791,13 @@ async function handlePaymentSubmit(e) {
             return;
         }
 
+        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollect.toFixed(2)} mediante Mercado Pago para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
+            return;
+        }
+
+        // Cerrar el modal actual de registro de pago
+        closeModal(getDomElement('paymentModal'));
+
         try {
             // 🚨 Llamada a la ruta correcta de Mercado Pago
             const response = await fetch(`${API_URL}/api/mp/create-order`, {
@@ -694,7 +810,7 @@ async function handlePaymentSubmit(e) {
                     clientName: loan.nombres,
                     clientLastName: loan.apellidos,
                     payment_date: paymentDate,
-                    amount_ci: paymentAmount.toFixed(2),
+                    amount_ci: paymentAmount.toFixed(2), // Solo Capital/Interés
                     amount_mora: moraAmount.toFixed(2)
                 })
             });
@@ -706,17 +822,15 @@ async function handlePaymentSubmit(e) {
                 } catch (e) {
                     errorData = { error: 'Error de formato (Estado: ' + response.status + ' ' + response.statusText + ')', status: response.status };
                 }
-
-                // Muestra un mensaje genérico, evitando la confusión con Flow
-                throw new Error(`(${response.status}) Ruta no encontrada o error de Mercado Pago. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
+                throw new Error(`(${response.status}) Error de Mercado Pago. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
             }
 
             const mpData = await response.json();
             const mpUrl = mpData.url;
 
             if (mpUrl) {
-                // *** REDIRECCIÓN AL PAGO REAL EN MERCADO PAGO ***
-                window.location.href = mpUrl;
+                // *** CRÍTICO: Muestra el link en un modal en lugar de redirigir ***
+                showCheckoutLinkModal(mpUrl, totalToCollect, selectedMethod, `${loan.nombres} ${loan.apellidos}`);
                 return;
             } else {
                 throw new Error("El backend no proporcionó un URL de pago válido de Mercado Pago.");
@@ -724,6 +838,7 @@ async function handlePaymentSubmit(e) {
 
         } catch (error) {
             alert(`❌ Error al iniciar el pago con Mercado Pago. Detalles: ${error.message}`);
+            // openModal(getDomElement('paymentModal')); // Opcional: Reabrir si quieres que el usuario intente de nuevo
             return;
         }
 
@@ -751,6 +866,7 @@ async function handlePaymentSubmit(e) {
             }
 
             const loan = loans.find(l => l.id == loanId);
+            // Mostrar recibo con la data de pago que SÍ se registró
             showReceipt(paymentData, loan);
 
             await fetchAndRenderLoans();
@@ -768,8 +884,6 @@ function initQuickPaymentListeners() {
     const confirmQuickPaymentBtn = getDomElement('confirmQuickPaymentBtn');
     const paymentSelectionType = getDomElement('payment_selection_type');
     const numInstallmentsInput = getDomElement('num_installments_to_pay');
-
-    // El botón 'calculatePaymentBtn' ya no existe en el HTML.
 
     searchDniInput?.addEventListener('input', (e) => { e.target.value = e.target.value.replace(/[^0-9]/g, ''); });
 
@@ -903,15 +1017,18 @@ function populateQuickPaymentSummary(loan) {
 
     // **MODIFICACIÓN 1: Establecer la fecha actual y mantenerla como string (DD/MM/YYYY)**
     const today = new Date();
+    // Utiliza el formato no editable, pero la función getTodayDateISO() genera el formato ISO para el backend
     const formattedDate = today.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
     getDomElement('quick_payment_date').value = formattedDate;
 
     const moraInfo = calculateMora(loan);
     const { schedule } = calculateSchedule(loan);
 
+    // Las cuotas pendientes son aquellas cuya expectativa acumulada es mayor al total pagado
     const pendingInstallments = schedule.filter(item => {
-        const cumulativeExpected = schedule.slice(0, item.cuota).reduce((sum, s) => sum + parseFloat(s.monto), 0);
-        return loan.total_paid < cumulativeExpected;
+        // Recalcular el total pagado basado en el totalDue de la simulación
+        const simulatedTotalDue = schedule.slice(0, item.cuota).reduce((sum, s) => sum + parseFloat(s.monto), 0);
+        return loan.total_paid < simulatedTotalDue;
     });
 
     const moraAlertSummary = getDomElement('mora-alert-summary');
@@ -1043,11 +1160,6 @@ async function handleQuickPaymentSubmit() {
     // La fecha de registro es la fecha actual no editable
     const paymentDate = getTodayDateISO();
 
-    // if (!paymentDate) {
-    //     alert("Por favor, selecciona una fecha de pago.");
-    //     return;
-    // }
-
     const totalToCollect = calculatedPaymentData.amount + calculatedPaymentData.mora;
 
     // Validar restricción de monto nuevamente antes del envío
@@ -1068,6 +1180,12 @@ async function handleQuickPaymentSubmit() {
     // Si es Transferencia o Yape/Plin, se usa Mercado Pago.
     if (selectedMethod === 'Transferencia' || selectedMethod === 'Yape/Plin') {
         // --- INICIO DE FLUJO DE PAGO CON MERCADO PAGO ---
+        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollect.toFixed(2)} mediante Mercado Pago para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
+            return;
+        }
+
+        // Opcional: Ocultar el resumen de pago rápido (aunque el modal de link lo cubrirá)
+        getDomElement('quick-payment-summary-section').style.display = 'none';
 
         try {
             // 🚨 Llamada a la ruta correcta de Mercado Pago
@@ -1094,15 +1212,15 @@ async function handleQuickPaymentSubmit() {
                     errorData = { error: 'Error de formato (Estado: ' + response.status + ' ' + response.statusText + ')', status: response.status };
                 }
 
-                throw new Error(`(${response.status}) Ruta no encontrada o error de Mercado Pago. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
+                throw new Error(`(${response.status}) Error de Mercado Pago. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
             }
 
             const mpData = await response.json();
             const mpUrl = mpData.url;
 
             if (mpUrl) {
-                // *** REDIRECCIÓN AL PAGO REAL EN MERCADO PAGO ***
-                window.location.href = mpUrl;
+                // *** CRÍTICO: Muestra el link en un modal en lugar de redirigir ***
+                showCheckoutLinkModal(mpUrl, totalToCollect, selectedMethod, `${loan.nombres} ${loan.apellidos}`);
                 return;
             } else {
                 throw new Error("El backend no proporcionó un URL de pago válido de Mercado Pago.");
@@ -1159,13 +1277,14 @@ function calculateMora(loan) {
     let totalMora = 0;
     let totalAmountOverdue = 0;
     let latestDueDate = new Date(loan.fecha);
-    let totalPaid = loan.total_paid || 0;
+    let totalPaid = loan.total_paid || 0; // Total pagado (Capital/Interés)
 
     for (const item of schedule) {
         const dueDate = new Date(item.fecha);
         dueDate.setHours(0, 0, 0, 0);
 
         if (dueDate <= today) {
+            // Se calcula la expectativa acumulada de Capital/Interés
             const cumulativeExpected = schedule.slice(0, item.cuota).reduce((sum, s) => sum + parseFloat(s.monto), 0);
 
             if (totalPaid < cumulativeExpected) {
@@ -1249,7 +1368,8 @@ function calculateSchedule(loan) {
             });
         }
     }
-    return { payments, schedule };
+    const totalDue = schedule.reduce((sum, item) => sum + parseFloat(item.monto), 0);
+    return { payments, schedule, totalDue: parseFloat(totalDue.toFixed(2)) };
 }
 
 function getTodayDateISO() {
@@ -1279,7 +1399,7 @@ function renderHistoryTable() {
         const thead = historyTable.querySelector('thead tr');
         // Esto previene duplicados en caso de re-render
         if (thead && thead.cells.length < 6) {
-            thead.innerHTML += `<th>Mora</th><th>Acciones</th>`;
+            // Nota: Estos encabezados ya existen en front.html, pero se deja por seguridad
         }
     }
 
@@ -1314,7 +1434,7 @@ function renderHistoryTable() {
             finalStatusClass = 'status-paid';
         }
 
-        // Renderizado de botones de acción (MODIFICADO: Se eliminó el botón Pagar)
+        // Renderizado de botones de acción
         row.innerHTML = `
             <td>${loan.nombres} ${loan.apellidos}${pepLabel}${hibridoLabel}</td>
             <td><strong>S/ ${parseFloat(loan.monto).toFixed(2)}</strong></td>
@@ -1344,10 +1464,10 @@ function updateDashboard() {
     clients.clear();
     loans.forEach(loan => clients.add(loan.dni));
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayDateISO();
     const collectedToday = loans.reduce((sum, loan) => {
         if (!loan.payments) return sum;
-        // Asumiendo que payment_amount en la DB es el total (Capital+Interés+Mora)
+        // payment_amount es el monto TOTAL (CI + Mora)
         return sum + loan.payments
             .filter(p => p.payment_date.split('T')[0] === today)
             .reduce((pSum, p) => pSum + parseFloat(p.payment_amount), 0);
@@ -1372,11 +1492,13 @@ function showReceipt(payment, loan) {
     const moraPagada = parseFloat(payment.mora_amount || 0);
     const capitalInteresPagado = totalPagado - moraPagada;
     const paymentMethod = payment.payment_method || 'Efectivo';
+    const transactionId = payment.transaction_id || Math.floor(Math.random() * 1000000);
+    const paymentDate = new Date(payment.payment_date).toLocaleDateString('es-PE', { timeZone: 'UTC' });
 
     receiptContent.innerHTML = `
         <div class="receipt-header">
             <h2>🧾 COMPROBANTE DE PAGO</h2>
-            <p class="receipt-number">N° Transacción: ${Math.floor(Math.random() * 1000000)} | Préstamo ID: ${loan.id}</p>
+            <p class="receipt-number">N° Transacción: ${transactionId} | Préstamo ID: ${loan.id}</p>
         </div>
         
         <div class="receipt-section">
@@ -1387,7 +1509,7 @@ function showReceipt(payment, loan) {
         
         <div class="receipt-section">
             <h3>💰 Resumen del Pago</h3>
-            <div class="receipt-row"><span class="receipt-label">Fecha de Pago:</span><span class="receipt-value">${new Date(payment.payment_date).toLocaleDateString('es-PE', { timeZone: 'UTC' })}</span></div>
+            <div class="receipt-row"><span class="receipt-label">Fecha de Pago:</span><span class="receipt-value">${paymentDate}</span></div>
             <div class="receipt-row"><span class="receipt-label">Método de Pago:</span><span class="receipt-value">${paymentMethod}</span></div>
             <div class="receipt-row"><span class="receipt-label">Aplicado a Capital/Interés:</span><span class="receipt-value">S/ ${capitalInteresPagado.toFixed(2)}</span></div>
             <div class="receipt-row"><span class="receipt-label">Aplicado a Mora:</span><span class="receipt-value" style="color: ${moraPagada > 0 ? 'var(--danger-color)' : 'var(--text-color)'};">S/ ${moraPagada.toFixed(2)}</span></div>
@@ -1632,7 +1754,7 @@ function compartirPDF() {
         const { payments, schedule } = calculateSchedule(loan);
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
-        let finalY = 0;
+        let finalY = 40; // Inicializar finalY después del encabezado
 
         const interesAnualMostrado = TASA_INTERES_ANUAL.toFixed(2);
 
@@ -1646,19 +1768,21 @@ function compartirPDF() {
         doc.text(`Fecha de Préstamo: ${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}`, 105, 58);
         doc.text(`Interés Anual: ${interesAnualMostrado}%`, 14, 64);
         doc.text(`Plazo: ${loan.plazo} meses`, 105, 64);
+        finalY = 70; // Ajustar finalY después de los datos generales
 
         if (parseFloat(loan.monto) > VALOR_UIT || loan.is_pep) {
-            doc.setFontSize(14); doc.setTextColor(52, 64, 84); doc.text("Declaración Jurada de Origen de Fondos", 105, finalY, { align: 'center' });
             finalY += 10;
+            doc.setFontSize(14); doc.setTextColor(52, 64, 84); doc.text("Declaración Jurada de Origen de Fondos", 105, finalY, { align: 'center' });
+            finalY += 8;
             const textoDeclaracion = `Yo, ${loan.nombres} ${loan.apellidos}, identificado(a) con DNI N° ${loan.dni}, declaro bajo juramento que los fondos y/o bienes utilizados en la operación de préstamo de S/ ${parseFloat(loan.monto).toFixed(2)} provienen de actividades lícitas y no están vinculados con el lavado de activos ni cualquier otra actividad ilegal.`;
             doc.setFontSize(10); doc.setTextColor(100, 100, 100);
             const splitText = doc.splitTextToSize(textoDeclaracion, 180);
             doc.text(splitText, 14, finalY);
-            finalY += (splitText.length * 5) + 20;
+            finalY += (splitText.length * 5) + 15;
             doc.text("_________________________", 105, finalY, { align: 'center' });
             finalY += 5;
             doc.text(`${loan.nombres} ${loan.apellidos}`, 105, finalY, { align: 'center' });
-            finalY += 15;
+            finalY += 10;
         }
 
         doc.setFontSize(14); doc.setTextColor(52, 64, 84); doc.text("Cronograma de Pagos", 105, finalY, { align: 'center' });
