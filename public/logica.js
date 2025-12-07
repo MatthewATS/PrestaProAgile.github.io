@@ -262,12 +262,15 @@ function initializeApp() {
         }
     });
 
+
+
     // --- INICIALIZACIÓN DE LÓGICA DE NEGOCIO ---
     initPaymentListeners();
     initQuickPaymentListeners();
     initLoanFormLogic(); // CRÍTICO: Inicializa el HTML del formulario
     initCashRegisterListeners();
     initReceiptButtonListeners();
+    initReceiptPrintButton()
 }
 
 function handleDeleteSubmit(e) {
@@ -335,6 +338,25 @@ function initReceiptButtonListeners() {
             const payment = loan.payments[paymentIndex];
             showReceipt(payment, loan);
         });
+    }
+
+    function initReceiptPrintButton() {
+        const printReceiptBtn = getDomElement('printReceiptBtn');
+        if (printReceiptBtn) {
+            // Remover listeners anteriores
+            const newBtn = printReceiptBtn.cloneNode(true);
+            printReceiptBtn.parentNode.replaceChild(newBtn, printReceiptBtn);
+
+            // Agregar nuevo listener
+            newBtn.addEventListener('click', () => {
+                const receiptContent = getDomElement('receiptContent');
+                if (receiptContent) {
+                    printModalContent(receiptContent);
+                } else {
+                    alert('No se pudo encontrar el contenido del recibo para imprimir.');
+                }
+            });
+        }
     }
 }
 
@@ -2223,3 +2245,330 @@ function descargarPDF(doc, fileName) {
     doc.save(fileName);
     console.log('PDF descargado:', fileName);
 }
+
+function printModalContent(contentElement) {
+    if (!contentElement) {
+        alert('No se pudo acceder al contenido para imprimir.');
+        return;
+    }
+
+    // Crear iframe temporal
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    const iframeDoc = iframe.contentWindow.document;
+    iframeDoc.open();
+
+    // HTML completo con estilos para impresión
+    iframeDoc.write(`
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+            <meta charset="UTF-8">
+            <title>Boleta de Venta - PrestaPro</title>
+            <link rel="preconnect" href="https://fonts.googleapis.com">
+            <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+            <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+            <style>
+                @page { 
+                    margin: 15mm; 
+                    size: A4; 
+                }
+                
+                * { 
+                    box-sizing: border-box; 
+                    margin: 0;
+                    padding: 0;
+                }
+                
+                body { 
+                    font-family: 'Poppins', sans-serif; 
+                    font-size: 12px; 
+                    line-height: 1.5; 
+                    color: #000;
+                    background: white;
+                }
+
+                .receipt-container {
+                    max-width: 100%;
+                    border: 2px solid #000;
+                    background: white;
+                    padding: 0;
+                    margin: 0 auto;
+                }
+
+                /* Header */
+                .receipt-header.sunat-header {
+                    display: grid;
+                    grid-template-columns: 1fr auto;
+                    gap: 20px;
+                    padding: 20px 25px;
+                    border-bottom: 3px solid #000;
+                    background: white;
+                }
+
+                .sunat-company-info {
+                    text-align: left;
+                }
+
+                .sunat-company-info .company-name {
+                    font-size: 16px;
+                    font-weight: 700;
+                    color: #000;
+                    margin-bottom: 8px;
+                }
+
+                .sunat-company-info .company-details {
+                    font-size: 11px;
+                    color: #333;
+                    line-height: 1.6;
+                }
+
+                .sunat-company-info .company-activity {
+                    font-size: 10px;
+                    color: #666;
+                    font-style: italic;
+                    margin-top: 4px;
+                }
+
+                .sunat-ruc-box {
+                    text-align: center;
+                    border: 3px solid #000;
+                    padding: 15px 20px;
+                    background: white;
+                    min-width: 200px;
+                }
+
+                .sunat-ruc-box strong {
+                    display: block;
+                    font-size: 11px;
+                    color: #000;
+                    font-weight: 700;
+                    margin-bottom: 6px;
+                }
+
+                .sunat-ruc-box h3 {
+                    color: #000;
+                    margin: 6px 0;
+                    font-size: 14px;
+                    font-weight: 700;
+                    line-height: 1.3;
+                    text-transform: uppercase;
+                }
+
+                .sunat-ruc-box p {
+                    margin: 4px 0 0 0;
+                    font-size: 13px;
+                    color: #000;
+                    font-weight: 600;
+                }
+
+                /* Secciones */
+                .receipt-section {
+                    padding: 15px 25px;
+                    border-bottom: 1px solid #ddd;
+                    page-break-inside: avoid;
+                }
+
+                .receipt-section h4 {
+                    margin: 0 0 10px 0;
+                    color: #000;
+                    font-size: 12px;
+                    font-weight: 700;
+                    text-transform: uppercase;
+                    padding-bottom: 6px;
+                    border-bottom: 2px solid #000;
+                }
+
+                .receipt-row {
+                    display: flex;
+                    justify-content: space-between;
+                    padding: 8px 0;
+                    border-bottom: 1px dashed #ccc;
+                }
+
+                .receipt-row:last-child {
+                    border-bottom: none;
+                }
+
+                .receipt-label {
+                    color: #666;
+                    font-size: 11px;
+                    font-weight: 500;
+                    text-transform: uppercase;
+                }
+
+                .receipt-value {
+                    color: #000;
+                    font-weight: 600;
+                    font-size: 12px;
+                }
+
+                /* Tabla */
+                .receipt-detail-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 10px;
+                }
+
+                .receipt-detail-table th {
+                    background: #f0f0f0;
+                    padding: 10px 8px;
+                    text-align: left;
+                    color: #000;
+                    font-size: 10px;
+                    font-weight: 700;
+                    text-transform: uppercase;
+                    border: 1px solid #000;
+                }
+
+                .receipt-detail-table th:nth-child(2),
+                .receipt-detail-table th:nth-child(3) {
+                    text-align: right;
+                }
+
+                .receipt-detail-table td {
+                    padding: 10px 8px;
+                    font-size: 11px;
+                    color: #000;
+                    border: 1px solid #000;
+                }
+
+                .receipt-detail-table td:nth-child(2),
+                .receipt-detail-table td:nth-child(3) {
+                    text-align: right;
+                    font-weight: 600;
+                }
+
+                .receipt-detail-table td small {
+                    font-size: 9px;
+                    color: #666;
+                }
+
+                .receipt-highlight {
+                    background-color: #ffe0e0;
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    color: #d32f2f;
+                    font-weight: 600;
+                }
+
+                /* Resumen */
+                .receipt-summary-box {
+                    display: flex;
+                    justify-content: flex-end;
+                    padding: 15px 25px;
+                }
+
+                .receipt-summary-content {
+                    width: 100%;
+                    max-width: 280px;
+                }
+
+                .summary-item {
+                    display: flex;
+                    justify-content: space-between;
+                    padding: 8px 0;
+                    font-size: 12px;
+                    border-bottom: 1px dashed #ccc;
+                }
+
+                .summary-item span:first-child {
+                    color: #666;
+                    font-weight: 500;
+                    text-transform: uppercase;
+                    font-size: 11px;
+                }
+
+                .summary-item .receipt-value {
+                    font-size: 13px;
+                    font-weight: 700;
+                }
+
+                .summary-item.summary-total {
+                    margin-top: 6px;
+                    padding-top: 12px;
+                    border-top: 3px solid #000;
+                    border-bottom: none;
+                }
+
+                .summary-item.summary-total span:first-child {
+                    color: #000;
+                    font-size: 13px;
+                    font-weight: 700;
+                }
+
+                .summary-item.summary-total .receipt-value {
+                    color: #2e7d32;
+                    font-size: 16px;
+                    font-weight: 700;
+                }
+
+                /* Footer */
+                .receipt-footer {
+                    padding: 15px 25px;
+                    background: white;
+                    border-top: 2px solid #000;
+                    page-break-inside: avoid;
+                }
+
+                .amount-in-words {
+                    background-color: #fff9e6;
+                    border-left: 4px solid #ffa000;
+                    padding: 10px 15px;
+                    margin: 8px 0;
+                }
+
+                .receipt-footer p {
+                    color: #000;
+                    font-size: 10px;
+                    line-height: 1.5;
+                    margin: 5px 0;
+                }
+
+                .receipt-footer p:first-child {
+                    font-weight: 600;
+                }
+
+                .receipt-footer p:last-child {
+                    font-size: 8px;
+                    color: #666;
+                    font-style: italic;
+                    margin-top: 10px;
+                    padding-top: 10px;
+                    border-top: 1px dashed #ccc;
+                }
+
+                /* Ocultar elementos que no se deben imprimir */
+                .close-button,
+                button {
+                    display: none !important;
+                }
+            </style>
+        </head>
+        <body>
+            ${contentElement.innerHTML}
+        </body>
+        </html>
+    `);
+
+    iframeDoc.close();
+
+    // Esperar a que cargue y luego imprimir
+    iframe.onload = function() {
+        setTimeout(function() {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+
+            // Remover iframe después de imprimir
+            setTimeout(() => {
+                document.body.removeChild(iframe);
+            }, 100);
+        }, 500);
+    };
+}
+
