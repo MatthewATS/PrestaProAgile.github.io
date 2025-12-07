@@ -1490,3 +1490,31 @@ small {
     margin-top: 15px;
     display: none;
 }
+
+/* === NUEVO MODAL DE CHECKOUT LINK === */
+#checkoutLinkModal .modal-content {
+    animation: slideIn 0.4s ease-out;
+}
+
+#checkoutLinkModal .modal-body {
+    padding-bottom: 10px; /* Reducir padding si el footer tiene botones */
+}
+
+#checkoutLinkModal h3 span {
+    font-size: 1.2em;
+}
+
+#checkoutLinkModal #mpLinkOutput {
+    cursor: text;
+    user-select: all;
+    background-color: #2F3845; /* Ligeramente más claro para el campo de URL */
+    border-color: var(--primary-color);
+    font-family: monospace, sans-serif;
+    font-weight: 500;
+    overflow-x: scroll;
+}
+
+#checkoutLinkModal .modal-footer {
+    padding: 20px 24px;
+    justify-content: space-between;
+}
