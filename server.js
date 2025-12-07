@@ -22,8 +22,9 @@ const TASA_INTERES_ANUAL = 10;
 const TASA_MORA_MENSUAL = 1;
 
 // 🚨 CREDENCIALES DE MERCADO PAGO DE PRODUCCIÓN 🚨
-const MP_ACCESS_TOKEN = 'APP_USR-1246920437893290-120617-768190e0a707195da7806e0964a2f70a-3045510589'; 
-const MP_PUBLIC_KEY = 'APP_USR-11b6bf25-952a-4b6e-a2e1-f2d387b9c8d8'; 
+// Los pagos se harán en el entorno REAL/LIVE.
+const MP_ACCESS_TOKEN = 'APP_USR-1246920437893290-120617-768190e0a707195da7806e0964a2f70a-3045510589'; // Access Token proporcionado
+const MP_PUBLIC_KEY = 'APP_USR-9e59f0d2-e486-4d3b-b09b-998efa2e46c4'; // Public Key proporcionada
 const MP_ENDPOINT_BASE = 'https://api.mercadopago.com/checkout/preferences';
 
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app';
@@ -108,7 +109,7 @@ async function registerPaymentInternal(loanId, paymentData) {
         await connection.beginTransaction();
         const { payment_amount, payment_date, mora_amount, payment_method } = paymentData;
 
-        const finalMethod = payment_method || 'Mercado Pago'; 
+        const finalMethod = payment_method || 'Mercado Pago';
 
         console.log(`[PAYMENT INTERNAL] Registrando pago para préstamo ${loanId}:`, {
             payment_amount,
@@ -165,7 +166,7 @@ app.get('/api/loans', async (req, res) => {
                 l.tipo_calculo, l.meses_solo_interes,
                 c.dni, c.nombres, c.apellidos, c.is_pep
             FROM loans l
-            JOIN clients c ON l.client_id = c.id
+                     JOIN clients c ON l.client_id = c.id
             ORDER BY l.fecha DESC, l.id DESC;
         `;
         const [loans] = await pool.query(loanQuery);
@@ -261,7 +262,7 @@ app.post('/api/loans', async (req, res) => {
         }
 
         await connection.query(
-            `INSERT INTO loans (client_id, monto, interes, fecha, plazo, status, declaracion_jurada, tipo_calculo, meses_solo_interes) 
+            `INSERT INTO loans (client_id, monto, interes, fecha, plazo, status, declaracion_jurada, tipo_calculo, meses_solo_interes)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
             [clientId, monto, interes, fecha, plazo, status, declaracion_jurada, tipo_calculo, meses_solo_interes]
         );
@@ -478,8 +479,8 @@ app.post('/api/mp/create-order', async (req, res) => {
         const mpData = await mpResponse.json();
 
         if (mpResponse.ok && mpData.id) {
-            // Mercado Pago en producción usa init_point
-            const checkoutUrl = mpData.init_point; 
+            // Mercado Pago usa init_point para la URL de checkout
+            const checkoutUrl = mpData.init_point;
 
             if (checkoutUrl) {
                 console.log('[MP] ✅ Orden creada exitosamente');
@@ -490,17 +491,17 @@ app.post('/api/mp/create-order', async (req, res) => {
                     externalReference: externalReference
                 });
             } else {
-                // Esto podría ocurrir si hay problemas de configuración de URLs en MP Dashboard
-                throw new Error("Mercado Pago no devolvió una URL de inicialización válida. Revise su configuración de URLs de retorno.");
+                throw new Error("Mercado Pago no devolvió una URL de inicialización válida.");
             }
 
         } else {
             console.error('[MP ERROR] ❌ Respuesta no exitosa:', mpData);
-            // Si el error es de autenticación (401), se captura aquí.
+            
             if (mpResponse.status === 401) {
                 throw new Error("Error de Autenticación (401). Revise su Access Token de Producción.");
             }
-            throw new Error(mpData.message || JSON.stringify(mpData));
+            // Capturamos el error específico o genérico de MP
+            throw new Error(mpData.message || mpData.cause?.[0]?.description || JSON.stringify(mpData));
         }
 
     } catch (error) {
@@ -520,11 +521,11 @@ app.post('/api/mp/webhook', async (req, res) => {
     res.status(200).send('OK');
 
     const notification = req.body;
-    
+
     // MP envia notificaciones de tipo 'payment'
     if (notification.type === 'payment' && notification.data && notification.data.id) {
         const paymentId = notification.data.id;
-        
+
         try {
             console.log('[MP WEBHOOK] 🔎 Consultando detalles del pago ID:', paymentId);
 
@@ -612,7 +613,7 @@ const startServer = async () => {
             console.log(`\n${'='.repeat(60)}`);
             console.log(`🚀 Servidor PrestaPro escuchando en el puerto ${PORT}`);
             console.log(`📡 URL de Backend: ${YOUR_BACKEND_URL}`);
-            console.log(`💳 Mercado Pago configurado: ${MP_ACCESS_TOKEN ? '✅' : '❌'}`);
+            console.log(`💳 Mercado Pago configurado: ${MP_ACCESS_TOKEN ? '✅ (Modo Producción/Real)' : '❌'}`);
             console.log(`${'='.repeat(60)}\n`);
         });
 
