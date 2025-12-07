@@ -270,7 +270,6 @@ function initializeApp() {
     initLoanFormLogic(); // CRÍTICO: Inicializa el HTML del formulario
     initCashRegisterListeners();
     initReceiptButtonListeners();
-    initReceiptPrintButton()
 }
 
 function handleDeleteSubmit(e) {
@@ -318,6 +317,7 @@ function initCashRegisterListeners() {
     getDomElement('printCashRegisterBtn')?.addEventListener('click', () => alert('Imprimir: Función en desarrollo.'));
 }
 
+// BUSCA ESTA SECCIÃ"N Y ACTUALIZA:
 function initReceiptButtonListeners() {
     const paymentHistoryBody = getDomElement('paymentHistoryBody');
 
@@ -340,23 +340,347 @@ function initReceiptButtonListeners() {
         });
     }
 
-    function initReceiptPrintButton() {
-        const printReceiptBtn = getDomElement('printReceiptBtn');
-        if (printReceiptBtn) {
-            // Remover listeners anteriores
-            const newBtn = printReceiptBtn.cloneNode(true);
-            printReceiptBtn.parentNode.replaceChild(newBtn, printReceiptBtn);
+    // CRÍTICO: Se corrigió la inicialización de los listeners de botones de PDF/Compartir
+    const printReceiptBtn = getDomElement('printReceiptBtn');
+    if (printReceiptBtn) {
+        // Clonar para asegurar que los listeners antiguos se remuevan si los hubiera
+        const newPrintBtn = printReceiptBtn.cloneNode(true);
+        printReceiptBtn.parentNode.replaceChild(newPrintBtn, printReceiptBtn);
+        newPrintBtn.addEventListener('click', () => {
+            const receiptContent = getDomElement('receiptContent');
+            if (receiptContent) {
+                printModalContent(receiptContent);
+            } else {
+                alert('No se pudo encontrar el contenido del recibo para imprimir.');
+            }
+        });
+    }
 
-            // Agregar nuevo listener
-            newBtn.addEventListener('click', () => {
-                const receiptContent = getDomElement('receiptContent');
-                if (receiptContent) {
-                    printModalContent(receiptContent);
-                } else {
-                    alert('No se pudo encontrar el contenido del recibo para imprimir.');
-                }
-            });
+    // AGREGAR ESTE BLOQUE NUEVO PARA EL BOTÓN DE COMPARTIR
+    const shareReceiptBtn = getDomElement('shareReceiptBtn');
+    if (shareReceiptBtn) {
+        // Clonar para asegurar que el listener se asigne al elemento correcto
+        const newShareBtn = shareReceiptBtn.cloneNode(true);
+        shareReceiptBtn.parentNode.replaceChild(newShareBtn, shareReceiptBtn);
+
+        newShareBtn.addEventListener('click', () => {
+            // La función shareReceipt ya maneja la generación de PDF y el uso de navigator.share
+            shareReceipt();
+        });
+    }
+}
+
+// AGREGAR ESTA FUNCIÃ"N NUEVA DESPUÃ‰S DE downloadReceipt()
+async function shareReceipt() {
+    if (!currentReceiptData) {
+        alert('No hay datos del recibo para compartir.');
+        return;
+    }
+
+    const {
+        loan,
+        totalPagado,
+        paymentMethod,
+        capitalInteresPagado,
+        moraPagada,
+        payment,
+        transactionId,
+        correlativo
+    } = currentReceiptData;
+
+    const paymentDate = new Date(payment.payment_date).toLocaleDateString('es-PE', { timeZone: 'UTC' });
+    const valorVenta = capitalInteresPagado;
+    const IGV = 0.00;
+    const subtotal = totalPagado - IGV;
+
+    // Generar el PDF
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    // Colores corporativos
+    const primaryColor = [93, 136, 255];
+    const darkColor = [52, 64, 84];
+    const grayColor = [100, 100, 100];
+    const lightGray = [200, 200, 200];
+
+    let yPos = 20;
+
+    // ==================== HEADER ====================
+    doc.setFillColor(...primaryColor);
+    doc.rect(14, yPos, 60, 12, 'F');
+    doc.setFontSize(16);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont(undefined, 'bold');
+    doc.text("PRESTAPRO", 44, yPos + 8, { align: 'center' });
+
+    doc.setDrawColor(...primaryColor);
+    doc.setLineWidth(0.8);
+    doc.rect(130, yPos, 65, 35);
+
+    doc.setFontSize(9);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text(`R.U.C. N° ${RUC_EMPRESA}`, 162.5, yPos + 6, { align: 'center' });
+
+    doc.setFontSize(12);
+    doc.setTextColor(...primaryColor);
+    doc.text("BOLETA DE VENTA", 162.5, yPos + 13, { align: 'center' });
+    doc.text("ELECTRÓNICA", 162.5, yPos + 19, { align: 'center' });
+
+    doc.setFontSize(11);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text(`B001-${correlativo.toString().padStart(8, '0')}`, 162.5, yPos + 28, { align: 'center' });
+
+    yPos += 2;
+    doc.setFontSize(12);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text(RAZON_SOCIAL_EMPRESA, 14, yPos + 13);
+
+    doc.setFontSize(9);
+    doc.setTextColor(...grayColor);
+    doc.setFont(undefined, 'normal');
+    doc.text(DIRECCION_EMPRESA, 14, yPos + 19);
+    doc.text("Teléfono: (01) 123-4567", 14, yPos + 24);
+    doc.text("Email: info@prestapro.com.pe", 14, yPos + 29);
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'italic');
+    doc.text("SERVICIOS DE PRÉSTAMOS PERSONALES", 14, yPos + 34);
+
+    yPos += 42;
+    doc.setDrawColor(...lightGray);
+    doc.setLineWidth(0.3);
+    doc.line(14, yPos, 196, yPos);
+    yPos += 8;
+
+    // ==================== DATOS DEL CLIENTE ====================
+    doc.setFillColor(245, 247, 250);
+    doc.rect(14, yPos, 182, 8, 'F');
+
+    doc.setFontSize(10);
+    doc.setTextColor(...primaryColor);
+    doc.setFont(undefined, 'bold');
+    doc.text("📋 DATOS DEL CLIENTE", 16, yPos + 5.5);
+
+    yPos += 12;
+    doc.setFontSize(9);
+    doc.setTextColor(...grayColor);
+    doc.setFont(undefined, 'normal');
+    doc.text("Tipo/N° Documento:", 16, yPos);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text(`DNI / ${loan.dni}`, 60, yPos);
+
+    yPos += 6;
+    doc.setTextColor(...grayColor);
+    doc.setFont(undefined, 'normal');
+    doc.text("Apellidos y Nombres:", 16, yPos);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text(`${loan.nombres} ${loan.apellidos}`, 60, yPos);
+
+    yPos += 6;
+    doc.setTextColor(...grayColor);
+    doc.setFont(undefined, 'normal');
+    doc.text("Fecha de Emisión:", 16, yPos);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text(paymentDate, 60, yPos);
+
+    yPos += 10;
+    doc.setDrawColor(...lightGray);
+    doc.line(14, yPos, 196, yPos);
+    yPos += 8;
+
+    // ==================== DETALLE DE LA OPERACIÓN ====================
+    doc.setFillColor(245, 247, 250);
+    doc.rect(14, yPos, 182, 8, 'F');
+
+    doc.setFontSize(10);
+    doc.setTextColor(...primaryColor);
+    doc.setFont(undefined, 'bold');
+    doc.text("📄 DETALLE DE LA OPERACIÓN", 16, yPos + 5.5);
+
+    yPos += 12;
+
+    const tableData = [
+        [
+            `AMORTIZACIÓN PRÉSTAMO N° ${loan.id}\nCapital e Intereses - Cuota programada`,
+            `S/ ${valorVenta.toFixed(2)}`,
+            `S/ ${capitalInteresPagado.toFixed(2)}`
+        ]
+    ];
+
+    if (moraPagada > 0) {
+        tableData.push([
+            'MORA / PENALIDAD POR ATRASO\nInterés moratorio aplicado',
+            'S/ 0.00',
+            `S/ ${moraPagada.toFixed(2)}`
+        ]);
+    }
+
+    doc.autoTable({
+        startY: yPos,
+        head: [['DESCRIPCIÓN', 'VALOR VENTA', 'IMPORTE']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: {
+            fillColor: primaryColor,
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
+            fontSize: 9,
+            halign: 'center'
+        },
+        bodyStyles: {
+            fontSize: 8,
+            textColor: darkColor,
+            cellPadding: 4
+        },
+        columnStyles: {
+            0: { cellWidth: 100 },
+            1: { halign: 'right', cellWidth: 35 },
+            2: { halign: 'right', cellWidth: 35, fontStyle: 'bold' }
+        },
+        didParseCell: function(data) {
+            if (data.row.index === 1 && moraPagada > 0 && data.column.index === 2) {
+                data.cell.styles.textColor = [244, 67, 54];
+            }
         }
+    });
+
+    yPos = doc.lastAutoTable.finalY + 10;
+
+    // ==================== RESUMEN DE MONTOS ====================
+    const summaryX = 130;
+    const summaryWidth = 66;
+
+    doc.setFontSize(9);
+    doc.setTextColor(...grayColor);
+    doc.setFont(undefined, 'normal');
+    doc.text("SUBTOTAL", summaryX, yPos);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text(`S/ ${subtotal.toFixed(2)}`, summaryX + summaryWidth, yPos, { align: 'right' });
+
+    yPos += 6;
+    doc.setTextColor(...grayColor);
+    doc.setFont(undefined, 'normal');
+    doc.text("IGV (0%)", summaryX, yPos);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text(`S/ ${IGV.toFixed(2)}`, summaryX + summaryWidth, yPos, { align: 'right' });
+
+    yPos += 8;
+    doc.setDrawColor(...primaryColor);
+    doc.setLineWidth(0.8);
+    doc.line(summaryX, yPos - 2, summaryX + summaryWidth, yPos - 2);
+
+    doc.setFillColor(245, 250, 255);
+    doc.rect(summaryX - 2, yPos - 3, summaryWidth + 4, 10, 'F');
+
+    doc.setFontSize(11);
+    doc.setTextColor(...primaryColor);
+    doc.setFont(undefined, 'bold');
+    doc.text("IMPORTE TOTAL", summaryX, yPos + 4);
+
+    doc.setFontSize(13);
+    doc.setTextColor(76, 175, 80);
+    doc.text(`S/ ${totalPagado.toFixed(2)}`, summaryX + summaryWidth, yPos + 4, { align: 'right' });
+
+    yPos += 18;
+
+    // ==================== FOOTER ====================
+    doc.setDrawColor(...lightGray);
+    doc.setLineWidth(0.3);
+    doc.line(14, yPos, 196, yPos);
+    yPos += 6;
+
+    doc.setFillColor(255, 249, 230);
+    doc.setDrawColor(255, 193, 7);
+    doc.setLineWidth(0.5);
+    doc.rect(14, yPos, 182, 12, 'FD');
+
+    doc.setFontSize(9);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text("SON:", 16, yPos + 5);
+    doc.setFont(undefined, 'normal');
+    doc.text(numeroALetras(totalPagado) + " SOLES", 16, yPos + 9);
+
+    yPos += 16;
+    doc.setFontSize(8);
+    doc.setTextColor(...grayColor);
+    doc.setFont(undefined, 'bold');
+    doc.text("Forma de Pago: ", 14, yPos);
+    doc.setFont(undefined, 'normal');
+    doc.text(paymentMethod, 40, yPos);
+
+    doc.setFont(undefined, 'bold');
+    doc.text("ID Transacción: ", 90, yPos);
+    doc.setFont(undefined, 'normal');
+    doc.text(transactionId, 120, yPos);
+
+    yPos += 6;
+    doc.setFont(undefined, 'bold');
+    doc.text("Observaciones: ", 14, yPos);
+    doc.setFont(undefined, 'normal');
+    doc.text(`Pago correspondiente al préstamo N° ${loan.id}. Operación registrada correctamente.`, 42, yPos);
+
+    yPos += 8;
+    doc.setFontSize(7);
+    doc.setTextColor(150, 150, 150);
+    doc.setFont(undefined, 'italic');
+    const legalText = doc.splitTextToSize(
+        'Representación impresa de la Boleta de Venta Electrónica. Puede verificar la autenticidad de este documento en www.sunat.gob.pe. Este es un documento simulado para fines demostrativos.',
+        168
+    );
+    doc.text(legalText, 14, yPos);
+
+    doc.setTextColor(200, 200, 200);
+    doc.setFontSize(40);
+    doc.setFont(undefined, 'bold');
+    doc.text('SIMULACIÓN', 105, 150, {
+        align: 'center',
+        angle: 45
+    });
+
+    // Convertir PDF a blob
+    const pdfBlob = doc.output('blob');
+    const fileName = `Boleta_B001-${correlativo.toString().padStart(8, '0')}_${loan.apellidos}.pdf`;
+
+    // Verificar si la API de compartir está disponible
+    if (navigator.share && navigator.canShare) {
+        try {
+            const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+
+            // Verificar si se puede compartir el archivo
+            if (navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                    files: [file],
+                    title: `Boleta de Pago - ${loan.nombres} ${loan.apellidos}`,
+                    text: `Boleta de pago por S/ ${totalPagado.toFixed(2)} - PrestaPro`
+                });
+
+                showSuccessAnimation('✅ Boleta compartida exitosamente');
+            } else {
+                // Si canShare falla (por ejemplo, en PC sin apps compatibles), se va a descarga.
+                // Esto es un error controlado.
+                throw new Error('El dispositivo no soporta compartir archivos PDF');
+            }
+        } catch (error) {
+            // AbortError ocurre si el usuario cancela, no mostrar alerta en ese caso.
+            if (error.name !== 'AbortError') {
+                console.error('Error al compartir:', error);
+                // Fallback: descargar el PDF
+                alert('No se pudo compartir el archivo. Se descargará en su lugar.');
+                doc.save(fileName);
+            }
+        }
+    } else {
+        // Fallback para navegadores que no soportan la API de compartir
+        alert('Tu navegador no soporta la función de compartir. El PDF se descargará automáticamente.');
+        doc.save(fileName);
     }
 }
 
@@ -1644,7 +1968,7 @@ function showReceipt(payment, loan) {
     `;
 
     openModal(getDomElement('receiptModal'));
-    currentReceiptData = { payment, loan, totalPagado, paymentMethod, capitalInteresPagado, moraPagada, transactionId, correlativo };
+    currentReceiptData = { payment, loan, totalPagado, paymentMethod, capitalInteresPagado, moraPagada, transactionId, correlativo, paymentDate, valorVenta, IGV, subtotal };
 }
 
 function numeroALetras(num) {
@@ -2571,4 +2895,3 @@ function printModalContent(contentElement) {
         }, 500);
     };
 }
-
