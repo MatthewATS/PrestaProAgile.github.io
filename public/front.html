@@ -197,7 +197,7 @@
                                             <label for="q_method_yape">📱 Yape/Plin</label>
                                         </div>
                                     </div>
-                                    <small style="margin-top: 10px;">*Solo los pagos en **Efectivo** se consideran para el cuadre de caja diario. Monto máximo Yape/Plin: S/ 500.</small>
+                                    <small style="margin-top: 10px;">*Solo los pagos en **Efectivo** se consideran para el cuadre de caja diario. Los pagos con tarjeta/transferencia usarán el flujo de Mercado Pago (link/QR).</small>
                                 </div>
 
                             </div>
@@ -210,7 +210,7 @@
                                 <div class="summary-item summary-total"><span>MONTO A COBRAR</span><span id="summary-total" class="receipt-value">S/ 0.00</span></div>
 
                                 <p style="margin-top: 20px; font-size: 13px; color: var(--text-color);">
-                                    <span id="payment_description">Seleccione un tipo de abono, ingrese la fecha y presione "Calcular Monto Total".</span>
+                                    <span id="payment_description">Seleccione un tipo de abono y presione "Confirmar y Procesar Pago" una vez calculado el monto.</span>
                                 </p>
 
                                 <button class="submit-button" id="confirmQuickPaymentBtn" disabled style="margin-top: 30px;">✅ Confirmar y Procesar Pago</button>
@@ -375,7 +375,7 @@
                         <label for="method_yape" style="color: var(--secondary-color); font-weight: 600;">📱 Yape/Plin</label>
                     </div>
                 </div>
-                <small style="margin-top: 10px;">*Solo los pagos en **Efectivo** serán considerados para el cuadre de caja diario.</small>
+                <small style="margin-top: 10px;">*Los pagos con **Transferencia** o **Yape/Plin** se procesan mediante un link/QR de Mercado Pago.</small>
             </div>
 
             <h3 style="margin-top: 20px; margin-bottom: 10px;">2. Montos a Pagar</h3>
@@ -475,6 +475,37 @@
                 <div id="change-password-error" class="error-message"></div>
                 <button type="submit" class="submit-button">Actualizar Contraseña</button>
             </form>
+        </div>
+    </div>
+</div>
+
+<div id="checkoutLinkModal" class="modal">
+    <div class="modal-content" style="max-width: 550px;">
+        <div class="modal-header">
+            <h2 id="checkoutLinkTitle">🔗 Enlace de Pago Generado</h2>
+            <button class="close-button" id="closeCheckoutLinkModalBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="alert alert-success">
+                <span>✅</span>
+                <div>
+                    <p style="margin: 0;"><strong>Instrucciones:</strong></p>
+                    <p style="margin: 5px 0 0 0;">Copia el enlace de abajo y compártelo con el cliente por WhatsApp, correo o el medio de tu preferencia. El pago se registrará automáticamente al ser completado.</p>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 10px; margin-bottom: 5px;">Monto Total: <span id="checkoutLinkAmount" style="color: var(--success-color);"></span></h3>
+            <p style="font-size: 14px; margin-bottom: 15px;">Método: <strong id="checkoutLinkMethod"></strong></p>
+
+            <div class="form-group">
+                <label for="mpLinkOutput">Enlace de Pago (Mercado Pago)</label>
+                <input type="text" id="mpLinkOutput" readonly style="cursor: text; font-size: 13px; background-color: var(--input-bg);">
+            </div>
+
+            <div class="modal-footer" style="justify-content: space-between; padding: 0;">
+                <button class="button button-secondary" id="shareMpLinkBtn" style="width: 48%;">🔗 Compartir Enlace</button>
+                <button class="button button-primary" id="copyLinkBtn" style="width: 48%;">📋 Copiar Enlace</button>
+            </div>
         </div>
     </div>
 </div>
