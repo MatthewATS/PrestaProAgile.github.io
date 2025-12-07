@@ -1636,79 +1636,354 @@ function numeroALetras(num) {
 function downloadReceipt() {
     if (!currentReceiptData) return;
 
-    const { loan, totalPagado, paymentMethod, capitalInteresPagado, moraPagada, payment, transactionId, correlativo } = currentReceiptData;
+    const {
+        loan,
+        totalPagado,
+        paymentMethod,
+        capitalInteresPagado,
+        moraPagada,
+        payment,
+        transactionId,
+        correlativo,
+        paymentDate,
+        valorVenta,
+        IGV,
+        subtotal
+    } = currentReceiptData;
+
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
-    const paymentDate = new Date(payment.payment_date).toLocaleDateString('es-PE', { timeZone: 'UTC' });
 
-    const valorVenta = capitalInteresPagado;
-    const IGV = 0.00;
-    const importeTotal = totalPagado;
-    const subtotal = importeTotal - IGV;
+    // Colores corporativos
+    const primaryColor = [93, 136, 255];
+    const darkColor = [52, 64, 84];
+    const grayColor = [100, 100, 100];
+    const lightGray = [200, 200, 200];
 
-    let finalY = 20;
+    let yPos = 20;
 
-    // --- ENCABEZADO SUNAT SIMULADO ---
-    doc.setFontSize(10); doc.setTextColor(52, 64, 84); doc.text(RAZON_SOCIAL_EMPRESA, 105, finalY, { align: 'center' });
-    finalY += 5;
-    doc.setFontSize(8); doc.setTextColor(100, 100, 100); doc.text(DIRECCION_EMPRESA, 105, finalY, { align: 'center' });
-    finalY += 5;
+    // ==================== HEADER ====================
 
-    doc.setFillColor(93, 136, 255); doc.rect(140, finalY, 60, 20, 'F');
-    doc.setFontSize(10); doc.setTextColor(255, 255, 255); doc.text("R.U.C. N° " + RUC_EMPRESA, 170, finalY + 4, { align: 'center' });
-    doc.setFontSize(12); doc.setTextColor(255, 255, 255); doc.text("BOLETA DE VENTA ELECTRÓNICA", 170, finalY + 9, { align: 'center' });
-    doc.setFontSize(10); doc.setTextColor(255, 255, 255); doc.text("B001 - N° " + correlativo.toString().padStart(8, '0'), 170, finalY + 14, { align: 'center' });
-    finalY += 25;
+    // Logo/Título (simulado)
+    doc.setFillColor(...primaryColor);
+    doc.rect(14, yPos, 60, 12, 'F');
+    doc.setFontSize(16);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont(undefined, 'bold');
+    doc.text("PRESTAPRO", 44, yPos + 8, { align: 'center' });
 
-    // --- DATOS DEL CLIENTE ---
-    doc.setFontSize(10); doc.setTextColor(52, 64, 84); doc.text("DATOS DEL CLIENTE", 14, finalY); finalY += 5;
-    doc.setFontSize(9); doc.setTextColor(100, 100, 100);
-    doc.text(`DNI/RUC: ${loan.dni}`, 14, finalY);
-    doc.text(`Cliente: ${loan.nombres} ${loan.apellidos}`, 105, finalY); finalY += 5;
-    doc.text(`Fecha de Emisión: ${paymentDate}`, 14, finalY); finalY += 10;
+    // Caja RUC (derecha)
+    doc.setDrawColor(...primaryColor);
+    doc.setLineWidth(0.8);
+    doc.rect(130, yPos, 65, 35);
 
+    doc.setFontSize(9);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text(`R.U.C. N° ${RUC_EMPRESA}`, 162.5, yPos + 6, { align: 'center' });
 
-    // --- DETALLE DE LA OPERACIÓN (Tabla) ---
-    doc.setFontSize(10); doc.setTextColor(52, 64, 84); doc.text("DETALLE DE LA OPERACIÓN", 14, finalY); finalY += 5;
+    doc.setFontSize(12);
+    doc.setTextColor(...primaryColor);
+    doc.text("BOLETA DE VENTA", 162.5, yPos + 13, { align: 'center' });
+    doc.text("ELECTRÓNICA", 162.5, yPos + 19, { align: 'center' });
 
+    doc.setFontSize(11);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text(`B001-${correlativo.toString().padStart(8, '0')}`, 162.5, yPos + 28, { align: 'center' });
+
+    // Información de la empresa (izquierda)
+    yPos += 2;
+    doc.setFontSize(12);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text(RAZON_SOCIAL_EMPRESA, 14, yPos + 13);
+
+    doc.setFontSize(9);
+    doc.setTextColor(...grayColor);
+    doc.setFont(undefined, 'normal');
+    doc.text(DIRECCION_EMPRESA, 14, yPos + 19);
+    doc.text("Teléfono: (01) 123-4567", 14, yPos + 24);
+    doc.text("Email: info@prestapro.com.pe", 14, yPos + 29);
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'italic');
+    doc.text("SERVICIOS DE PRÉSTAMOS PERSONALES", 14, yPos + 34);
+
+    yPos += 42;
+
+    // Línea separadora
+    doc.setDrawColor(...lightGray);
+    doc.setLineWidth(0.3);
+    doc.line(14, yPos, 196, yPos);
+    yPos += 8;
+
+    // ==================== DATOS DEL CLIENTE ====================
+
+    doc.setFillColor(245, 247, 250);
+    doc.rect(14, yPos, 182, 8, 'F');
+
+    doc.setFontSize(10);
+    doc.setTextColor(...primaryColor);
+    doc.setFont(undefined, 'bold');
+    doc.text("📋 DATOS DEL CLIENTE", 16, yPos + 5.5);
+
+    yPos += 12;
+
+    doc.setFontSize(9);
+    doc.setTextColor(...grayColor);
+    doc.setFont(undefined, 'normal');
+    doc.text("Tipo/N° Documento:", 16, yPos);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text(`DNI / ${loan.dni}`, 60, yPos);
+
+    yPos += 6;
+    doc.setTextColor(...grayColor);
+    doc.setFont(undefined, 'normal');
+    doc.text("Apellidos y Nombres:", 16, yPos);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text(`${loan.nombres} ${loan.apellidos}`, 60, yPos);
+
+    yPos += 6;
+    doc.setTextColor(...grayColor);
+    doc.setFont(undefined, 'normal');
+    doc.text("Fecha de Emisión:", 16, yPos);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text(paymentDate, 60, yPos);
+
+    yPos += 10;
+
+    // Línea separadora
+    doc.setDrawColor(...lightGray);
+    doc.line(14, yPos, 196, yPos);
+    yPos += 8;
+
+    // ==================== DETALLE DE LA OPERACIÓN ====================
+
+    doc.setFillColor(245, 247, 250);
+    doc.rect(14, yPos, 182, 8, 'F');
+
+    doc.setFontSize(10);
+    doc.setTextColor(...primaryColor);
+    doc.setFont(undefined, 'bold');
+    doc.text("📄 DETALLE DE LA OPERACIÓN", 16, yPos + 5.5);
+
+    yPos += 12;
+
+    // Tabla de detalles
     const tableData = [
-        ['Amortización Cápital/Interés Préstamo', `S/ ${valorVenta.toFixed(2)}`, `S/ ${capitalInteresPagado.toFixed(2)}`],
+        [
+            `AMORTIZACIÓN PRÉSTAMO N° ${loan.id}\nCapital e Intereses - Cuota programada`,
+            `S/ ${valorVenta.toFixed(2)}`,
+            `S/ ${capitalInteresPagado.toFixed(2)}`
+        ]
     ];
+
     if (moraPagada > 0) {
-        tableData.push(['Mora / Penalidad por Atraso', `S/ 0.00`, `S/ ${moraPagada.toFixed(2)}`]);
+        tableData.push([
+            'MORA / PENALIDAD POR ATRASO\nInterés moratorio aplicado',
+            'S/ 0.00',
+            `S/ ${moraPagada.toFixed(2)}`
+        ]);
     }
 
     doc.autoTable({
-        startY: finalY + 2,
+        startY: yPos,
         head: [['DESCRIPCIÓN', 'VALOR VENTA', 'IMPORTE']],
         body: tableData,
         theme: 'grid',
-        headStyles: { fillColor: [55, 65, 81], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
-        bodyStyles: { fontSize: 8, textColor: [52, 64, 84] },
-        columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } }
+        headStyles: {
+            fillColor: primaryColor,
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
+            fontSize: 9,
+            halign: 'center'
+        },
+        bodyStyles: {
+            fontSize: 8,
+            textColor: darkColor,
+            cellPadding: 4
+        },
+        columnStyles: {
+            0: { cellWidth: 100 },
+            1: { halign: 'right', cellWidth: 35 },
+            2: { halign: 'right', cellWidth: 35, fontStyle: 'bold' }
+        },
+        didParseCell: function(data) {
+            // Resaltar mora en rojo
+            if (data.row.index === 1 && moraPagada > 0 && data.column.index === 2) {
+                data.cell.styles.textColor = [244, 67, 54];
+            }
+        }
     });
-    finalY = doc.lastAutoTable.finalY;
 
-    // --- RESUMEN DE MONTOS ---
-    finalY += 5;
-    doc.setFontSize(9); doc.setTextColor(52, 64, 84);
-    doc.text(`SUBTOTAL: S/ ${subtotal.toFixed(2)}`, 140, finalY, { align: 'right' }); finalY += 5;
-    doc.text(`IGV (0%): S/ ${IGV.toFixed(2)}`, 140, finalY, { align: 'right' }); finalY += 5;
+    yPos = doc.lastAutoTable.finalY + 10;
 
-    doc.setFontSize(12); doc.setTextColor(76, 175, 80);
-    doc.text(`IMPORTE TOTAL: S/ ${importeTotal.toFixed(2)}`, 140, finalY, { align: 'right' }); finalY += 10;
+    // ==================== RESUMEN DE MONTOS ====================
 
-    // --- FOOTER ---
-    doc.setFontSize(9); doc.setTextColor(100, 100, 100);
-    doc.text(`Monto en Letras: ${numeroALetras(importeTotal)} SOLES`, 14, finalY); finalY += 5;
-    doc.text(`Método de Pago: ${paymentMethod}. Transacción: ${transactionId}`, 14, finalY); finalY += 5;
+    const summaryX = 130;
+    const summaryWidth = 66;
 
-    doc.setFontSize(7); doc.setTextColor(150, 150, 150);
-    doc.text('Representación impresa de la Boleta de Venta Electrónica. Puede verificar este documento en la web de SUNAT (Simulación).', 105, 280, { align: 'center' });
+    // Subtotal
+    doc.setFontSize(9);
+    doc.setTextColor(...grayColor);
+    doc.setFont(undefined, 'normal');
+    doc.text("SUBTOTAL", summaryX, yPos);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text(`S/ ${subtotal.toFixed(2)}`, summaryX + summaryWidth, yPos, { align: 'right' });
 
+    yPos += 6;
 
-    const fileName = `Boleta_B001-${correlativo.toString().padStart(8, '0')}.pdf`;
+    // IGV
+    doc.setTextColor(...grayColor);
+    doc.setFont(undefined, 'normal');
+    doc.text("IGV (0%)", summaryX, yPos);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text(`S/ ${IGV.toFixed(2)}`, summaryX + summaryWidth, yPos, { align: 'right' });
+
+    yPos += 8;
+
+    // Línea antes del total
+    doc.setDrawColor(...primaryColor);
+    doc.setLineWidth(0.8);
+    doc.line(summaryX, yPos - 2, summaryX + summaryWidth, yPos - 2);
+
+    // Total
+    doc.setFillColor(245, 250, 255);
+    doc.rect(summaryX - 2, yPos - 3, summaryWidth + 4, 10, 'F');
+
+    doc.setFontSize(11);
+    doc.setTextColor(...primaryColor);
+    doc.setFont(undefined, 'bold');
+    doc.text("IMPORTE TOTAL", summaryX, yPos + 4);
+
+    doc.setFontSize(13);
+    doc.setTextColor(76, 175, 80); // Verde para el total
+    doc.text(`S/ ${totalPagado.toFixed(2)}`, summaryX + summaryWidth, yPos + 4, { align: 'right' });
+
+    yPos += 18;
+
+    // ==================== FOOTER ====================
+
+    // Línea separadora
+    doc.setDrawColor(...lightGray);
+    doc.setLineWidth(0.3);
+    doc.line(14, yPos, 196, yPos);
+    yPos += 6;
+
+    // Monto en letras (destacado)
+    doc.setFillColor(255, 249, 230);
+    doc.setDrawColor(255, 193, 7);
+    doc.setLineWidth(0.5);
+    doc.rect(14, yPos, 182, 12, 'FD');
+
+    doc.setFontSize(9);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text("SON:", 16, yPos + 5);
+    doc.setFont(undefined, 'normal');
+    doc.text(numeroALetras(totalPagado) + " SOLES", 16, yPos + 9);
+
+    yPos += 16;
+
+    // Información de pago
+    doc.setFontSize(8);
+    doc.setTextColor(...grayColor);
+    doc.setFont(undefined, 'bold');
+    doc.text("Forma de Pago: ", 14, yPos);
+    doc.setFont(undefined, 'normal');
+    doc.text(paymentMethod, 40, yPos);
+
+    doc.setFont(undefined, 'bold');
+    doc.text("ID Transacción: ", 90, yPos);
+    doc.setFont(undefined, 'normal');
+    doc.text(transactionId, 120, yPos);
+
+    yPos += 6;
+
+    // Observaciones
+    doc.setFont(undefined, 'bold');
+    doc.text("Observaciones: ", 14, yPos);
+    doc.setFont(undefined, 'normal');
+    doc.text(`Pago correspondiente al préstamo N° ${loan.id}. Operación registrada correctamente.`, 42, yPos);
+
+    yPos += 8;
+
+    // Texto legal SUNAT (pequeño y gris)
+    doc.setFontSize(7);
+    doc.setTextColor(150, 150, 150);
+    doc.setFont(undefined, 'italic');
+    const legalText = doc.splitTextToSize(
+        'Representación impresa de la Boleta de Venta Electrónica. Puede verificar la autenticidad de este documento en www.sunat.gob.pe. Este es un documento simulado para fines demostrativos.',
+        168
+    );
+    doc.text(legalText, 14, yPos);
+
+    // Marca de agua (opcional)
+    doc.setTextColor(200, 200, 200);
+    doc.setFontSize(40);
+    doc.setFont(undefined, 'bold');
+    doc.text('SIMULACIÓN', 105, 150, {
+        align: 'center',
+        angle: 45
+    });
+
+    // Guardar el PDF
+    const fileName = `Boleta_B001-${correlativo.toString().padStart(8, '0')}_${loan.apellidos}.pdf`;
     doc.save(fileName);
+}
+
+function numeroALetras(num) {
+    if (!/^\d+(\.\d{1,2})?$/.test(num)) return "CERO CON 00/100";
+
+    const [entero, decimal] = num.toFixed(2).split('.').map(s => parseInt(s));
+
+    const unidades = ['', 'UN', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE'];
+    const decenas = ['', 'DIEZ', 'VEINTE', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA'];
+    const especiales = ['DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISÉIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE'];
+    const centenas = ['', 'CIENTO', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS', 'QUINIENTOS', 'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS'];
+
+    function convertirGrupo(n) {
+        if (n === 0) return '';
+        if (n < 10) return unidades[n];
+        if (n >= 10 && n < 20) return especiales[n - 10];
+        if (n >= 20 && n < 100) {
+            const dec = Math.floor(n / 10);
+            const uni = n % 10;
+            return decenas[dec] + (uni > 0 ? ' Y ' + unidades[uni] : '');
+        }
+        if (n >= 100 && n < 1000) {
+            const cent = Math.floor(n / 100);
+            const resto = n % 100;
+            const centenasStr = cent === 1 && resto === 0 ? 'CIEN' : centenas[cent];
+            return centenasStr + (resto > 0 ? ' ' + convertirGrupo(resto) : '');
+        }
+        return '';
+    }
+
+    function convertirMiles(n) {
+        if (n === 0) return 'CERO';
+        if (n < 1000) return convertirGrupo(n);
+
+        const miles = Math.floor(n / 1000);
+        const resto = n % 1000;
+
+        let milesStr = '';
+        if (miles === 1) {
+            milesStr = 'MIL';
+        } else {
+            milesStr = convertirGrupo(miles) + ' MIL';
+        }
+
+        return milesStr + (resto > 0 ? ' ' + convertirGrupo(resto) : '');
+    }
+
+    const letras = convertirMiles(entero);
+    return `${letras} CON ${decimal.toString().padStart(2, '0')}/100`;
 }
 
 function toggleFormLock(locked) {
