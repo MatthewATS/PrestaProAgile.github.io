@@ -22,9 +22,8 @@ const TASA_INTERES_ANUAL = 10;
 const TASA_MORA_MENSUAL = 1;
 
 // 🚨 CREDENCIALES DE MERCADO PAGO DE PRODUCCIÓN 🚨
-// Los pagos se harán en el entorno REAL/LIVE.
-const MP_ACCESS_TOKEN = 'APP_USR-1246920437893290-120617-768190e0a707195da7806e0964a2f70a-3045510589'; // Access Token proporcionado
-const MP_PUBLIC_KEY = 'APP_USR-9e59f0d2-e486-4d3b-b09b-998efa2e46c4'; // Public Key proporcionada
+const MP_ACCESS_TOKEN = 'APP_USR-1246920437893290-120617-768190e0a707195da7806e0964a2f70a-3045510589';
+const MP_PUBLIC_KEY = 'APP_USR-11b6bf25-952a-4b6e-a2e1-f2d387b9c8d8';
 const MP_ENDPOINT_BASE = 'https://api.mercadopago.com/checkout/preferences';
 
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app';
@@ -118,6 +117,7 @@ async function registerPaymentInternal(loanId, paymentData) {
             payment_method: finalMethod
         });
 
+        // 🚨 CRÍTICO: El payment_amount enviado aquí es el MONTO TOTAL (CI + MORA)
         await connection.query(
             'INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method) VALUES (?, ?, ?, ?, ?)',
             [loanId, payment_amount, payment_date, mora_amount, finalMethod]
@@ -125,16 +125,17 @@ async function registerPaymentInternal(loanId, paymentData) {
 
         // Verificar si el préstamo está totalmente pagado
         const [paymentsRows] = await connection.query(
-            'SELECT SUM(payment_amount) as totalPaid FROM payments WHERE loan_id = ?',
+            'SELECT SUM(payment_amount - mora_amount) as totalPaidCI FROM payments WHERE loan_id = ?',
             [loanId]
         );
-        const totalPaid = parseFloat(paymentsRows[0].totalPaid || 0);
+        // Se suma solo el Capital/Interés (payment_amount - mora_amount) para comparar con totalDue
+        const totalPaidCI = parseFloat(paymentsRows[0].totalPaidCI || 0);
 
         const [loanRows] = await connection.query('SELECT * FROM loans WHERE id = ?', [loanId]);
         const loan = loanRows[0];
         const { totalDue } = calculateSchedule(loan);
 
-        if (totalPaid >= totalDue) {
+        if (totalPaidCI >= totalDue) {
             await connection.query("UPDATE loans SET status = 'Pagado' WHERE id = ?", [loanId]);
             console.log(`[PAYMENT INTERNAL] ✅ Préstamo ${loanId} marcado como PAGADO`);
         }
@@ -181,8 +182,9 @@ app.get('/api/loans', async (req, res) => {
 
             const associatedPayments = payments.filter(p => p.loan_id === loan.id);
 
-            const totalPaid = associatedPayments.reduce((sum, p) => sum + parseFloat(p.payment_amount), 0);
-            loan.total_paid = parseFloat(totalPaid.toFixed(2));
+            // Calcular Capital/Interés Pagado
+            const totalPaidCI = associatedPayments.reduce((sum, p) => sum + (parseFloat(p.payment_amount) - (parseFloat(p.mora_amount) || 0)), 0);
+            loan.total_paid = parseFloat(totalPaidCI.toFixed(2));
 
             loan.mora_pendiente = calculateMora(loan, loan.total_paid);
 
@@ -286,7 +288,7 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
 
     const totalPayment = parseFloat(payment_amount);
     const moraToRegister = parseFloat(mora_amount || 0);
-    const CiPayment = totalPayment - moraToRegister;
+    const CiPayment = totalPayment - moraToRegister; // Capital/Interés pagado
 
     if (totalPayment <= 0 || !payment_date || CiPayment < 0) {
         return res.status(400).json({ error: 'Monto de pago inválido o fecha faltante.' });
@@ -304,14 +306,15 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
         }
         const loan = loanRows[0];
 
+        // Obtener la suma total de CAPITAL/INTERÉS pagado
         const [paymentsRows] = await connection.query(
-            'SELECT SUM(payment_amount) as totalPaid FROM payments WHERE loan_id = ?',
+            'SELECT SUM(payment_amount - mora_amount) as totalPaidCI FROM payments WHERE loan_id = ?',
             [loanId]
         );
-        const totalPaid = parseFloat(paymentsRows[0].totalPaid || 0);
+        const totalPaidCI = parseFloat(paymentsRows[0].totalPaidCI || 0);
         const { totalDue } = calculateSchedule(loan);
 
-        const remainingBalanceCI = totalDue - totalPaid;
+        const remainingBalanceCI = totalDue - totalPaidCI;
         const roundedRemainingBalanceCI = parseFloat(remainingBalanceCI.toFixed(2));
 
         if (CiPayment > roundedRemainingBalanceCI) {
@@ -322,14 +325,15 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
             });
         }
 
+        // 🚨 CRÍTICO: Registrar el monto total (CI + MORA)
         await connection.query(
             'INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method) VALUES (?, ?, ?, ?, ?)',
             [loanId, totalPayment, payment_date, moraToRegister, payment_method]
         );
 
-        const newTotalPaid = totalPaid + totalPayment;
+        const newTotalPaidCI = totalPaidCI + CiPayment;
 
-        if (newTotalPaid >= totalDue) {
+        if (newTotalPaidCI >= totalDue) {
             await connection.query("UPDATE loans SET status = 'Pagado' WHERE id = ?", [loanId]);
         }
 
@@ -447,6 +451,7 @@ app.post('/api/mp/create-order', async (req, res) => {
                 number: clientDni
             }
         },
+        // 🚨 CRÍTICO: Redirecciona a una página de estado simulada (requiere un front-end/payment-status.html)
         back_urls: {
             success: `${YOUR_BACKEND_URL}/payment-status.html?status=success&loanId=${loanId}`,
             pending: `${YOUR_BACKEND_URL}/payment-status.html?status=pending&loanId=${loanId}`,
@@ -479,7 +484,7 @@ app.post('/api/mp/create-order', async (req, res) => {
         const mpData = await mpResponse.json();
 
         if (mpResponse.ok && mpData.id) {
-            // Mercado Pago usa init_point para la URL de checkout
+            // Mercado Pago en producción usa init_point
             const checkoutUrl = mpData.init_point;
 
             if (checkoutUrl) {
@@ -491,17 +496,17 @@ app.post('/api/mp/create-order', async (req, res) => {
                     externalReference: externalReference
                 });
             } else {
-                throw new Error("Mercado Pago no devolvió una URL de inicialización válida.");
+                // Esto podría ocurrir si hay problemas de configuración de URLs en MP Dashboard
+                throw new Error("Mercado Pago no devolvió una URL de inicialización válida. Revise su configuración de URLs de retorno.");
             }
 
         } else {
             console.error('[MP ERROR] ❌ Respuesta no exitosa:', mpData);
-            
+            // Si el error es de autenticación (401), se captura aquí.
             if (mpResponse.status === 401) {
                 throw new Error("Error de Autenticación (401). Revise su Access Token de Producción.");
             }
-            // Capturamos el error específico o genérico de MP
-            throw new Error(mpData.message || mpData.cause?.[0]?.description || JSON.stringify(mpData));
+            throw new Error(mpData.message || JSON.stringify(mpData));
         }
 
     } catch (error) {
@@ -554,13 +559,13 @@ app.post('/api/mp/webhook', async (req, res) => {
                 const externalRef = paymentData.external_reference;
                 const loanId = externalRef ? externalRef.split('-')[1] : null;
 
-                const paymentAmount = paymentData.transaction_amount;
+                const paymentAmount = paymentData.transaction_amount; // Monto total
                 const paymentDate = paymentData.date_approved?.split('T')[0] || new Date().toISOString().split('T')[0];
                 const amountMora = paymentData.metadata?.amount_mora || '0';
 
                 if (loanId && paymentAmount) {
                     const paymentDataToRegister = {
-                        payment_amount: parseFloat(paymentAmount),
+                        payment_amount: parseFloat(paymentAmount), // Total
                         mora_amount: parseFloat(amountMora),
                         payment_date: paymentDate,
                         payment_method: 'Mercado Pago'
@@ -613,7 +618,7 @@ const startServer = async () => {
             console.log(`\n${'='.repeat(60)}`);
             console.log(`🚀 Servidor PrestaPro escuchando en el puerto ${PORT}`);
             console.log(`📡 URL de Backend: ${YOUR_BACKEND_URL}`);
-            console.log(`💳 Mercado Pago configurado: ${MP_ACCESS_TOKEN ? '✅ (Modo Producción/Real)' : '❌'}`);
+            console.log(`💳 Mercado Pago configurado: ${MP_ACCESS_TOKEN ? '✅' : '❌'}`);
             console.log(`${'='.repeat(60)}\n`);
         });
 
