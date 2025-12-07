@@ -221,6 +221,7 @@
                 </div>
             </div>
         </div>
+
         <div id="module-caja" class="module-view">
             <div class="card">
                 <div class="card-header">
@@ -242,36 +243,35 @@
                     </div>
 
                     <div id="cashRegisterSummary" class="cash-register-summary">
-                        <p><strong>Total de Ingresos (Calculado):</strong> S/ 0.00</p>
-                        <p><strong>Ingreso Declarado (En Efectivo):</strong> N/A</p>
-                        <p style="border-top: 1px solid var(--border-color); padding-top: 5px; margin-top: 10px;"><strong>Diferencia:</strong> N/A</p>
+                        <p><strong>Total de Ingresos (Caja + Transferencias):</strong> S/ 0.00</p>
+                        <p><strong>Ingreso Neto en Efectivo (Cuadre):</strong> S/ 0.00</p>
+                        <p style="border-top: 1px solid var(--border-color); padding-top: 5px; margin-top: 10px;"><strong>Diferencia:</strong> N/A (Solo aplicable al cierre diario)</p>
                     </div>
 
-                    <div id="dailySquareSection">
+                    <div id="dailySquareSection" style="display: none;">
                         <h3 style="margin-bottom: 15px; color: var(--secondary-color);">Cierre de Caja Diario</h3>
                         <div class="form-row">
                             <div class="form-group">
-                                <label for="declaredAmount">Monto Total Recibido (Efectivo)</label>
+                                <label for="declaredAmount">Monto Total Contado (Efectivo)</label>
                                 <input type="number" id="declaredAmount" step="0.01" min="0" placeholder="Monto total contado en efectivo hoy" required>
                             </div>
                             <div class="form-group" style="display: flex; align-items: flex-end;">
-                                <button class="button button-success" id="saveDailySquareBtn" style="width: 100%;">✅ Registrar Cuadre Diario</button>
+                                <button class="button button-success" id="saveDailySquareBtn" style="width: 100%;">✅ Realizar Cierre de Caja</button>
                             </div>
                         </div>
                         <div id="squareValidationMessage" class="alert" style="display: none;"></div>
                     </div>
 
-                    <h3 style="margin-top: 30px; margin-bottom: 15px; color: var(--secondary-color);">💰 Historial Detallado</h3>
+                    <h3 style="margin-top: 30px; margin-bottom: 15px; color: var(--secondary-color);">💰 Resumen de Movimientos Diarios</h3>
                     <div class="table-container">
                         <table id="cashRegisterTable" class="main-table">
                             <thead>
                             <tr>
                                 <th>Fecha</th>
-                                <th>Cliente</th>
-                                <th>Monto Pagado</th>
-                                <th>Mora Pagada</th>
-                                <th>Método</th>
-                                <th>Total</th>
+                                <th>Efectivo Neto</th>
+                                <th>Transferencia/Yape</th>
+                                <th>Otros MP</th>
+                                <th>Total Ingresos</th>
                             </tr>
                             </thead>
                             <tbody id="cashRegisterTableBody"></tbody>
