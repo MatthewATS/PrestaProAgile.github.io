@@ -1519,45 +1519,362 @@ small {
     justify-content: space-between;
 }
 
-/* --- ESTILOS DE RECIBO SUNAT SIMULADO (AÑADIDOS) --- */
-.receipt-header.sunat-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 15px 20px;
-    border-bottom: 2px solid var(--border-color);
-    margin-bottom: 0;
+/*----------------------------DISEÑO PARA BOLETA SEGÚN SUNAT--------------------------------*/
+/* Contenedor principal del recibo */
+.receipt-container {
+    background: var(--bg-primary);
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    padding: 0;
+    max-width: 700px;
+    margin: 0 auto;
+    box-shadow: var(--shadow-lg);
 }
 
+/* Header estilo SUNAT mejorado */
+.receipt-header.sunat-header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 20px;
+    padding: 25px 30px;
+    border-bottom: 3px solid var(--primary-color);
+    margin-bottom: 0;
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--input-bg) 100%);
+}
+
+/* Información de la empresa (izquierda) */
+.sunat-company-info {
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+}
+
+.sunat-company-info .company-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--secondary-color);
+    margin: 0 0 8px 0;
+    letter-spacing: 0.5px;
+}
+
+.sunat-company-info .company-details {
+    font-size: 12px;
+    color: var(--text-color);
+    line-height: 1.6;
+    margin: 0;
+}
+
+.sunat-company-info .company-activity {
+    font-size: 11px;
+    color: #9CA3AF;
+    font-style: italic;
+    margin-top: 4px;
+}
+
+/* Caja RUC y Boleta (derecha) */
 .sunat-ruc-box {
     text-align: center;
-    border: 2px solid var(--primary-color);
-    padding: 8px 15px;
-    border-radius: 8px;
-    color: var(--primary-color);
-    font-weight: 700;
+    border: 3px solid var(--primary-color);
+    padding: 15px 20px;
+    border-radius: 12px;
+    background: var(--bg-primary);
+    min-width: 220px;
+    box-shadow: 0 4px 12px rgba(93, 136, 255, 0.2);
 }
 
-.sunat-company-info {
-    text-align: right;
+.sunat-ruc-box strong {
+    display: block;
+    font-size: 13px;
+    color: var(--primary-color);
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.sunat-ruc-box h3 {
+    color: var(--primary-color);
+    margin: 8px 0;
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.3;
+    text-transform: uppercase;
+}
+
+.sunat-ruc-box p {
+    margin: 6px 0 0 0;
     font-size: 14px;
     color: var(--text-color);
+    font-weight: 600;
+    letter-spacing: 1px;
+}
+
+/* Secciones del recibo */
+.receipt-section {
+    padding: 20px 30px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.receipt-section:last-of-type {
+    border-bottom: none;
+}
+
+.receipt-section h4 {
+    margin: 0 0 12px 0;
+    color: var(--secondary-color);
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--primary-light);
+}
+
+/* Filas de información */
+.receipt-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px dashed var(--light-gray);
+    align-items: center;
+}
+
+.receipt-row:last-child {
+    border-bottom: none;
+}
+
+.receipt-label {
+    color: #9CA3AF;
+    font-size: 13px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.receipt-value {
+    color: var(--text-color);
+    font-weight: 600;
+    font-size: 14px;
+    text-align: right;
+}
+
+/* Tabla de detalles */
+.receipt-detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+}
+
+.receipt-detail-table thead tr {
+    background: linear-gradient(135deg, var(--input-bg) 0%, var(--light-gray) 100%);
 }
 
 .receipt-detail-table th {
-    background-color: var(--light-gray);
+    padding: 12px 10px;
+    text-align: left;
     color: var(--secondary-color);
     font-size: 11px;
-    font-weight: 600;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid var(--primary-color);
+}
+
+.receipt-detail-table th:nth-child(2),
+.receipt-detail-table th:nth-child(3) {
+    text-align: right;
 }
 
 .receipt-detail-table td {
-    font-size: 12px;
+    padding: 12px 10px;
+    font-size: 13px;
+    color: var(--text-color);
+    border-bottom: 1px solid var(--border-color);
 }
 
-/* Ajustes de footer y total para la simulación SUNAT */
-.receipt-total {
-    background-color: transparent;
-    padding: 0;
-    margin-top: 10px;
+.receipt-detail-table td:nth-child(2),
+.receipt-detail-table td:nth-child(3) {
+    text-align: right;
+    font-weight: 600;
+}
+
+.receipt-detail-table tbody tr:last-child td {
+    border-bottom: 2px solid var(--border-color);
+}
+
+/* Resumen de montos (derecha) */
+.receipt-summary-box {
+    display: flex;
+    justify-content: flex-end;
+    padding: 20px 30px 10px 30px;
+}
+
+.receipt-summary-content {
+    width: 100%;
+    max-width: 320px;
+}
+
+.summary-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    font-size: 14px;
+    border-bottom: 1px dashed var(--border-color);
+}
+
+.summary-item:last-child {
+    border-bottom: none;
+}
+
+.summary-item span:first-child {
+    color: #9CA3AF;
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 12px;
+    letter-spacing: 0.3px;
+}
+
+.summary-item .receipt-value {
+    font-size: 15px;
+    font-weight: 700;
+}
+
+/* Total destacado */
+.summary-item.summary-total {
+    margin-top: 8px;
+    padding-top: 15px;
+    border-top: 3px solid var(--primary-color);
+    border-bottom: none;
+}
+
+.summary-item.summary-total span:first-child {
+    color: var(--secondary-color);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.summary-item.summary-total .receipt-value {
+    color: var(--success-color);
+    font-size: 20px;
+    font-weight: 700;
+}
+
+/* Footer del recibo */
+.receipt-footer {
+    padding: 20px 30px;
+    background: linear-gradient(135deg, var(--input-bg) 0%, var(--bg-secondary) 100%);
+    border-top: 2px solid var(--border-color);
+}
+
+.receipt-footer p {
+    color: var(--text-color);
+    font-size: 12px;
+    line-height: 1.6;
+    margin: 6px 0;
+}
+
+.receipt-footer p:first-child {
+    font-weight: 600;
+    color: var(--secondary-color);
+}
+
+.receipt-footer p:last-child {
+    font-size: 10px;
+    color: #9CA3AF;
+    font-style: italic;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border-color);
+}
+
+/* Monto en letras destacado */
+.receipt-footer .amount-in-words {
+    background-color: var(--primary-light);
+    padding: 10px 15px;
+    border-radius: 6px;
+    border-left: 4px solid var(--primary-color);
+    margin: 10px 0;
+}
+
+/* Estilos específicos para elementos destacados */
+.receipt-highlight {
+    background-color: var(--warning-light);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--warning-color);
+    font-weight: 600;
+}
+
+/* Responsive para el recibo */
+@media (max-width: 768px) {
+    .receipt-header.sunat-header {
+        grid-template-columns: 1fr;
+        gap: 15px;
+        padding: 20px;
+    }
+
+    .sunat-company-info {
+        text-align: center;
+    }
+
+    .sunat-ruc-box {
+        min-width: auto;
+        width: 100%;
+    }
+
+    .receipt-section {
+        padding: 15px 20px;
+    }
+
+    .receipt-summary-box {
+        padding: 15px 20px;
+    }
+
+    .receipt-summary-content {
+        max-width: 100%;
+    }
+}
+
+/* Estilos para impresión */
+@media print {
+    .receipt-container {
+        border: 2px solid #000;
+        box-shadow: none;
+        max-width: 100%;
+        background: white;
+    }
+
+    .receipt-header.sunat-header {
+        background: white;
+        border-bottom: 3px solid #000;
+    }
+
+    .sunat-ruc-box {
+        border-color: #000;
+        background: white;
+        box-shadow: none;
+    }
+
+    .sunat-company-info .company-name,
+    .sunat-ruc-box h3,
+    .receipt-section h4,
+    .summary-item.summary-total span:first-child {
+        color: #000;
+    }
+
+    .receipt-value,
+    .receipt-label,
+    .receipt-footer p {
+        color: #333;
+    }
+
+    .receipt-detail-table th {
+        background: #f0f0f0;
+        color: #000;
+    }
+
+    .receipt-footer {
+        background: white;
+    }
 }
