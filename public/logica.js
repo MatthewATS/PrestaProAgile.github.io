@@ -445,7 +445,7 @@ function initCashRegisterListeners() {
     getDomElement('printCashRegisterBtn')?.addEventListener('click', () => alert('Imprimir: Función en desarrollo.'));
 }
 
-// BUSCA ESTA SECCIÃ"N Y ACTUALIZA:
+// BUSCA ESTA SECCIÓN Y ACTUALIZA:
 function initReceiptButtonListeners() {
     const paymentHistoryBody = getDomElement('paymentHistoryBody');
 
@@ -498,7 +498,48 @@ function initReceiptButtonListeners() {
     }
 }
 
-// MODIFICADA: Implementa el nuevo diseño de PDF con jsPDF y autotable
+// NUEVO: Función para generar el Data URL del QR usando la librería qrcode.js
+function generateQrDataURL(text, size = 100) {
+    if (typeof QRCode === 'undefined') {
+        console.error("Librería QRCode no cargada. Usando placeholder.");
+        return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0BVAwCAAAAAQMAAAAAAElFTkSuQmCC';
+    }
+
+    // Crear un elemento div temporal para que la librería qrcode.js pueda renderizar
+    const tempDiv = document.createElement('div');
+    tempDiv.style.display = 'none';
+    document.body.appendChild(tempDiv);
+
+    // Inicializar el QR en el div
+    new QRCode(tempDiv, {
+        text: text,
+        width: size,
+        height: size,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.H
+    });
+
+    // La librería renderiza el QR como una tabla dentro del div.
+    // Buscamos el canvas o la imagen generada.
+    const canvas = tempDiv.querySelector('canvas');
+    let dataUrl = '';
+
+    if (canvas) {
+        dataUrl = canvas.toDataURL('image/png');
+    } else {
+        // Fallback si la librería usa imagen u otro formato (depende de la versión)
+        // La versión 1.0.0 suele usar solo un div/table
+        console.warn("No se encontró canvas para generar DataURL. Devolviendo placeholder.");
+        dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0BVAwCAAAAAQMAAAAAAElFTkSuQmCC';
+    }
+
+    // Limpiar el div temporal
+    document.body.removeChild(tempDiv);
+    return dataUrl;
+}
+
+// MODIFICADA: Implementa el nuevo diseño de PDF con jsPDF, autotable y QR
 async function shareReceipt() {
     if (!currentReceiptData) {
         alert('No hay datos del recibo para compartir.');
@@ -520,6 +561,10 @@ async function shareReceipt() {
     const valorVenta = capitalInteresPagado;
     const IGV = 0.00;
     const subtotal = totalPagado - IGV;
+
+    // Texto del QR (SUNAT: RUC, Tipo Doc, Serie, Numero, Total, IGV, Fecha, Tipo Doc Cliente, Num Doc Cliente)
+    const qrText = `|${RUC_EMPRESA}|03|B001|${correlativo.toString().padStart(8, '0')}|${totalPagado.toFixed(2)}|${IGV.toFixed(2)}|${paymentDate}|1|${loan.dni}|`;
+    const qrDataUrl = generateQrDataURL(qrText, 100);
 
     // Generar el PDF
     const { jsPDF } = window.jspdf;
@@ -719,54 +764,86 @@ async function shareReceipt() {
 
     yPos += 18;
 
-    // ==================== FOOTER (Mejorado) ====================
+    // ==================== FOOTER (Mejorado con QR) ====================
+    // --- QR Y TEXTO LEGAL EN DOS COLUMNAS ---
+    const qrSize = 40;
+    const qrX = 14;
+    const qrY = yPos + 6;
+
+    // 1. DIBUJAR EL QR REAL
+    doc.setFontSize(8);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text("Código QR SUNAT", qrX + (qrSize / 2), qrY - 3, { align: 'center' });
+
+    // Dibuja la imagen QR generada (si existe)
+    if (qrDataUrl.length > 100) {
+        doc.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize);
+    } else {
+        // Placeholder si falla la generación del DataURL
+        doc.setDrawColor(...darkColor);
+        doc.setLineWidth(0.5);
+        doc.rect(qrX, qrY, qrSize, qrSize);
+        doc.setFontSize(6);
+        doc.setTextColor(150, 150, 150);
+        doc.text("QR No Disponible", qrX + (qrSize / 2), qrY + 15, { align: 'center' });
+    }
+
+    // 2. Información en letras y detalles (Columna derecha)
+    const infoX = qrX + qrSize + 10;
+    let infoY = yPos;
+
     doc.setDrawColor(...lightGray);
     doc.setLineWidth(0.3);
-    doc.line(14, yPos, 196, yPos);
-    yPos += 6;
+    doc.line(infoX - 5, yPos, infoX - 5, yPos + 75); // Línea divisoria vertical
 
     // Monto en letras (Destacado)
+    infoY += 6;
     doc.setFillColor(255, 249, 230); // Color amarillo claro
     doc.setDrawColor(255, 193, 7); // Borde amarillo
     doc.setLineWidth(0.5);
-    doc.rect(14, yPos, 182, 12, 'FD');
+    doc.rect(infoX, infoY, 196 - infoX - 10, 12, 'FD');
 
     doc.setFontSize(9);
     doc.setTextColor(...darkColor);
     doc.setFont(undefined, 'bold');
-    doc.text("SON:", 16, yPos + 5);
+    doc.text("SON:", infoX + 2, infoY + 5);
     doc.setFont(undefined, 'normal');
-    doc.text(numeroALetras(totalPagado) + " SOLES", 16, yPos + 9);
+    doc.text(numeroALetras(totalPagado) + " SOLES", infoX + 2, infoY + 9);
 
-    yPos += 16;
+    infoY += 16;
     doc.setFontSize(8);
     doc.setTextColor(...grayColor);
     doc.setFont(undefined, 'bold');
-    doc.text("Forma de Pago: ", 14, yPos);
+    doc.text("Forma de Pago: ", infoX, infoY);
     doc.setFont(undefined, 'normal');
-    doc.text(paymentMethod, 40, yPos);
+    doc.text(paymentMethod, infoX + 26, infoY);
 
     doc.setFont(undefined, 'bold');
-    doc.text("ID Transacción: ", 90, yPos);
+    doc.text("ID Transacción: ", infoX + 60, infoY);
     doc.setFont(undefined, 'normal');
-    doc.text(transactionId, 120, yPos);
+    doc.text(transactionId, infoX + 86, infoY);
 
-    yPos += 6;
+    infoY += 6;
     doc.setFont(undefined, 'bold');
-    doc.text("Observaciones: ", 14, yPos);
+    doc.text("Observaciones: ", infoX, infoY);
     doc.setFont(undefined, 'normal');
-    doc.text(`Pago correspondiente al préstamo N° ${loan.id}. Operación registrada correctamente.`, 42, yPos);
+    doc.text(`Pago correspondiente al préstamo N° ${loan.id}. Operación registrada correctamente.`, infoX + 28, infoY);
 
-    yPos += 8;
+    infoY += 8;
     doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
     doc.setFont(undefined, 'italic');
     const legalText = doc.splitTextToSize(
         'Representación impresa de la Boleta de Venta Electrónica. Puede verificar la autenticidad de este documento en www.sunat.gob.pe. Este es un documento simulado para fines demostrativos.',
-        168
+        196 - infoX - 10
     );
-    doc.text(legalText, 14, yPos);
+    doc.text(legalText, infoX, infoY);
 
+    // Actualizar yPos al final del QR + Info
+    yPos = Math.max(qrY + qrSize + 10, infoY + legalText.length * 5 + 5);
+
+    // Marca de agua
     doc.setTextColor(200, 200, 200);
     doc.setFontSize(40);
     doc.setFont(undefined, 'bold');
@@ -2046,6 +2123,11 @@ function showReceipt(payment, loan) {
     const importeTotal = totalPagado;
     const subtotal = importeTotal - IGV;
 
+    // Generar el Data URL del QR
+    const qrText = `|${RUC_EMPRESA}|03|B001|${correlativo.toString().padStart(8, '0')}|${totalPagado.toFixed(2)}|${IGV.toFixed(2)}|${paymentDate}|1|${loan.dni}|`;
+    const qrDataUrl = generateQrDataURL(qrText, 100);
+
+
     receiptContent.innerHTML = `
         <div class="receipt-container">
             <div class="receipt-header sunat-header">
@@ -2103,13 +2185,22 @@ function showReceipt(payment, loan) {
                 </div>
             </div>
 
-            <div class="receipt-footer">
-                <div class="amount-in-words">
-                    <p style="font-weight: 700; color: var(--secondary-color); margin: 0;">SON: ${numeroALetras(importeTotal)} SOLES</p>
+            <div class="receipt-footer" style="display: flex; gap: 20px; align-items: flex-start;">
+                
+                <div class="qr-code-container" style="flex-shrink: 0; text-align: center; border: 1px solid var(--border-color); padding: 10px; border-radius: 8px;">
+                    <img src="${qrDataUrl}" alt="Código QR SUNAT" style="width: 100px; height: 100px; display: block; margin: 0 auto;">
+                    <p style="font-size: 10px; color: var(--secondary-color); margin-top: 5px; font-weight: 600;">Código QR SUNAT</p>
+                    <p style="font-size: 7px; color: #9CA3AF; margin: 0; max-width: 100px; word-break: break-all;">${qrText}</p>
                 </div>
-                <p style="margin: 5px 0;">Método de Pago: ${paymentMethod}. Transacción: ${transactionId}</p>
-                <p style="margin: 5px 0;">Pago correspondiente al préstamo N° ${loan.id}. Operación registrada correctamente.</p>
-                <p style="margin: 5px 0; font-size: 10px;">Representación impresa de la Boleta de Venta Electrónica. Puede verificar este documento en la web de SUNAT (Simulación).</p>
+                
+                <div style="flex-grow: 1;">
+                    <div class="amount-in-words">
+                        <p style="font-weight: 700; color: var(--secondary-color); margin: 0;">SON: ${numeroALetras(importeTotal)} SOLES</p>
+                    </div>
+                    <p style="margin: 5px 0;">Método de Pago: ${paymentMethod}. Transacción: ${transactionId}</p>
+                    <p style="margin: 5px 0;">Pago correspondiente al préstamo N° ${loan.id}. Operación registrada correctamente.</p>
+                    <p style="margin: 5px 0; font-size: 10px;">Representación impresa de la Boleta de Venta Electrónica. Puede verificar este documento en la web de SUNAT (Simulación).</p>
+                </div>
             </div>
         </div>
     `;
@@ -2120,9 +2211,50 @@ function showReceipt(payment, loan) {
 
 function numeroALetras(num) {
     if (!/^\d+(\.\d{1,2})?$/.test(num)) return "CERO CON 00/100";
+
     const [entero, decimal] = num.toFixed(2).split('.').map(s => parseInt(s));
-    // Simulación de una librería compleja. Se deja solo el principio y el final.
-    const letras = entero > 0 ? 'MONTO EN LETRAS SIMULADO' : 'CERO';
+
+    const unidades = ['', 'UN', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE'];
+    const decenas = ['', 'DIEZ', 'VEINTE', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVETENA'];
+    const especiales = ['DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISÉIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE'];
+    const centenas = ['', 'CIENTO', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS', 'QUINIENTOS', 'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS'];
+
+    function convertirGrupo(n) {
+        if (n === 0) return '';
+        if (n < 10) return unidades[n];
+        if (n >= 10 && n < 20) return especiales[n - 10];
+        if (n >= 20 && n < 100) {
+            const dec = Math.floor(n / 10);
+            const uni = n % 10;
+            return decenas[dec] + (uni > 0 ? ' Y ' + unidades[uni] : '');
+        }
+        if (n >= 100 && n < 1000) {
+            const cent = Math.floor(n / 100);
+            const resto = n % 100;
+            const centenasStr = cent === 1 && resto === 0 ? 'CIEN' : centenas[cent];
+            return centenasStr + (resto > 0 ? ' ' + convertirGrupo(resto) : '');
+        }
+        return '';
+    }
+
+    function convertirMiles(n) {
+        if (n === 0) return 'CERO';
+        if (n < 1000) return convertirGrupo(n);
+
+        const miles = Math.floor(n / 1000);
+        const resto = n % 1000;
+
+        let milesStr = '';
+        if (miles === 1) {
+            milesStr = 'MIL';
+        } else {
+            milesStr = convertirGrupo(miles) + ' MIL';
+        }
+
+        return milesStr + (resto > 0 ? ' ' + convertirGrupo(resto) : '');
+    }
+
+    const letras = convertirMiles(entero);
     return `${letras} CON ${decimal.toString().padStart(2, '0')}/100`;
 }
 
@@ -2144,6 +2276,9 @@ function downloadReceipt() {
         IGV,
         subtotal
     } = currentReceiptData;
+
+    const qrText = `|${RUC_EMPRESA}|03|B001|${correlativo.toString().padStart(8, '0')}|${totalPagado.toFixed(2)}|${IGV.toFixed(2)}|${paymentDate}|1|${loan.dni}|`;
+    const qrDataUrl = generateQrDataURL(qrText, 100);
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
@@ -2350,61 +2485,84 @@ function downloadReceipt() {
 
     yPos += 18;
 
-    // ==================== FOOTER (Mejorado) ====================
+    // ==================== FOOTER (Mejorado con QR) ====================
+    // --- QR Y TEXTO LEGAL EN DOS COLUMNAS ---
+    const qrSize = 40;
+    const qrX = 14;
+    const qrY = yPos + 6;
 
-    // Línea separadora
+    // 1. DIBUJAR EL QR REAL
+    doc.setFontSize(8);
+    doc.setTextColor(...darkColor);
+    doc.setFont(undefined, 'bold');
+    doc.text("Código QR SUNAT", qrX + (qrSize / 2), qrY - 3, { align: 'center' });
+
+    // Dibuja la imagen QR generada (si existe)
+    if (qrDataUrl.length > 100) {
+        doc.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize);
+    } else {
+        // Placeholder si falla la generación del DataURL
+        doc.setDrawColor(...darkColor);
+        doc.setLineWidth(0.5);
+        doc.rect(qrX, qrY, qrSize, qrSize);
+        doc.setFontSize(6);
+        doc.setTextColor(150, 150, 150);
+        doc.text("QR No Disponible", qrX + (qrSize / 2), qrY + 15, { align: 'center' });
+    }
+
+    // 2. Información en letras y detalles (Columna derecha)
+    const infoX = qrX + qrSize + 10;
+    let infoY = yPos;
+
     doc.setDrawColor(...lightGray);
     doc.setLineWidth(0.3);
-    doc.line(14, yPos, 196, yPos);
-    yPos += 6;
+    doc.line(infoX - 5, yPos, infoX - 5, yPos + 75); // Línea divisoria vertical
 
-    // Monto en letras (destacado)
-    doc.setFillColor(255, 249, 230);
-    doc.setDrawColor(255, 193, 7);
+    // Monto en letras (Destacado)
+    infoY += 6;
+    doc.setFillColor(255, 249, 230); // Color amarillo claro
+    doc.setDrawColor(255, 193, 7); // Borde amarillo
     doc.setLineWidth(0.5);
-    doc.rect(14, yPos, 182, 12, 'FD');
+    doc.rect(infoX, infoY, 196 - infoX - 10, 12, 'FD');
 
     doc.setFontSize(9);
     doc.setTextColor(...darkColor);
     doc.setFont(undefined, 'bold');
-    doc.text("SON:", 16, yPos + 5);
+    doc.text("SON:", infoX + 2, infoY + 5);
     doc.setFont(undefined, 'normal');
-    doc.text(numeroALetras(totalPagado) + " SOLES", 16, yPos + 9);
+    doc.text(numeroALetras(totalPagado) + " SOLES", infoX + 2, infoY + 9);
 
-    yPos += 16;
-
-    // Información de pago
+    infoY += 16;
     doc.setFontSize(8);
     doc.setTextColor(...grayColor);
     doc.setFont(undefined, 'bold');
-    doc.text("Forma de Pago: ", 14, yPos);
+    doc.text("Forma de Pago: ", infoX, infoY);
     doc.setFont(undefined, 'normal');
-    doc.text(paymentMethod, 40, yPos);
+    doc.text(paymentMethod, infoX + 26, infoY);
 
     doc.setFont(undefined, 'bold');
-    doc.text("ID Transacción: ", 90, yPos);
+    doc.text("ID Transacción: ", infoX + 60, infoY);
     doc.setFont(undefined, 'normal');
-    doc.text(transactionId, 120, yPos);
+    doc.text(transactionId, infoX + 86, infoY);
 
-    yPos += 6;
-
-    // Observaciones
+    infoY += 6;
     doc.setFont(undefined, 'bold');
-    doc.text("Observaciones: ", 14, yPos);
+    doc.text("Observaciones: ", infoX, infoY);
     doc.setFont(undefined, 'normal');
-    doc.text(`Pago correspondiente al préstamo N° ${loan.id}. Operación registrada correctamente.`, 42, yPos);
+    doc.text(`Pago correspondiente al préstamo N° ${loan.id}. Operación registrada correctamente.`, infoX + 28, infoY);
 
-    yPos += 8;
-
-    // Texto legal SUNAT (pequeño y gris)
+    infoY += 8;
     doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
     doc.setFont(undefined, 'italic');
     const legalText = doc.splitTextToSize(
         'Representación impresa de la Boleta de Venta Electrónica. Puede verificar la autenticidad de este documento en www.sunat.gob.pe. Este es un documento simulado para fines demostrativos.',
-        168
+        196 - infoX - 10
     );
-    doc.text(legalText, 14, yPos);
+    doc.text(legalText, infoX, infoY);
+
+    // Actualizar yPos al final del QR + Info
+    yPos = Math.max(qrY + qrSize + 10, infoY + legalText.length * 5 + 5);
 
     // Marca de agua (opcional)
     doc.setTextColor(200, 200, 200);
@@ -2418,55 +2576,6 @@ function downloadReceipt() {
     // Guardar el PDF
     const fileName = `Boleta_B001-${correlativo.toString().padStart(8, '0')}_${loan.apellidos}.pdf`;
     doc.save(fileName);
-}
-
-function numeroALetras(num) {
-    if (!/^\d+(\.\d{1,2})?$/.test(num)) return "CERO CON 00/100";
-
-    const [entero, decimal] = num.toFixed(2).split('.').map(s => parseInt(s));
-
-    const unidades = ['', 'UN', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE'];
-    const decenas = ['', 'DIEZ', 'VEINTE', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA'];
-    const especiales = ['DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISÉIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE'];
-    const centenas = ['', 'CIENTO', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS', 'QUINIENTOS', 'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS'];
-
-    function convertirGrupo(n) {
-        if (n === 0) return '';
-        if (n < 10) return unidades[n];
-        if (n >= 10 && n < 20) return especiales[n - 10];
-        if (n >= 20 && n < 100) {
-            const dec = Math.floor(n / 10);
-            const uni = n % 10;
-            return decenas[dec] + (uni > 0 ? ' Y ' + unidades[uni] : '');
-        }
-        if (n >= 100 && n < 1000) {
-            const cent = Math.floor(n / 100);
-            const resto = n % 100;
-            const centenasStr = cent === 1 && resto === 0 ? 'CIEN' : centenas[cent];
-            return centenasStr + (resto > 0 ? ' ' + convertirGrupo(resto) : '');
-        }
-        return '';
-    }
-
-    function convertirMiles(n) {
-        if (n === 0) return 'CERO';
-        if (n < 1000) return convertirGrupo(n);
-
-        const miles = Math.floor(n / 1000);
-        const resto = n % 1000;
-
-        let milesStr = '';
-        if (miles === 1) {
-            milesStr = 'MIL';
-        } else {
-            milesStr = convertirGrupo(miles) + ' MIL';
-        }
-
-        return milesStr + (resto > 0 ? ' ' + convertirGrupo(resto) : '');
-    }
-
-    const letras = convertirMiles(entero);
-    return `${letras} CON ${decimal.toString().padStart(2, '0')}/100`;
 }
 
 function toggleFormLock(locked) {
@@ -2991,8 +3100,34 @@ function printModalContent(contentElement) {
                     background: white;
                     border-top: 2px solid #000;
                     page-break-inside: avoid;
+                    display: flex;
+                    gap: 20px;
+                    align-items: flex-start;
                 }
 
+                .receipt-footer .qr-code-container {
+                    flex-shrink: 0; 
+                    text-align: center; 
+                    border: 1px solid #000; 
+                    padding: 10px; 
+                    border-radius: 8px;
+                }
+                
+                .receipt-footer .qr-code-container img {
+                    width: 100px; 
+                    height: 100px; 
+                    display: block; 
+                    margin: 0 auto;
+                }
+
+                .receipt-footer .amount-in-words {
+                    background-color: #ffffe0;
+                    padding: 10px 15px;
+                    border-radius: 6px;
+                    border-left: 4px solid #ffa000;
+                    margin: 10px 0;
+                }
+                
                 .receipt-footer p {
                     color: #000;
                     font-size: 12px;
@@ -3014,14 +3149,6 @@ function printModalContent(contentElement) {
                     border-top: 1px dashed #ccc;
                 }
                 
-                .receipt-footer .amount-in-words {
-                    background-color: #ffffe0;
-                    padding: 10px 15px;
-                    border-radius: 6px;
-                    border-left: 4px solid #ffa000;
-                    margin: 10px 0;
-                }
-
                 /* Ocultar elementos que no se deben imprimir */
                 .close-button,
                 button {
