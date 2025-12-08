@@ -117,7 +117,7 @@ function initializeApp() {
     getDomElement('shareMpLinkBtn')?.addEventListener('click', shareMpLink);
 
 
-    // --- FUNCIÓN DE MOSTRAR APLICACIÓN ---
+    // --- FUNCIÓN DE MOSTRAR APLICACIÓN (MODIFICADA) ---
     const showApp = () => {
         loginContainer.style.display = 'none';
         appContainer.style.display = 'block';
@@ -154,7 +154,7 @@ function initializeApp() {
         appContainer.style.display = 'none';
     };
 
-    // --- LÓGICA DE NAVEGACIÓN ---
+    // --- LÓGICA DE NAVEGACIÓN (MODIFICADA) ---
     function showModule(moduleId, addToHistory = true) {
         // 1. Ocultar todos los módulos
         document.querySelectorAll('.module-view').forEach(view => {
@@ -169,7 +169,7 @@ function initializeApp() {
         }
 
         const appTitle = getDomElement('appTitle');
-        const navBar = getDomElement('navigation-bar'); // La nueva barra que creamos
+        const navBar = getDomElement('navigation-bar');
 
         // 2. Gestión del Historial del Navegador (CRÍTICO)
         if (addToHistory) {
@@ -183,7 +183,7 @@ function initializeApp() {
             appTitle.textContent = '💰 PrestaPro';
         } else {
             // ✅ SOLUCIÓN 2: Mostrar barra en cualquier otro módulo
-            if (navBar) navBar.style.display = 'block'; // Mostrar barra en otros módulos
+            if (navBar) navBar.style.display = 'flex'; // Usamos flex para mostrar
 
             // Configurar títulos y reseteos según el módulo
             if (moduleId === 'module-pagos') {
@@ -1549,7 +1549,7 @@ function populateQuickPaymentSummary(loan) {
 
     // **MODIFICACIÓN 1: Establecer la fecha actual y mantenerla como string (DD/MM/YYYY)**
     const today = new Date();
-    // Utiliza el formato no editable, pero la función getTodayDateISO() genera el formato ISO para el backend
+    // Utiliza el formato no editable, but the getTodayDateISO() function generates the ISO format for the backend
     const formattedDate = today.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
     getDomElement('quick_payment_date').value = formattedDate;
 
