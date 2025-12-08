@@ -1021,7 +1021,7 @@ function initLoanFormLogic() {
             </div>
             
             <div id="declaracion-container" class="form-group" style="display: none; background-color: var(--primary-light); padding: 15px; border-radius: 8px; margin-top: 10px;">
-                <div style="display: flex; align-items: center;">
+                <div style="display: -webkit-box; display: -ms-flexbox; display: -webkit-flex; display: flex; -webkit-box-align: center; -ms-flex-align: center; -webkit-align-items: center; align-items: center;">
                     <input type="checkbox" id="declaracion_jurada" style="width: 20px; height: 20px; margin-right: 12px;">
                     <label for="declaracion_jurada" style="margin-bottom: 0;">Declaro bajo juramento el origen lícito del dinero.</label>
                 </div>
@@ -1449,26 +1449,29 @@ function initQuickPaymentListeners() {
     // Listener para recalcular y habilitar el botón al cambiar el método de pago
     document.querySelectorAll('input[name="quick_payment_method"]').forEach(radio => {
         radio.addEventListener('change', () => {
+            // Lógica para asignar la clase 'selected' (FIX de compatibilidad)
+            document.querySelectorAll('#quick-payment-summary-section .payment-methods-row .checkbox-container').forEach(c => {
+                c.classList.remove('selected');
+            });
+            radio.closest('.checkbox-container').classList.add('selected');
+
             if (currentLoanForQuickPayment) calculateFlexiblePayment(currentLoanForQuickPayment);
         });
     });
 
     confirmQuickPaymentBtn?.addEventListener('click', handleQuickPaymentSubmit);
 
+    // FIX DE COMPATIBILIDAD: Reemplazar :has() en CSS con JS para el clic en las tarjetas
     document.querySelectorAll('#quick-payment-summary-section .payment-methods-row .checkbox-container').forEach(card => {
         card.addEventListener('click', () => {
-            document.querySelectorAll('.payment-methods-row .checkbox-container').forEach(c => {
-                c.style.borderColor = 'var(--border-color)';
-                c.style.backgroundColor = 'var(--input-bg)';
-            });
-            card.style.borderColor = 'var(--primary-color)';
-            card.style.backgroundColor = 'var(--primary-light)';
-
+            // Simular el comportamiento del radio button al hacer clic en el contenedor
             const radio = card.querySelector('input[type="radio"]');
-            if (radio) radio.checked = true;
-
-            // Recalculo para aplicar restricción si es necesario
-            if (currentLoanForQuickPayment) calculateFlexiblePayment(currentLoanForQuickPayment);
+            if (radio) {
+                radio.checked = true;
+                // Disparar el evento 'change' manualmente para activar el listener de recalcular
+                const event = new Event('change');
+                radio.dispatchEvent(event);
+            }
         });
     });
 }
@@ -2088,7 +2091,7 @@ function showReceipt(payment, loan) {
                 </table>
             </div>
 
-            <div style="display: flex; justify-content: flex-end; padding: 15px 20px 0 20px;">
+            <div style="display: -webkit-box; display: -ms-flexbox; display: -webkit-flex; display: flex; -webkit-box-pack: end; -ms-flex-pack: end; -webkit-justify-content: flex-end; justify-content: flex-end; padding: 15px 20px 0 20px;">
                 <div style="width: 50%; max-width: 300px;">
                     <div class="summary-item"><span>SUBTOTAL</span><span class="receipt-value">S/ ${subtotal.toFixed(2)}</span></div>
                     <div class="summary-item"><span>IGV (0%)</span><span class="receipt-value">S/ ${IGV.toFixed(2)}</span></div>
