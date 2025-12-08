@@ -4,10 +4,12 @@ const VALOR_UIT = 5150;
 const TASA_INTERES_ANUAL = 10;
 const TASA_MORA_MENSUAL = 1; // 1% de mora por mes
 const MP_LIMIT_YAPE = 500; // Nuevo límite para Yape/Plin
-const RUC_EMPRESA = '20609939521'; // RUC de ejemplo
-const RAZON_SOCIAL_EMPRESA = 'PRESTAPRO S.A.C.';
-const DIRECCION_EMPRESA = 'Av. Javier Prado Este 123, San Isidro';
 
+const MAX_HISTORY_SIZE = 10;
+
+let RUC_EMPRESA = localStorage.getItem('config_ruc') || '20609939521'; // RUC de ejemplo
+let RAZON_SOCIAL_EMPRESA = localStorage.getItem('config_razon_social') || 'PRESTAPRO S.A.C.';
+let DIRECCION_EMPRESA = localStorage.getItem('config_direccion') || 'Av. Javier Prado Este 123, San Isidro'
 let loans = [];
 let clients = new Set();
 let currentLoanForDetails = null;
@@ -77,6 +79,7 @@ function showSuccessAnimation(message) {
 
 // --- FUNCIÓN DE INICIALIZACIÓN PRINCIPAL ---
 document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
     initializeApp();
 });
 
@@ -99,6 +102,14 @@ function initializeApp() {
     const moduleCards = document.querySelectorAll('.module-card');
     const backToMenuBtn = getDomElement('backToMenuBtn');
 
+    const receiptConfigModal = getDomElement('receiptConfigModal');
+    const receiptConfigForm = getDomElement('receiptConfigForm');
+    const menuReceiptConfig = getDomElement('menuReceiptConfig');
+    const closeReceiptConfigModalBtn = getDomElement('closeReceiptConfigModalBtn');
+
+    updateClock();
+    setInterval(updateClock, 1000);
+
     // Nuevo Modal Link
     getDomElement('closeCheckoutLinkModalBtn')?.addEventListener('click', () => closeModal(getDomElement('checkoutLinkModal')));
     getDomElement('copyLinkBtn')?.addEventListener('click', copyMpLink);
@@ -110,8 +121,32 @@ function initializeApp() {
     const showApp = () => {
         loginContainer.style.display = 'none';
         appContainer.style.display = 'block';
+
+        // 1. Mostrar nombre de usuario en el header
+        const userNameDisplay = getDomElement('headerUserName');
+        if (userNameDisplay) {
+            // Capitalizar (admin -> Admin)
+            userNameDisplay.textContent = currentUser.charAt(0).toUpperCase() + currentUser.slice(1);
+        }
+
+        // 2. Configurar listener para "Cambiar Contraseña" del menú
+        const menuChangePass = getDomElement('menuChangePassword');
+        if (menuChangePass) {
+            // Usamos clonación para limpiar listeners viejos si se recarga la app
+            const newBtn = menuChangePass.cloneNode(true);
+            menuChangePass.parentNode.replaceChild(newBtn, menuChangePass);
+
+            newBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                // Aseguramos que el form y modal existan (definidos al inicio de initializeApp)
+                if (typeof changePasswordForm !== 'undefined') changePasswordForm.reset();
+                if (typeof changePasswordModal !== 'undefined') openModal(changePasswordModal);
+            });
+        }
+
         fetchAndRenderLoans();
-        showModule('module-menu');
+        window.history.replaceState({ module: 'module-menu' }, '', '#module-menu');
+        showModule('module-menu', false);
     };
 
     const showLogin = () => {
@@ -120,7 +155,8 @@ function initializeApp() {
     };
 
     // --- LÓGICA DE NAVEGACIÓN ---
-    function showModule(moduleId) {
+    function showModule(moduleId, addToHistory = true) {
+        // 1. Ocultar todos los módulos
         document.querySelectorAll('.module-view').forEach(view => {
             view.style.display = 'none';
             view.classList.remove('active');
@@ -133,16 +169,26 @@ function initializeApp() {
         }
 
         const appTitle = getDomElement('appTitle');
+        const navBar = getDomElement('navigation-bar'); // La nueva barra que creamos
 
+        // 2. Gestión del Historial del Navegador (CRÍTICO)
+        if (addToHistory) {
+            window.history.pushState({ module: moduleId }, '', `#${moduleId}`);
+        }
+
+        // 3. Lógica visual del Botón Retroceder
         if (moduleId === 'module-menu') {
-            backToMenuBtn.style.display = 'none';
+            // ✅ SOLUCIÓN 1: Ocultar barra en el menú principal
+            if (navBar) navBar.style.display = 'none';
             appTitle.textContent = '💰 PrestaPro';
-            fetchAndRenderLoans();
         } else {
-            backToMenuBtn.style.display = 'inline-flex';
+            // ✅ SOLUCIÓN 2: Mostrar barra en cualquier otro módulo
+            if (navBar) navBar.style.display = 'block'; // Mostrar barra en otros módulos
 
+            // Configurar títulos y reseteos según el módulo
             if (moduleId === 'module-pagos') {
                 appTitle.textContent = '💳 Registrar Pagos';
+                // Reseteos específicos de pagos
                 getDomElement('search-dni-pago').value = '';
                 getDomElement('quickPaymentTableBody').innerHTML = '<tr><td colspan="4" style="text-align: center; color: #9CA3AF;">Busca un DNI para encontrar préstamos.</td></tr>';
                 getDomElement('quick-payment-result-section').style.display = 'none';
@@ -200,11 +246,27 @@ function initializeApp() {
         });
     });
 
-    backToMenuBtn?.addEventListener('click', () => { showModule('module-menu'); });
+
+
+    backToMenuBtn?.addEventListener('click', () => {
+        // Simula presionar "Atrás" en el navegador
+        window.history.back();
+    });
 
     addLoanBtn?.addEventListener('click', () => openModal(loanModal));
 
     deleteConfirmationForm?.addEventListener('submit', handleDeleteSubmit);
+
+
+    window.addEventListener('popstate', (event) => {
+        if (event.state && event.state.module) {
+            // Si hay estado guardado, volvemos a ese módulo SIN añadirlo al historial de nuevo (false)
+            showModule(event.state.module, false);
+        } else {
+            // Si no hay estado (llegamos al inicio), mostramos el menú
+            showModule('module-menu', false);
+        }
+    });
 
     // --- CAMBIO DE CONTRASEÑA ---
     changePasswordLink?.addEventListener('click', (e) => {
@@ -241,6 +303,16 @@ function initializeApp() {
         setTimeout(() => closeModal(changePasswordModal), 2500);
     });
 
+    closeReceiptConfigModalBtn?.addEventListener('click', () => closeModal(receiptConfigModal));
+
+    menuReceiptConfig?.addEventListener('click', (e) => {
+        e.preventDefault();
+        openReceiptConfigModal();
+    });
+
+    receiptConfigForm?.addEventListener('submit', handleReceiptConfigSubmit);
+
+
     // === DELEGACIÓN DE EVENTOS DE LA TABLA PRINCIPAL (CORREGIDA) ===
     getDomElement('historyTableBody')?.addEventListener('click', function(event) {
         const target = event.target.closest('button');
@@ -262,14 +334,70 @@ function initializeApp() {
         }
     });
 
-
-
     // --- INICIALIZACIÓN DE LÓGICA DE NEGOCIO ---
     initPaymentListeners();
     initQuickPaymentListeners();
     initLoanFormLogic(); // CRÍTICO: Inicializa el HTML del formulario
     initCashRegisterListeners();
     initReceiptButtonListeners();
+}
+
+
+function goBackModule() {
+    // Si el historial está vacío o solo tiene 1 elemento (el actual), ir al menú principal
+    if (appModuleHistory.length <= 1) {
+        showModule('module-menu', true);
+        return;
+    }
+
+    // 1. Sacar el módulo actual (el que vamos a cerrar)
+    appModuleHistory.pop();
+
+    // 2. Obtener el módulo anterior
+    const previousModuleId = appModuleHistory[appModuleHistory.length - 1];
+
+    // 3. Mostrarlo, indicando que es una acción de retroceso
+    showModule(previousModuleId || 'module-menu', true);
+}
+
+function openReceiptConfigModal() {
+    const rucInput = getDomElement('configRuc');
+    const razonSocialInput = getDomElement('configRazonSocial');
+    const direccionInput = getDomElement('configDireccion');
+
+    // Cargar los valores actuales (globales) en el formulario
+    rucInput.value = RUC_EMPRESA;
+    razonSocialInput.value = RAZON_SOCIAL_EMPRESA;
+    direccionInput.value = DIRECCION_EMPRESA;
+
+    getDomElement('receipt-config-message').style.display = 'none';
+    openModal(getDomElement('receiptConfigModal'));
+}
+
+function handleReceiptConfigSubmit(e) {
+    e.preventDefault();
+
+    const rucInput = getDomElement('configRuc').value;
+    const razonSocialInput = getDomElement('configRazonSocial').value;
+    const direccionInput = getDomElement('configDireccion').value;
+    const messageEl = getDomElement('receipt-config-message');
+
+    // 🚨 Aquí actualizamos las variables globales (solo en memoria local)
+    RUC_EMPRESA = rucInput;
+    RAZON_SOCIAL_EMPRESA = razonSocialInput;
+    DIRECCION_EMPRESA = direccionInput;
+
+    // GUARDAR EN LOCALSTORAGE para que persista
+    localStorage.setItem('config_ruc', RUC_EMPRESA);
+    localStorage.setItem('config_razon_social', RAZON_SOCIAL_EMPRESA);
+    localStorage.setItem('config_direccion', DIRECCION_EMPRESA);
+
+    messageEl.className = 'alert alert-success';
+    messageEl.innerHTML = '<span>✅</span> Configuración guardada correctamente.';
+    messageEl.style.display = 'flex';
+
+    // Opcional: Cerrar después de un delay
+    setTimeout(() => closeModal(getDomElement('receiptConfigModal')), 2000);
 }
 
 function handleDeleteSubmit(e) {
@@ -1861,7 +1989,16 @@ function renderHistoryTable() {
 function updateDashboard() {
     const totalLoaned = loans.reduce((sum, loan) => sum + parseFloat(loan.monto), 0);
     const activeLoans = loans.filter(loan => loan.status === 'Activo').length;
-
+// --- NUEVO: Lógica de Indicador de Mora ---
+    const hasLateLoans = loans.some(loan => loan.status === 'Atrasado' || loan.mora_pendiente > 0);
+    const moraIndicator = getDomElement('moraAlertIndicator');
+    if (moraIndicator) {
+        moraIndicator.style.display = hasLateLoans ? 'inline-block' : 'none';
+        if (hasLateLoans) {
+            moraIndicator.title = '¡ATENCIÓN! Hay préstamos con mora.';
+        }
+    }
+// --- NUEVO: Lógica de Indicador de Mora ---
     clients.clear();
     loans.forEach(loan => clients.add(loan.dni));
 
@@ -2894,4 +3031,50 @@ function printModalContent(contentElement) {
             }, 100);
         }, 500);
     };
+}
+
+
+// ==========================================
+// --- LÓGICA DE TEMAS Y USUARIO (NUEVO) ---
+// ==========================================
+
+function setTheme(themeName) {
+    const html = document.documentElement;
+    localStorage.setItem('theme', themeName);
+
+    if (themeName === 'system') {
+        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        html.setAttribute('data-theme', systemDark ? 'dark' : 'light');
+    } else {
+        html.setAttribute('data-theme', themeName);
+    }
+}
+
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme') || 'system';
+    setTheme(savedTheme);
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+        if (localStorage.getItem('theme') === 'system') {
+            document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+        }
+    });
+}
+
+// Exponer globalmente
+window.setTheme = setTheme;
+
+// --- UTILIDAD: ACTUALIZAR RELOJ ---
+function updateClock() {
+    const now = new Date();
+    const dateOptions = { day: '2-digit', month: 'short', year: 'numeric' };
+    const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
+
+    const dateStr = now.toLocaleDateString('es-PE', dateOptions);
+    const timeStr = now.toLocaleTimeString('es-PE', timeOptions);
+
+    const displayElement = getDomElement('currentDateTime');
+    if (displayElement) {
+        displayElement.textContent = `${dateStr.toUpperCase()} | ${timeStr}`;
+    }
 }
