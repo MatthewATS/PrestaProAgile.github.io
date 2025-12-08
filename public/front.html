@@ -40,11 +40,40 @@
 <div id="appContainer" style="display: none;">
     <header class="main-header">
         <h1 id="appTitle">💰 PrestaPro</h1>
-        <div class="header-actions">
-            <button class="button button-secondary" id="backToMenuBtn" style="display: none;">← Volver al Menú</button>
+        
+        <div class="header-user-controls">
+            <span id="moraAlertIndicator" class="mora-indicator" style="display: none;">⚠️</span>
+            <span id="currentDateTime" class="datetime-display"></span>
+            <span id="headerUserName" class="user-name-display">Admin</span>
+
+            <div class="settings-dropdown">
+                <button class="button button-secondary" id="settingsBtn">⚙️ Configuración</button>
+                <div class="dropdown-content" id="settingsDropdown">
+                    <div class="dropdown-section">
+                        <h4>🎨 Tema</h4>
+                        <div class="theme-options">
+                            <button class="theme-btn" onclick="setTheme('light')" title="Claro">☀️</button>
+                            <button class="theme-btn" onclick="setTheme('dark')" title="Oscuro">zkr</button>
+                            <button class="theme-btn" onclick="setTheme('system')" title="Sistema">💻</button>
+                        </div>
+                    </div>
+                    <div class="dropdown-section">
+                        <h4>⚙️ Opciones</h4>
+                        <a href="#" id="menuChangePassword">Cambiar Contraseña</a>
+                        <a href="#" id="menuReceiptConfig">Configurar Recibos</a>
+                    </div>
+                </div>
+                
+            </div>
+
             <button class="button button-secondary" id="logoutBtn">Cerrar Sesión</button>
+            
         </div>
     </header>
+
+    <div id="navigation-bar" style="display: none;">
+        <button class="button button-primary" id="backToMenuBtn">⬅ Retroceder</button>
+    </div>
 
     <main class="container">
 
@@ -285,6 +314,33 @@
             </div>
         </div>
     </main>
+</div>
+
+<div id="receiptConfigModal" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+            <h2>⚙️ Configuración de Recibos</h2>
+            <button class="close-button" id="closeReceiptConfigModalBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="receiptConfigForm">
+                <div class="form-group">
+                    <label for="configRuc">R.U.C. Empresa</label>
+                    <input type="text" id="configRuc" maxlength="11" required>
+                </div>
+                <div class="form-group">
+                    <label for="configRazonSocial">Razón Social</label>
+                    <input type="text" id="configRazonSocial" required>
+                </div>
+                <div class="form-group">
+                    <label for="configDireccion">Dirección Completa</label>
+                    <input type="text" id="configDireccion" required>
+                </div>
+                <div id="receipt-config-message" class="alert" style="display: none;"></div>
+                <button type="submit" class="submit-button">💾 Guardar Configuración</button>
+            </form>
+        </div>
+    </div>
 </div>
 
 <div id="loanModal" class="modal">
