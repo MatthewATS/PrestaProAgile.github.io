@@ -498,7 +498,7 @@ function initReceiptButtonListeners() {
     }
 }
 
-// AGREGAR ESTA FUNCIÃ"N NUEVA DESPUÃ‰S DE downloadReceipt()
+// MODIFICADA: Implementa el nuevo diseño de PDF con jsPDF y autotable
 async function shareReceipt() {
     if (!currentReceiptData) {
         alert('No hay datos del recibo para compartir.');
@@ -526,14 +526,15 @@ async function shareReceipt() {
     const doc = new jsPDF();
 
     // Colores corporativos
-    const primaryColor = [93, 136, 255];
-    const darkColor = [52, 64, 84];
-    const grayColor = [100, 100, 100];
-    const lightGray = [200, 200, 200];
+    const primaryColor = [93, 136, 255]; // Azul principal
+    const darkColor = [52, 64, 84]; // Texto oscuro
+    const grayColor = [100, 100, 100]; // Gris de labels
+    const lightGray = [200, 200, 200]; // Gris claro para líneas
+    const successColor = [76, 175, 80]; // Verde para total
 
     let yPos = 20;
 
-    // ==================== HEADER ====================
+    // ==================== HEADER (Mejorado) ====================
     doc.setFillColor(...primaryColor);
     doc.rect(14, yPos, 60, 12, 'F');
     doc.setFontSize(16);
@@ -679,7 +680,7 @@ async function shareReceipt() {
 
     yPos = doc.lastAutoTable.finalY + 10;
 
-    // ==================== RESUMEN DE MONTOS ====================
+    // ==================== RESUMEN DE MONTOS (Mejorado) ====================
     const summaryX = 130;
     const summaryWidth = 66;
 
@@ -713,19 +714,20 @@ async function shareReceipt() {
     doc.text("IMPORTE TOTAL", summaryX, yPos + 4);
 
     doc.setFontSize(13);
-    doc.setTextColor(76, 175, 80);
+    doc.setTextColor(...successColor);
     doc.text(`S/ ${totalPagado.toFixed(2)}`, summaryX + summaryWidth, yPos + 4, { align: 'right' });
 
     yPos += 18;
 
-    // ==================== FOOTER ====================
+    // ==================== FOOTER (Mejorado) ====================
     doc.setDrawColor(...lightGray);
     doc.setLineWidth(0.3);
     doc.line(14, yPos, 196, yPos);
     yPos += 6;
 
-    doc.setFillColor(255, 249, 230);
-    doc.setDrawColor(255, 193, 7);
+    // Monto en letras (Destacado)
+    doc.setFillColor(255, 249, 230); // Color amarillo claro
+    doc.setDrawColor(255, 193, 7); // Borde amarillo
     doc.setLineWidth(0.5);
     doc.rect(14, yPos, 182, 12, 'FD');
 
@@ -2021,6 +2023,7 @@ function updateDashboard() {
     getDomElement('collectedToday').textContent = `S/ ${collectedToday.toFixed(2)}`;
 }
 
+// MODIFICADA: Implementa el nuevo diseño de HTML para el modal de recibo
 function showReceipt(payment, loan) {
     if (!payment || !loan) {
         alert('No se pudieron obtener los datos completos del pago para generar el recibo.');
@@ -2044,64 +2047,68 @@ function showReceipt(payment, loan) {
     const subtotal = importeTotal - IGV;
 
     receiptContent.innerHTML = `
-        <div class="receipt-container" style="padding: 0;">
+        <div class="receipt-container">
             <div class="receipt-header sunat-header">
+                <div class="sunat-company-info">
+                    <p style="font-weight: 700; margin: 0;">${RAZON_SOCIAL_EMPRESA}</p>
+                    <p style="font-size: 13px; margin: 0;">${DIRECCION_EMPRESA}</p>
+                    <p style="font-size: 13px; margin: 0;">Teléfono: (01) 123-4567 | Email: info@prestapro.com.pe</p>
+                    <p style="font-size: 11px; margin: 0; font-style: italic;">SERVICIOS DE PRÉSTAMOS PERSONALES</p>
+                </div>
                 <div class="sunat-ruc-box">
                     <strong>R.U.C. N° ${RUC_EMPRESA}</strong>
                     <h3 style="color: var(--primary-color); margin: 5px 0 0 0;">BOLETA DE VENTA ELECTRÓNICA</h3>
                     <p style="margin: 0;">B001 - N° ${correlativo.toString().padStart(8, '0')}</p>
                 </div>
-                <div class="sunat-company-info">
-                    <p style="font-weight: 700; margin: 0;">${RAZON_SOCIAL_EMPRESA}</p>
-                    <p style="font-size: 13px; margin: 0;">${DIRECCION_EMPRESA}</p>
-                    <p style="font-size: 13px; margin: 0;">PRESTAMO DE DINERO</p>
-                </div>
             </div>
             
-            <div class="receipt-section" style="padding: 15px 20px;">
-                <h4 style="margin-bottom: 5px; color: var(--secondary-color);">DATOS DEL CLIENTE</h4>
+            <div class="receipt-section">
+                <h4 style="color: var(--secondary-color);">DATOS DEL CLIENTE</h4>
                 <div class="receipt-row"><span class="receipt-label">DNI/RUC:</span><span class="receipt-value">${loan.dni}</span></div>
                 <div class="receipt-row"><span class="receipt-label">Cliente:</span><span class="receipt-value">${loan.nombres} ${loan.apellidos}</span></div>
                 <div class="receipt-row"><span class="receipt-label">Fecha de Emisión:</span><span class="receipt-value">${paymentDate}</span></div>
             </div>
             
-            <div class="receipt-section" style="padding: 15px 20px;">
-                <h4 style="margin-bottom: 5px; color: var(--secondary-color);">DETALLE DE LA OPERACIÓN</h4>
-                <table class="receipt-detail-table" style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+            <div class="receipt-section">
+                <h4 style="color: var(--secondary-color);">DETALLE DE LA OPERACIÓN</h4>
+                <table class="receipt-detail-table">
                     <thead>
-                        <tr style="background-color: var(--input-bg);">
-                            <th style="padding: 8px; text-align: left;">DESCRIPCIÓN</th>
-                            <th style="padding: 8px; text-align: right;">VALOR VENTA</th>
-                            <th style="padding: 8px; text-align: right;">IMPORTE</th>
+                        <tr>
+                            <th>DESCRIPCIÓN</th>
+                            <th style="text-align: right;">VALOR VENTA</th>
+                            <th style="text-align: right;">IMPORTE</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td style="padding: 8px; border-bottom: 1px solid var(--light-gray);">Amortización Cápital/Interés Préstamo #${loan.id}</td>
-                            <td style="padding: 8px; text-align: right; border-bottom: 1px solid var(--light-gray);">S/ ${valorVenta.toFixed(2)}</td>
-                            <td style="padding: 8px; text-align: right; border-bottom: 1px solid var(--light-gray);">S/ ${capitalInteresPagado.toFixed(2)}</td>
+                            <td>Amortización Cápital/Interés Préstamo #${loan.id}</td>
+                            <td style="text-align: right;">S/ ${valorVenta.toFixed(2)}</td>
+                            <td style="text-align: right;">S/ ${capitalInteresPagado.toFixed(2)}</td>
                         </tr>
                         ${moraPagada > 0 ? `
                         <tr>
-                            <td style="padding: 8px; border-bottom: 1px solid var(--light-gray); color: var(--danger-color);">Mora / Penalidad por Atraso</td>
-                            <td style="padding: 8px; text-align: right; border-bottom: 1px solid var(--light-gray);">S/ 0.00</td>
-                            <td style="padding: 8px; text-align: right; border-bottom: 1px solid var(--light-gray); color: var(--danger-color);">S/ ${moraPagada.toFixed(2)}</td>
+                            <td style="color: var(--danger-color); font-weight: 600;">Mora / Penalidad por Atraso</td>
+                            <td style="text-align: right;">S/ 0.00</td>
+                            <td style="text-align: right; color: var(--danger-color); font-weight: 700;">S/ ${moraPagada.toFixed(2)}</td>
                         </tr>` : ''}
                     </tbody>
                 </table>
             </div>
 
-            <div style="display: -webkit-box; display: -ms-flexbox; display: -webkit-flex; display: flex; -webkit-box-pack: end; -ms-flex-pack: end; -webkit-justify-content: flex-end; justify-content: flex-end; padding: 15px 20px 0 20px;">
-                <div style="width: 50%; max-width: 300px;">
+            <div class="receipt-summary-box">
+                <div class="receipt-summary-content">
                     <div class="summary-item"><span>SUBTOTAL</span><span class="receipt-value">S/ ${subtotal.toFixed(2)}</span></div>
                     <div class="summary-item"><span>IGV (0%)</span><span class="receipt-value">S/ ${IGV.toFixed(2)}</span></div>
-                    <div class="summary-item summary-total" style="border-top: 2px solid var(--primary-color);"><span>IMPORTE TOTAL</span><span class="receipt-value" style="color: var(--success-color);">S/ ${importeTotal.toFixed(2)}</span></div>
+                    <div class="summary-item summary-total"><span>IMPORTE TOTAL</span><span class="receipt-value" style="color: var(--success-color);">S/ ${importeTotal.toFixed(2)}</span></div>
                 </div>
             </div>
 
-            <div class="receipt-footer" style="padding: 10px 20px;">
-                <p style="margin: 5px 0; font-weight: 500;">Monto en Letras: ${numeroALetras(importeTotal)} SOLES</p>
+            <div class="receipt-footer">
+                <div class="amount-in-words">
+                    <p style="font-weight: 700; color: var(--secondary-color); margin: 0;">SON: ${numeroALetras(importeTotal)} SOLES</p>
+                </div>
                 <p style="margin: 5px 0;">Método de Pago: ${paymentMethod}. Transacción: ${transactionId}</p>
+                <p style="margin: 5px 0;">Pago correspondiente al préstamo N° ${loan.id}. Operación registrada correctamente.</p>
                 <p style="margin: 5px 0; font-size: 10px;">Representación impresa de la Boleta de Venta Electrónica. Puede verificar este documento en la web de SUNAT (Simulación).</p>
             </div>
         </div>
@@ -2119,6 +2126,7 @@ function numeroALetras(num) {
     return `${letras} CON ${decimal.toString().padStart(2, '0')}/100`;
 }
 
+// MODIFICADA: Se corrigió la función para usar los nuevos estilos de PDF
 function downloadReceipt() {
     if (!currentReceiptData) return;
 
@@ -2141,16 +2149,15 @@ function downloadReceipt() {
     const doc = new jsPDF();
 
     // Colores corporativos
-    const primaryColor = [93, 136, 255];
-    const darkColor = [52, 64, 84];
-    const grayColor = [100, 100, 100];
-    const lightGray = [200, 200, 200];
+    const primaryColor = [93, 136, 255]; // Azul principal
+    const darkColor = [52, 64, 84]; // Texto oscuro
+    const grayColor = [100, 100, 100]; // Gris de labels
+    const lightGray = [200, 200, 200]; // Gris claro para líneas
+    const successColor = [76, 175, 80]; // Verde para total
 
     let yPos = 20;
 
-    // ==================== HEADER ====================
-
-    // Logo/Título (simulado)
+    // ==================== HEADER (Mejorado) ====================
     doc.setFillColor(...primaryColor);
     doc.rect(14, yPos, 60, 12, 'F');
     doc.setFontSize(16);
@@ -2158,7 +2165,6 @@ function downloadReceipt() {
     doc.setFont(undefined, 'bold');
     doc.text("PRESTAPRO", 44, yPos + 8, { align: 'center' });
 
-    // Caja RUC (derecha)
     doc.setDrawColor(...primaryColor);
     doc.setLineWidth(0.8);
     doc.rect(130, yPos, 65, 35);
@@ -2178,7 +2184,6 @@ function downloadReceipt() {
     doc.setFont(undefined, 'bold');
     doc.text(`B001-${correlativo.toString().padStart(8, '0')}`, 162.5, yPos + 28, { align: 'center' });
 
-    // Información de la empresa (izquierda)
     yPos += 2;
     doc.setFontSize(12);
     doc.setTextColor(...darkColor);
@@ -2196,15 +2201,12 @@ function downloadReceipt() {
     doc.text("SERVICIOS DE PRÉSTAMOS PERSONALES", 14, yPos + 34);
 
     yPos += 42;
-
-    // Línea separadora
     doc.setDrawColor(...lightGray);
     doc.setLineWidth(0.3);
     doc.line(14, yPos, 196, yPos);
     yPos += 8;
 
     // ==================== DATOS DEL CLIENTE ====================
-
     doc.setFillColor(245, 247, 250);
     doc.rect(14, yPos, 182, 8, 'F');
 
@@ -2214,7 +2216,6 @@ function downloadReceipt() {
     doc.text("📋 DATOS DEL CLIENTE", 16, yPos + 5.5);
 
     yPos += 12;
-
     doc.setFontSize(9);
     doc.setTextColor(...grayColor);
     doc.setFont(undefined, 'normal');
@@ -2240,14 +2241,11 @@ function downloadReceipt() {
     doc.text(paymentDate, 60, yPos);
 
     yPos += 10;
-
-    // Línea separadora
     doc.setDrawColor(...lightGray);
     doc.line(14, yPos, 196, yPos);
     yPos += 8;
 
     // ==================== DETALLE DE LA OPERACIÓN ====================
-
     doc.setFillColor(245, 247, 250);
     doc.rect(14, yPos, 182, 8, 'F');
 
@@ -2258,7 +2256,6 @@ function downloadReceipt() {
 
     yPos += 12;
 
-    // Tabla de detalles
     const tableData = [
         [
             `AMORTIZACIÓN PRÉSTAMO N° ${loan.id}\nCapital e Intereses - Cuota programada`,
@@ -2307,7 +2304,7 @@ function downloadReceipt() {
 
     yPos = doc.lastAutoTable.finalY + 10;
 
-    // ==================== RESUMEN DE MONTOS ====================
+    // ==================== RESUMEN DE MONTOS (Mejorado) ====================
 
     const summaryX = 130;
     const summaryWidth = 66;
@@ -2348,12 +2345,12 @@ function downloadReceipt() {
     doc.text("IMPORTE TOTAL", summaryX, yPos + 4);
 
     doc.setFontSize(13);
-    doc.setTextColor(76, 175, 80); // Verde para el total
+    doc.setTextColor(...successColor); // Verde para el total
     doc.text(`S/ ${totalPagado.toFixed(2)}`, summaryX + summaryWidth, yPos + 4, { align: 'right' });
 
     yPos += 18;
 
-    // ==================== FOOTER ====================
+    // ==================== FOOTER (Mejorado) ====================
 
     // Línea separadora
     doc.setDrawColor(...lightGray);
@@ -2710,6 +2707,7 @@ function descargarPDF(doc, fileName) {
     console.log('PDF descargado:', fileName);
 }
 
+// MODIFICADA: Se corrigió la función para usar los nuevos estilos de impresión
 function printModalContent(contentElement) {
     if (!contentElement) {
         alert('No se pudo acceder al contenido para imprimir.');
@@ -2727,7 +2725,7 @@ function printModalContent(contentElement) {
     const iframeDoc = iframe.contentWindow.document;
     iframeDoc.open();
 
-    // HTML completo con estilos para impresión
+    // HTML completo con estilos para impresión (Copiado de la lógica CSS)
     iframeDoc.write(`
         <!DOCTYPE html>
         <html lang="es">
@@ -2770,30 +2768,36 @@ function printModalContent(contentElement) {
                     display: grid;
                     grid-template-columns: 1fr auto;
                     gap: 20px;
-                    padding: 20px 25px;
+                    padding: 25px 30px;
                     border-bottom: 3px solid #000;
                     background: white;
                 }
 
                 .sunat-company-info {
                     text-align: left;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    gap: 4px;
                 }
 
-                .sunat-company-info .company-name {
-                    font-size: 16px;
+                .sunat-company-info p:first-child {
+                    font-size: 18px;
                     font-weight: 700;
                     color: #000;
-                    margin-bottom: 8px;
+                    margin: 0 0 8px 0;
+                    letter-spacing: 0.5px;
                 }
 
-                .sunat-company-info .company-details {
-                    font-size: 11px;
+                .sunat-company-info p {
+                    font-size: 12px;
                     color: #333;
                     line-height: 1.6;
+                    margin: 0;
                 }
-
-                .sunat-company-info .company-activity {
-                    font-size: 10px;
+                
+                .sunat-company-info p:last-child {
+                    font-size: 11px;
                     color: #666;
                     font-style: italic;
                     margin-top: 4px;
@@ -2803,56 +2807,66 @@ function printModalContent(contentElement) {
                     text-align: center;
                     border: 3px solid #000;
                     padding: 15px 20px;
+                    border-radius: 12px;
                     background: white;
-                    min-width: 200px;
+                    min-width: 220px;
+                    box-shadow: none; /* Sin sombra al imprimir */
                 }
 
                 .sunat-ruc-box strong {
                     display: block;
-                    font-size: 11px;
+                    font-size: 13px;
                     color: #000;
                     font-weight: 700;
-                    margin-bottom: 6px;
+                    letter-spacing: 0.5px;
+                    margin-bottom: 8px;
                 }
 
                 .sunat-ruc-box h3 {
                     color: #000;
-                    margin: 6px 0;
-                    font-size: 14px;
+                    margin: 8px 0;
+                    font-size: 16px;
                     font-weight: 700;
                     line-height: 1.3;
                     text-transform: uppercase;
                 }
 
                 .sunat-ruc-box p {
-                    margin: 4px 0 0 0;
-                    font-size: 13px;
+                    margin: 6px 0 0 0;
+                    font-size: 14px;
                     color: #000;
                     font-weight: 600;
+                    letter-spacing: 1px;
                 }
 
                 /* Secciones */
                 .receipt-section {
-                    padding: 15px 25px;
+                    padding: 20px 30px;
                     border-bottom: 1px solid #ddd;
                     page-break-inside: avoid;
                 }
 
+                .receipt-section:last-of-type {
+                    border-bottom: none;
+                }
+
                 .receipt-section h4 {
-                    margin: 0 0 10px 0;
+                    margin: 0 0 12px 0;
                     color: #000;
-                    font-size: 12px;
+                    font-size: 13px;
                     font-weight: 700;
                     text-transform: uppercase;
-                    padding-bottom: 6px;
-                    border-bottom: 2px solid #000;
+                    letter-spacing: 0.5px;
+                    padding-bottom: 8px;
+                    border-bottom: 2px solid #ccc;
                 }
 
                 .receipt-row {
                     display: flex;
                     justify-content: space-between;
-                    padding: 8px 0;
+                    padding: 10px 0;
                     border-bottom: 1px dashed #ccc;
+                    align-items: center;
                 }
 
                 .receipt-row:last-child {
@@ -2861,32 +2875,38 @@ function printModalContent(contentElement) {
 
                 .receipt-label {
                     color: #666;
-                    font-size: 11px;
+                    font-size: 13px;
                     font-weight: 500;
                     text-transform: uppercase;
+                    letter-spacing: 0.3px;
                 }
 
                 .receipt-value {
                     color: #000;
                     font-weight: 600;
-                    font-size: 12px;
+                    font-size: 14px;
+                    text-align: right;
                 }
 
                 /* Tabla */
                 .receipt-detail-table {
                     width: 100%;
                     border-collapse: collapse;
-                    margin-top: 10px;
+                    margin-top: 12px;
+                }
+
+                .receipt-detail-table thead tr {
+                    background: #f0f0f0;
                 }
 
                 .receipt-detail-table th {
-                    background: #f0f0f0;
-                    padding: 10px 8px;
+                    padding: 12px 10px;
                     text-align: left;
                     color: #000;
-                    font-size: 10px;
+                    font-size: 11px;
                     font-weight: 700;
                     text-transform: uppercase;
+                    letter-spacing: 0.5px;
                     border: 1px solid #000;
                 }
 
@@ -2896,8 +2916,8 @@ function printModalContent(contentElement) {
                 }
 
                 .receipt-detail-table td {
-                    padding: 10px 8px;
-                    font-size: 11px;
+                    padding: 12px 10px;
+                    font-size: 13px;
                     color: #000;
                     border: 1px solid #000;
                 }
@@ -2908,36 +2928,28 @@ function printModalContent(contentElement) {
                     font-weight: 600;
                 }
 
-                .receipt-detail-table td small {
-                    font-size: 9px;
-                    color: #666;
+                .receipt-detail-table tbody tr:last-child td {
+                    border-bottom: 1px solid #000;
                 }
 
-                .receipt-highlight {
-                    background-color: #ffe0e0;
-                    padding: 2px 6px;
-                    border-radius: 3px;
-                    color: #d32f2f;
-                    font-weight: 600;
-                }
 
                 /* Resumen */
                 .receipt-summary-box {
                     display: flex;
                     justify-content: flex-end;
-                    padding: 15px 25px;
+                    padding: 20px 30px 10px 30px;
                 }
 
                 .receipt-summary-content {
                     width: 100%;
-                    max-width: 280px;
+                    max-width: 320px;
                 }
 
                 .summary-item {
                     display: flex;
                     justify-content: space-between;
-                    padding: 8px 0;
-                    font-size: 12px;
+                    padding: 10px 0;
+                    font-size: 14px;
                     border-bottom: 1px dashed #ccc;
                 }
 
@@ -2945,11 +2957,12 @@ function printModalContent(contentElement) {
                     color: #666;
                     font-weight: 500;
                     text-transform: uppercase;
-                    font-size: 11px;
+                    font-size: 12px;
+                    letter-spacing: 0.3px;
                 }
 
                 .summary-item .receipt-value {
-                    font-size: 13px;
+                    font-size: 15px;
                     font-weight: 700;
                 }
 
@@ -2962,49 +2975,51 @@ function printModalContent(contentElement) {
 
                 .summary-item.summary-total span:first-child {
                     color: #000;
-                    font-size: 13px;
+                    font-size: 14px;
                     font-weight: 700;
                 }
 
                 .summary-item.summary-total .receipt-value {
-                    color: #2e7d32;
-                    font-size: 16px;
+                    color: #2e7d32; /* Verde oscuro */
+                    font-size: 20px;
                     font-weight: 700;
                 }
 
                 /* Footer */
                 .receipt-footer {
-                    padding: 15px 25px;
+                    padding: 20px 30px;
                     background: white;
                     border-top: 2px solid #000;
                     page-break-inside: avoid;
                 }
 
-                .amount-in-words {
-                    background-color: #fff9e6;
-                    border-left: 4px solid #ffa000;
-                    padding: 10px 15px;
-                    margin: 8px 0;
-                }
-
                 .receipt-footer p {
                     color: #000;
-                    font-size: 10px;
-                    line-height: 1.5;
-                    margin: 5px 0;
+                    font-size: 12px;
+                    line-height: 1.6;
+                    margin: 6px 0;
                 }
 
                 .receipt-footer p:first-child {
                     font-weight: 600;
+                    color: #000;
                 }
 
                 .receipt-footer p:last-child {
-                    font-size: 8px;
+                    font-size: 10px;
                     color: #666;
                     font-style: italic;
-                    margin-top: 10px;
-                    padding-top: 10px;
+                    margin-top: 12px;
+                    padding-top: 12px;
                     border-top: 1px dashed #ccc;
+                }
+                
+                .receipt-footer .amount-in-words {
+                    background-color: #ffffe0;
+                    padding: 10px 15px;
+                    border-radius: 6px;
+                    border-left: 4px solid #ffa000;
+                    margin: 10px 0;
                 }
 
                 /* Ocultar elementos que no se deben imprimir */
