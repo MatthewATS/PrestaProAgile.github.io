@@ -1,32 +1,55 @@
 :root {
-    /* Colores Base */
-    --primary-color: #5D88FF; /* Azul Brillante */
-    --primary-light: #2A3A69; /* Azul más oscuro para fondos */
-    --primary-dark: #0045B8; /* Azul Original para hover */
-    --secondary-color: #E0E6F7; /* Blanco roto para títulos en oscuro */
+    /* === VARIABLES POR DEFECTO (TEMA CLARO) === */
+    --primary-color: #5D88FF;
+    --primary-light: #E0E7FF; /* Fondo claro para tema claro */
+    --primary-dark: #0045B8;
+    --secondary-color: #1F2937; /* Texto oscuro para fondos claros */
 
-    /* Colores del Tema Oscuro */
-    --bg-primary: #1F2937; /* Fondo principal (Gris oscuro) */
-    --bg-secondary: #374151; /* Fondo de tarjetas/secundario */
-    --text-color: #E5E7EB; /* Color de texto principal */
-    --light-gray: #4B5563; /* Bordes, separadores */
-    --border-color: #4B5563;
-    --input-bg: #374151; /* Fondo de campos */
-    --white: #111827; /* Usado como fondo de header */
+    /* Fondos */
+    --bg-primary: #F3F4F6;   /* Gris muy claro */
+    --bg-secondary: #FFFFFF; /* Blanco puro para tarjetas */
+    --input-bg: #FFFFFF;
+
+    /* Textos y Bordes */
+    --text-color: #111827;
+    --light-gray: #E5E7EB;
+    --border-color: #D1D5DB;
 
     /* Colores Funcionales */
-    --success-color: #4CAF50;
-    --danger-color: #F44336;
-    --warning-color: #FFC107;
-    --warning-light: #5A471C;
-
-    /* Sombras (más sutiles para oscuro) */
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+    --success-color: #10B981;
+    --danger-color: #EF4444;
+    --warning-color: #F59E0B;
+    --warning-light: #FFFBEB;
 
     --font-family: 'Poppins', sans-serif;
+
+    /* Sombras */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
 }
+
+[data-theme="dark"] {
+    --primary-color: #5D88FF;
+    --primary-light: #2A3A69;
+    --primary-dark: #0045B8;
+    --secondary-color: #E0E6F7;
+
+    --bg-primary: #1F2937;
+    --bg-secondary: #374151;
+    --input-bg: #4B5563; /* Ajustado para mejor contraste en inputs */
+
+    --text-color: #E5E7EB;
+    --light-gray: #4B5563;
+    --border-color: #4B5563;
+
+    --warning-light: #5A471C;
+
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+}
+
 
 * {
     margin: 0;
@@ -42,6 +65,143 @@ body {
 }
 
 /* === HEADER === */
+
+/* === ESTILOS DEL HEADER Y MENÚ DE CONFIGURACIÓN === */
+
+.header-user-controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.user-name-display {
+    font-weight: 600;
+    color: var(--text-color);
+    margin-right: 5px;
+}
+
+.datetime-display {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--secondary-color); /* Se ajustará con el tema */
+    padding-right: 15px;
+    border-right: 1px solid var(--border-color);
+}
+
+.mora-indicator {
+    font-size: 18px;
+    cursor: pointer;
+    color: var(--danger-color); /* Color rojo inicial */
+    animation: pulse 1s infinite alternate; /* Efecto de pulso si está activo */
+    margin-right: 5px;
+}
+
+@keyframes pulse {
+    from { transform: scale(1.0); opacity: 0.8; }
+    to { transform: scale(1.1); opacity: 1; }
+}
+
+/* Dropdown Container */
+.settings-dropdown {
+    display: flex;
+    align-items: center;
+    position: relative;
+}
+
+/* Dropdown Content (Oculto por defecto) */
+.dropdown-content {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%; /* Justo debajo del botón */
+
+    /* Esta separación visual es la que causa el problema si no tenemos el puente */
+    margin-top: 10px;
+
+    background-color: var(--bg-secondary);
+    min-width: 220px; /* Un poco más ancho para que se vea bien */
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    z-index: 1000;
+    padding: 15px;
+}
+
+.dropdown-content::before {
+    content: "";
+    position: absolute;
+
+    /* Sube para cubrir el hueco */
+    top: -15px;
+
+    /* Cubre todo el ancho */
+    left: 0;
+    width: 100%;
+
+    /* Altura suficiente para conectar ambos elementos */
+    height: 15px;
+
+    background: transparent; /* Es invisible, pero el mouse lo detecta */
+}
+
+/* Mostrar dropdown al hacer hover o añadir clase active */
+.settings-dropdown:hover .dropdown-content {
+    display: block;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.dropdown-section {
+    padding: 10px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.dropdown-section:last-child {
+    border-bottom: none;
+}
+
+.dropdown-section h4 {
+    margin: 0 0 10px 0;
+    font-size: 12px;
+    text-transform: uppercase;
+    color: #9CA3AF;
+}
+
+.dropdown-section a {
+    display: block;
+    color: var(--text-color);
+    text-decoration: none;
+    font-size: 14px;
+    padding: 5px 0;
+    transition: color 0.2s;
+}
+
+.dropdown-section a:hover {
+    color: var(--primary-color);
+}
+
+/* Botones de Tema */
+.theme-options {
+    display: flex;
+    justify-content: space-between;
+    gap: 5px;
+}
+
+.theme-btn {
+    flex: 1;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.2s;
+}
+
+.theme-btn:hover {
+    background: var(--primary-light);
+    border-color: var(--primary-color);
+}
+
 .main-header {
     background-color: var(--bg-secondary); /* Header también oscuro */
     padding: 20px 40px;
@@ -1877,4 +2037,16 @@ small {
     .receipt-footer {
         background: white;
     }
+}
+
+#navigation-bar {
+    /* Claves de alineación */
+    display: flex;
+    justify-content: flex-end; /* Mueve el contenido a la derecha */
+    align-items: center;
+
+    /* Apariencia */
+    padding: 15px 40px; /* Mismo padding horizontal que el header */
+    background-color: var(--bg-primary); /* Fondo del tema actual */
+    border-bottom: 1px solid var(--border-color); /* Línea sutil de separación */
 }
