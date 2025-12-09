@@ -493,11 +493,14 @@ body {
     position: sticky;
     top: 0;
     z-index: 10;
+    vertical-align: middle;
 }
 
 .main-table td {
     font-size: 14px;
     color: var(--text-color);
+    vertical-align: middle;
+    line-height: 1.5;
 }
 
 .main-table tbody tr {
