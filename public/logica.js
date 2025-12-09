@@ -7,6 +7,8 @@ const MP_LIMIT_YAPE = 500; // Nuevo límite para Yape/Plin
 
 const MAX_HISTORY_SIZE = 10;
 
+let currentShareType = null;
+
 let RUC_EMPRESA = localStorage.getItem('config_ruc') || '20609939521'; // RUC de ejemplo
 let RAZON_SOCIAL_EMPRESA = localStorage.getItem('config_razon_social') || 'PRESTAPRO S.A.C.';
 let DIRECCION_EMPRESA = localStorage.getItem('config_direccion') || 'Av. Javier Prado Este 123, San Isidro'
@@ -178,9 +180,8 @@ function initializeApp() {
 
         // 3. Lógica visual del Botón Retroceder
         if (moduleId === 'module-menu') {
-            // ✅ SOLUCIÓN 1: Ocultar barra en el menú principal
             if (navBar) navBar.style.display = 'none';
-            appTitle.textContent = '💰 PrestaPro';
+            appTitle.innerHTML = '<img src="assets/logo-verde.png" alt="Logo" class="header-logo"> PrestaPro';
         } else {
             // ✅ SOLUCIÓN 2: Mostrar barra en cualquier otro módulo
             if (navBar) navBar.style.display = 'flex'; // Usamos flex para mostrar
@@ -233,11 +234,13 @@ function initializeApp() {
     getDomElement('closePaymentModalBtn')?.addEventListener('click', () => closeModal(getDomElement('paymentModal')));
     getDomElement('closeDeleteModalBtn')?.addEventListener('click', () => closeModal(getDomElement('deleteConfirmationModal')));
     getDomElement('closeReceiptModalBtn')?.addEventListener('click', () => closeModal(getDomElement('receiptModal')));
-
+    getDomElement('closeShareOptionsModalBtn')?.addEventListener('click', () => closeModal(getDomElement('shareOptionsModal')));
     getDomElement('printScheduleBtn')?.addEventListener('click', printSchedule);
-    getDomElement('shareBtn')?.addEventListener('click', compartirPDF);
+    getDomElement('shareBtn')?.addEventListener('click', () => { currentShareType = 'details';openModal(getDomElement('shareOptionsModal')); });
     getDomElement('printReceiptBtn')?.addEventListener('click', () => printModalContent(getDomElement('receiptContent')));
     getDomElement('downloadReceiptBtn')?.addEventListener('click', downloadReceipt);
+
+   
 
     moduleCards.forEach(card => {
         card.addEventListener('click', () => {
@@ -247,6 +250,9 @@ function initializeApp() {
     });
 
 
+    getDomElement('closeChangePasswordModalBtn')?.addEventListener('click', () => {
+    closeModal(getDomElement('changePasswordModal'));
+    });
 
     backToMenuBtn?.addEventListener('click', () => {
         // Simula presionar "Atrás" en el navegador
@@ -441,8 +447,9 @@ function openCashRegister() {
 function initCashRegisterListeners() {
     getDomElement('filterCashRegisterBtn')?.addEventListener('click', filterCashRegister);
     getDomElement('saveDailySquareBtn')?.addEventListener('click', saveDailySquare);
-    getDomElement('exportCashRegisterBtn')?.addEventListener('click', () => alert('Exportar a PDF: Función en desarrollo.'));
-    getDomElement('printCashRegisterBtn')?.addEventListener('click', () => alert('Imprimir: Función en desarrollo.'));
+
+    getDomElement('exportCashRegisterBtn')?.addEventListener('click', exportarCajaPDF);
+    getDomElement('printCashRegisterBtn')?.addEventListener('click', imprimirCaja);
 }
 
 // BUSCA ESTA SECCIÓN Y ACTUALIZA:
@@ -487,13 +494,12 @@ function initReceiptButtonListeners() {
     // AGREGAR ESTE BLOQUE NUEVO PARA EL BOTÓN DE COMPARTIR
     const shareReceiptBtn = getDomElement('shareReceiptBtn');
     if (shareReceiptBtn) {
-        // Clonar para asegurar que el listener se asigne al elemento correcto
         const newShareBtn = shareReceiptBtn.cloneNode(true);
         shareReceiptBtn.parentNode.replaceChild(newShareBtn, shareReceiptBtn);
 
         newShareBtn.addEventListener('click', () => {
-            // La función shareReceipt ya maneja la generación de PDF y el uso de navigator.share
-            shareReceipt();
+            currentShareType = 'receipt'; // Marcamos que es un recibo
+            openModal(getDomElement('shareOptionsModal')); // Abrimos el nuevo menú
         });
     }
 }
@@ -2598,7 +2604,15 @@ function populateDetailsModal(loan) {
     const moraInfo = calculateMora(loan);
     const totalPending = (loan.total_due - loan.total_paid) + moraInfo.totalMora;
     const remainingCapitalInterest = loan.total_due - loan.total_paid;
+    const modalHeaderH2 = getDomElement('detailsModal').querySelector('.modal-header h2');
 
+    modalHeaderH2.textContent = 'Cronograma y Detalles'; // Solo texto, sin imagen
+    modalHeaderH2.style = "";
+
+    const summaryInfoDiv = getDomElement('scheduleSummary');
+    if(summaryInfoDiv) {
+        summaryInfoDiv.style.border = "2px solid #000000"; // Borde Negro en pantalla
+    }
 
     let paymentSummary = '';
     if(loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
@@ -2691,10 +2705,51 @@ function populateDetailsModal(loan) {
     openModal(getDomElement('detailsModal'));
 }
 
-function printSchedule() {
-    // Implementación de impresión
-    const printableContent = document.querySelector('#detailsModal .printable').innerHTML;
+// En public/logica.js (Reemplazar la función printSchedule)
+// En public/logica.js -> Reemplazar printSchedule
 
+// En public/logica.js -> Reemplaza toda la función printSchedule
+
+// En public/logica.js -> Reemplaza printSchedule
+// En public/logica.js -> Reemplaza printSchedule
+
+// En public/logica.js -> Reemplaza printSchedule
+
+function printSchedule() {
+    // 1. Clonar contenido
+    const contentToPrint = document.querySelector('#detailsModal .printable').cloneNode(true);
+
+    // 2. INYECTAR LOGO GRANDE (Solo impresión)
+    const headerTitle = contentToPrint.querySelector('.modal-header h2');
+    if (headerTitle) {
+        headerTitle.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; border-bottom: 2px solid #000; padding-bottom: 15px;">
+                <span style="color: #000; font-weight: 700; font-size: 24px;">Cronograma y Detalles</span>
+                <img src="assets/presta-logo.png" style="height: 110px; width: auto;" alt="Logo">
+            </div>
+        `;
+    }
+
+    // 3. LIMPIEZA TABLAS
+    const paymentTable = contentToPrint.querySelector('#paymentHistoryTable');
+    if (paymentTable) {
+        const headerRow = paymentTable.querySelector('thead tr');
+        if (headerRow && headerRow.cells.length > 0) headerRow.deleteCell(-1);
+        const bodyRows = paymentTable.querySelectorAll('tbody tr');
+        bodyRows.forEach(row => { if (row.cells.length > 0) row.deleteCell(-1); });
+    }
+
+    // 4. ESTILOS NEGROS PARA RESUMEN
+    const summaryInfo = contentToPrint.querySelector('#scheduleSummary');
+    if (summaryInfo) {
+        summaryInfo.style.border = '2px solid #000'; 
+        summaryInfo.style.color = '#000';
+        summaryInfo.style.backgroundColor = '#fff';
+        const textElements = summaryInfo.querySelectorAll('*');
+        textElements.forEach(el => el.style.color = '#000');
+    }
+
+    // 5. IFRAME
     const iframe = document.createElement('iframe');
     iframe.style.position = 'absolute';
     iframe.style.width = '0';
@@ -2710,29 +2765,30 @@ function printSchedule() {
         <head>
             <meta charset="UTF-8">
             <title>Cronograma de Pagos</title>
-            <link rel="preconnect" href="https://fonts.googleapis.com">
-            <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
             <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
             <style>
-                @page { margin: 15mm; size: A4; } * { box-sizing: border-box; }
-                html, body { margin: 0; padding: 0; font-family: 'Poppins', sans-serif; font-size: 12px; line-height: 1.4; color: #344054; }
-                .modal-header { padding: 0 0 15px 0; border-bottom: 2px solid #D0D5DD; margin-bottom: 20px; }
-                .modal-header h2 { font-size: 18px; color: #0D244F; margin: 0; } .close-button { display: none !important; }
-                .summary-info { padding: 15px; background-color: #E6F0FF; border-radius: 8px; margin-bottom: 20px; border: 1px solid #005DFF; page-break-inside: avoid; }
-                .summary-info p { margin: 5px 0; font-size: 11px; }
-                #declaracionJuradaSection { margin: 20px 0; padding: 15px; border: 1px solid #D0D5DD; border-radius: 8px; page-break-inside: avoid; }
-                .declaracion-title { text-align: center; font-size: 14px; font-weight: bold; text-transform: uppercase; color: #0D244F; }
-                .declaracion-body { font-size: 10px; line-height: 1.6; text-align: justify; margin-bottom: 25px; }
-                .declaracion-signature { margin-top: 30px; text-align: center; font-size: 10px; } .declaracion-signature p { margin: 3px 0; }
-                .table-container { width: 100%; overflow: visible; }
-                table { width: 100%; border-collapse: collapse; margin-top: 10px; } thead { display: table-header-group; }
-                th, td { padding: 10px; text-align: left; border: 1px solid #D0D5DD; font-size: 11px; }
-                th { background-color: #F9FAFB; font-weight: 600; text-transform: uppercase; color: #667085; font-size: 10px; }
-                tr { page-break-inside: avoid; } tbody tr:nth-child(even) { background-color: #FAFBFC; }
-                .mora-badge { display: none; }
+                @page { margin: 15mm; size: A4; }
+                body { font-family: 'Poppins', sans-serif; font-size: 12px; color: #000; -webkit-print-color-adjust: exact; }
+                
+                .modal-header h2 { margin: 0; padding: 0; width: 100%; }
+                .summary-info { padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+                
+                /* TABLAS BLANCAS CON BORDE NEGRO */
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                th { 
+                    background-color: #FFFFFF !important; 
+                    color: #000000 !important; 
+                    border: 1px solid #000000 !important;
+                    padding: 8px; text-align: left; font-size: 10px; font-weight: 700;
+                }
+                td { border: 1px solid #000000; padding: 8px; font-size: 11px; color: #000000; }
+                
+                button, .close-button { display: none !important; }
             </style>
         </head>
-        <body>${printableContent}</body>
+        <body>
+            ${contentToPrint.innerHTML}
+        </body>
         </html>
     `);
     iframeDoc.close();
@@ -2741,7 +2797,7 @@ function printSchedule() {
         setTimeout(function() {
             iframe.contentWindow.focus();
             iframe.contentWindow.print();
-            setTimeout(() => { document.body.removeChild(iframe); }, 100);
+            setTimeout(() => { document.body.removeChild(iframe); }, 500);
         }, 500);
     };
 }
@@ -2806,8 +2862,16 @@ function compartirPDF() {
         if (navigator.share) {
             const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
             navigator.share({ files: [file], title: 'Detalles del Préstamo', text: `Detalles del préstamo de ${loan.nombres} ${loan.apellidos}`})
-                .catch((error) => { console.log('Error al compartir, iniciando descarga:', error); descargarPDF(doc, fileName); });
-        } else { descargarPDF(doc, fileName); }
+                .catch((error) => { 
+                    if (error.name !== 'AbortError') {
+                        console.log('Error al compartir, iniciando descarga:', error); 
+                        descargarPDF(doc, fileName); 
+                    }
+                });
+        } else { 
+            descargarPDF(doc, fileName); // Fallback si no hay soporte nativo
+        }
+
     } catch (error) { console.error('Error al generar PDF:', error); alert('Hubo un error al generar el PDF.'); }
 }
 
@@ -3204,6 +3268,8 @@ function initTheme() {
             document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
         }
     });
+
+    
 }
 
 // Exponer globalmente
@@ -3222,4 +3288,357 @@ function updateClock() {
     if (displayElement) {
         displayElement.textContent = `${dateStr.toUpperCase()} | ${timeStr}`;
     }
+}
+
+// ==========================================
+// --- LÓGICA DE COMPARTIR FINAL (SIN ALERTAS) ---
+// ==========================================
+
+function handleSmartShare(platform) {
+    let subject, bodyText;
+
+    // A. LÓGICA PARA RECIBOS (PAGOS)
+    if (currentShareType === 'receipt') {
+        if (!currentReceiptData) return;
+
+        // 1. Descarga silenciosa
+        downloadReceipt(); 
+
+        // 2. Preparar texto
+        const { loan, totalPagado } = currentReceiptData;
+        subject = `Comprobante de Pago - ${loan.nombres} ${loan.apellidos}`;
+        bodyText = `Hola, adjunto el comprobante de pago por S/ ${totalPagado.toFixed(2)}.`;
+    } 
+    
+    // B. LÓGICA PARA DETALLES (PRÉSTAMOS)
+    else if (currentShareType === 'details') {
+        if (!currentLoanForDetails) return;
+
+        // SI ES WINDOWS NATIVO, USAMOS LA FUNCIÓN VIEJA Y SALIMOS
+        if (platform === 'native') {
+            compartirPDF(); // Esta sí abre el menú gris
+            closeModal(getDomElement('shareOptionsModal'));
+            return;
+        }
+
+        // 1. Descarga silenciosa (Usando la nueva función que NO abre menús)
+        descargarPDFDetalles(currentLoanForDetails);
+
+        // 2. Preparar texto
+        const loan = currentLoanForDetails;
+        subject = `Detalle de Préstamo - ${loan.nombres} ${loan.apellidos}`;
+        bodyText = `Adjunto el cronograma y detalles del préstamo activo.`;
+    }
+
+    // C. REDIRECCIÓN INMEDIATA
+    // Pequeño timeout para asegurar que la descarga inició antes de cambiar de pestaña
+    setTimeout(() => {
+        if (platform === 'gmail') {
+            const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyText)}`;
+            window.open(gmailUrl, '_blank');
+        } 
+        else if (platform === 'whatsapp') {
+            const waUrl = `https://wa.me/?text=${encodeURIComponent(subject + "\n" + bodyText)}`;
+            window.open(waUrl, '_blank');
+        }
+        else if (platform === 'copy') {
+            navigator.clipboard.writeText(`${subject}\n\n${bodyText}`);
+            // Solo mostramos animación visual breve, sin alerta intrusiva
+            const btn = document.querySelector('.share-option-btn.copy .text');
+            if(btn) { 
+                const original = btn.textContent;
+                btn.textContent = "¡Copiado!";
+                setTimeout(() => btn.textContent = original, 2000);
+            }
+        }
+        
+        // Cerrar el modal al finalizar
+        closeModal(getDomElement('shareOptionsModal'));
+    }, 100); 
+}
+
+// --- FUNCIÓN AUXILIAR: SOLO DESCARGAR PDF DETALLES (SIN MENÚ WINDOWS) ---
+// En public/logica.js (Reemplazar la función descargarPDFDetalles)
+// En public/logica.js -> Reemplaza descargarPDFDetalles
+
+// En public/logica.js -> Reemplaza descargarPDFDetalles
+
+// En public/logica.js -> Reemplaza descargarPDFDetalles
+
+// En public/logica.js -> Reemplaza descargarPDFDetalles
+
+function descargarPDFDetalles(loan) {
+    if (typeof window.jspdf === 'undefined') return;
+    
+    try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        const { schedule } = calculateSchedule(loan);
+
+        // --- COLORES ---
+        const colorNegro = [0, 0, 0];
+        const colorBlanco = [255, 255, 255];
+
+        // 1. HEADER & LOGO
+        const logoImg = new Image();
+        logoImg.src = 'assets/presta-logo.png';
+        
+        try {
+           // 🚨 CAMBIO: Logo más grande (55x55) y posición X ajustada (140)
+           // Coordenadas: X=140, Y=10, Ancho=55, Alto=55
+           doc.addImage(logoImg, 'PNG', 140, 10, 55, 55); 
+        } catch (e) {
+           console.warn("No imagen");
+        }
+
+        doc.setFontSize(20); 
+        doc.setTextColor(...colorNegro); 
+        // Centramos verticalmente el título respecto al logo
+        doc.text("Cronograma y Detalles", 14, 40); 
+        
+        // Línea divisoria (Bajada a Y=70 para que no corte el logo)
+        doc.setDrawColor(...colorNegro);
+        doc.setLineWidth(0.5);
+        doc.line(14, 70, 196, 70);
+
+        // 2. CUADRO RESUMEN (Bajado a Y=75 por el logo grande)
+        doc.setDrawColor(...colorNegro); 
+        doc.setLineWidth(0.5);
+        doc.rect(14, 75, 182, 35);
+
+        doc.setFontSize(10); 
+        doc.setTextColor(...colorNegro);
+        
+        // Textos dentro del cuadro (Ajustados +30 en Y)
+        doc.text(`Cliente: ${loan.nombres} ${loan.apellidos}`, 20, 85);
+        doc.text(`DNI: ${loan.dni}`, 110, 85);
+        doc.text(`Monto: S/ ${parseFloat(loan.monto).toFixed(2)}`, 20, 95);
+        doc.text(`Interés Anual: ${TASA_INTERES_ANUAL.toFixed(2)}%`, 110, 95);
+        doc.text(`Fecha: ${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}`, 20, 105);
+        
+        // La tabla empieza más abajo ahora
+        let finalY = 120;
+
+        // 3. ESTILOS TABLA (Blanco/Negro)
+        const tableStyles = {
+            theme: 'grid',
+            headStyles: { 
+                fillColor: colorBlanco, 
+                textColor: colorNegro,  
+                lineColor: colorNegro,  
+                lineWidth: 0.1,
+                fontStyle: 'bold'
+            },
+            bodyStyles: { 
+                textColor: colorNegro, 
+                lineColor: colorNegro 
+            },
+            styles: { 
+                lineColor: colorNegro, 
+                lineWidth: 0.1 
+            }
+        };
+
+        // TABLA CRONOGRAMA
+        const tableData = schedule.map(item => [item.cuota.toString(), item.fecha, `S/ ${item.monto}`]);
+        doc.autoTable({
+            head: [['Cuota', 'Vencimiento', 'Monto']],
+            body: tableData, 
+            startY: finalY, 
+            ...tableStyles
+        });
+
+        // TABLA HISTORIAL (Si existe)
+        if(loan.payments && loan.payments.length > 0) {
+            let pagstartY = doc.lastAutoTable.finalY + 15;
+            
+            // Si falta espacio en la hoja, saltar página
+            if (pagstartY > 270) {
+                doc.addPage();
+                pagstartY = 20;
+            }
+            
+            doc.setFontSize(12);
+            doc.setTextColor(...colorNegro);
+            doc.text("Historial de Pagos Realizados", 14, pagstartY);
+
+            const pagosData = loan.payments.map((p, index) => [
+                (index + 1).toString(),
+                new Date(p.payment_date).toLocaleDateString('es-PE', { timeZone: 'UTC' }),
+                `S/ ${(p.payment_amount - (p.mora_amount||0)).toFixed(2)}`,
+                `S/ ${(p.mora_amount||0).toFixed(2)}`,
+                p.payment_method || 'Efectivo'
+            ]);
+
+            doc.autoTable({
+                head: [['#', 'Fecha', 'Monto', 'Mora', 'Método']], 
+                body: pagosData,
+                startY: pagstartY + 5,
+                ...tableStyles
+            });
+        }
+
+        const fileName = `Detalle_${loan.dni}.pdf`;
+        doc.save(fileName);
+        
+    } catch (error) {
+        console.error("Error generando PDF", error);
+    }
+}
+
+// --- FUNCIÓN: EXPORTAR REPORTE DE CAJA A PDF ---
+function exportarCajaPDF() {
+    if (typeof window.jspdf === 'undefined') {
+        alert("Error: Librería jsPDF no cargada.");
+        return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    // 1. Obtener datos de la interfaz
+    const dateFrom = getDomElement('cashRegisterDateFrom').value;
+    const dateTo = getDomElement('cashRegisterDateTo').value;
+    const summaryText = getDomElement('cashRegisterSummary').innerText.split('\n').filter(line => line.trim() !== '');
+
+    // 2. Encabezado
+    doc.setFontSize(18);
+    doc.setTextColor(0, 93, 255); // Azul PrestaPro
+    doc.text("REPORTE DE MOVIMIENTOS DE CAJA", 105, 20, { align: 'center' });
+
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Generado el: ${new Date().toLocaleString('es-PE')}`, 105, 28, { align: 'center' });
+    doc.text(`Rango: Del ${dateFrom} al ${dateTo}`, 105, 33, { align: 'center' });
+
+    // 3. Resumen (Caja de totales)
+    doc.setDrawColor(0, 93, 255);
+    doc.setFillColor(240, 245, 255);
+    doc.rect(14, 40, 182, 25, 'FD'); // Caja de fondo
+
+    doc.setFontSize(11);
+    doc.setTextColor(0, 0, 0);
+    
+    let yResumen = 48;
+    summaryText.forEach((line) => {
+        // Limpiamos un poco el texto para que se vea bien
+        if(line.includes('Diferencia')) return; // Omitir línea de diferencia si no es cierre
+        doc.text(line, 20, yResumen);
+        yResumen += 7;
+    });
+
+    // 4. Tabla de Movimientos
+    doc.autoTable({
+        html: '#cashRegisterTable', // Jala los datos directo de tu tabla HTML
+        startY: 75,
+        theme: 'grid',
+        headStyles: { 
+            fillColor: [0, 93, 255], 
+            textColor: [255, 255, 255],
+            halign: 'center',
+            fontStyle: 'bold'
+        },
+        bodyStyles: { 
+            textColor: [50, 50, 50],
+            fontSize: 10
+        },
+        columnStyles: {
+            0: { halign: 'center' }, // Fecha
+            4: { fontStyle: 'bold', halign: 'right' }, // Total
+            1: { halign: 'right' }, 
+            2: { halign: 'right' }, 
+            3: { halign: 'right' }
+        },
+        footStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: 'bold'
+        }
+    });
+
+    // 5. Descargar
+    const fileName = `Reporte_Caja_${dateFrom}_${dateTo}.pdf`;
+    doc.save(fileName);
+}
+
+// --- FUNCIÓN: IMPRIMIR REPORTE DE CAJA ---
+function imprimirCaja() {
+    const dateFrom = getDomElement('cashRegisterDateFrom').value;
+    const dateTo = getDomElement('cashRegisterDateTo').value;
+    
+    // Clonamos el resumen y la tabla para no afectar la vista actual
+    const summaryHTML = getDomElement('cashRegisterSummary').innerHTML;
+    const tableHTML = getDomElement('cashRegisterTable').outerHTML;
+
+    // Crear iframe temporal para imprimir
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    const iframeDoc = iframe.contentWindow.document;
+    iframeDoc.open();
+
+    iframeDoc.write(`
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+            <meta charset="UTF-8">
+            <title>Reporte de Caja</title>
+            <style>
+                body { font-family: sans-serif; padding: 20px; color: #333; }
+                h1 { text-align: center; color: #000; margin-bottom: 5px; }
+                .subtitle { text-align: center; font-size: 12px; color: #666; margin-bottom: 20px; }
+                
+                /* Estilos del Resumen */
+                .summary-box { 
+                    border: 2px solid #333; 
+                    padding: 15px; 
+                    margin-bottom: 20px; 
+                    border-radius: 5px;
+                    background-color: #f9f9f9;
+                }
+                .summary-box p { margin: 5px 0; font-size: 14px; }
+                
+                /* Estilos de la Tabla */
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+                th { background-color: #eee; border: 1px solid #999; padding: 8px; text-transform: uppercase; }
+                td { border: 1px solid #999; padding: 8px; text-align: right; }
+                td:first-child { text-align: center; } /* Fecha centrada */
+                
+                /* Utilidades de impresión */
+                @media print {
+                    @page { margin: 10mm; }
+                    body { -webkit-print-color-adjust: exact; }
+                }
+            </style>
+        </head>
+        <body>
+            <h1>REPORTE DE MOVIMIENTOS DE CAJA</h1>
+            <p class="subtitle">
+                Rango: ${dateFrom} al ${dateTo} <br>
+                Impreso el: ${new Date().toLocaleString('es-PE')}
+            </p>
+
+            <div class="summary-box">
+                ${summaryHTML}
+            </div>
+
+            ${tableHTML}
+        </body>
+        </html>
+    `);
+    
+    iframeDoc.close();
+
+    iframe.onload = function() {
+        setTimeout(function() {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+            setTimeout(() => { document.body.removeChild(iframe); }, 1000);
+        }, 500);
+    };
 }
