@@ -17,8 +17,10 @@
 <div class="login-container" id="loginContainer">
     <div class="login-card">
         <div class="login-header">
-            <h1>PrestaPro 💰</h1>
-            <p>Bienvenido. Ingresa para continuar.</p>
+            <h1 style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+              <img src="assets/logo-verde.png" alt="Logo" style="height: 45px; width: auto;">
+              PrestaPro </h1>
+        <p>Bienvenido. Ingresa para continuar.</p>
         </div>
         <form id="loginForm">
             <div class="form-group">
@@ -40,7 +42,10 @@
 
 <div id="appContainer" style="display: none;">
     <header class="main-header">
-        <h1 id="appTitle">💰 PrestaPro</h1>
+        <h1 id="appTitle">
+            <img src="assets/logo-verde.png" alt="Logo PrestaPro" class="header-logo">
+            PrestaPro
+            </h1>
 
         <div class="header-user-controls">
             <span id="moraAlertIndicator" class="mora-indicator" style="display: none;">⚠️</span>
@@ -574,6 +579,44 @@
             <path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
         </svg>
         <p id="successText">¡Préstamo Registrado!</p>
+    </div>
+</div>
+
+
+<div id="shareOptionsModal" class="modal">
+    <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+            <h2>📤 Compartir Documento</h2>
+            <button class="close-button" id="closeShareOptionsModalBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p style="font-size: 13px; color: var(--secondary-color); margin-bottom: 20px;">
+                Elige un medio para enviar el documento. <br>
+                <small style="color: #9CA3AF;">(Para Gmail/WhatsApp Web, el PDF se descargará para que lo adjuntes).</small>
+            </p>
+
+            <div class="share-grid">
+                <button class="share-option-btn gmail" onclick="handleSmartShare('gmail')">
+                    <span class="icon">📧</span>
+                    <span class="text">Gmail</span>
+                </button>
+
+                <button class="share-option-btn whatsapp" onclick="handleSmartShare('whatsapp')">
+                    <span class="icon">💚</span>
+                    <span class="text">WhatsApp</span>
+                </button>
+
+                <button class="share-option-btn copy" onclick="handleSmartShare('copy')">
+                    <span class="icon">📋</span>
+                    <span class="text">Copiar Texto</span>
+                </button>
+
+                <button class="share-option-btn native" onclick="handleSmartShare('native')">
+                    <span class="icon">💻</span>
+                    <span class="text">Otros / Windows</span>
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
