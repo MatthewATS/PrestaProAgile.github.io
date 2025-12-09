@@ -435,20 +435,12 @@ async function deleteLoan(loanId) {
 }
 
 
-// --- LÓGICA DE CUADRE DE CAJA (MODIFICADA) ---
+// --- LÓGICA DE CUADRE DE CAJA (Mínima) ---
 async function openCashRegister() {
     const today = getTodayDateISO();
-    
-    // Si no tienen valores, establecerlos al día de hoy para el reporte inicial
-    if (!getDomElement('cashRegisterDateFrom').value) {
-        getDomElement('cashRegisterDateFrom').value = today;
-    }
-    // Si no tienen valores, establecerlos al día de hoy para el reporte inicial
-    // ESTO PERMITE QUE POR DEFECTO MUESTRE EL DÍA ACTUAL PARA EL CUADRE INICIAL
-    if (!getDomElement('cashRegisterDateTo').value) {
-        getDomElement('cashRegisterDateTo').value = today;
-    }
-
+    // Se fuerza la misma fecha en ambos campos para cuadre diario
+    getDomElement('cashRegisterDateFrom').value = today;
+    getDomElement('cashRegisterDateTo').value = today;
     await filterCashRegister();
 }
 
@@ -459,8 +451,11 @@ function initCashRegisterListeners() {
     getDomElement('exportCashRegisterBtn')?.addEventListener('click', exportarCajaPDF);
     getDomElement('printCashRegisterBtn')?.addEventListener('click', imprimirCaja);
 
-    // Permitir la selección de rango de fechas
-    getDomElement('cashRegisterDateFrom')?.addEventListener('change', filterCashRegister);
+    // 🚨 NUEVO: Permitir la selección de rango pero forzar DateTo para la funcionalidad de Cierre Diario
+    getDomElement('cashRegisterDateFrom')?.addEventListener('change', (e) => {
+        // Al cambiar "Desde", actualizamos el reporte
+        filterCashRegister();
+    });
     getDomElement('cashRegisterDateTo')?.addEventListener('change', filterCashRegister);
 }
 
@@ -965,7 +960,6 @@ async function filterCashRegister() {
     const squareStatusMessage = getDomElement('squareStatusMessage');
     const declaredAmountInput = getDomElement('declaredAmount');
 
-    // MOSTRAR LA SECCIÓN DE CUADRE SOLO SI ES UN ÚNICO DÍA (No importa cuál)
     dailySquareSection.style.display = isDaily ? 'block' : 'none';
 
     if (isDaily) {
@@ -974,7 +968,6 @@ async function filterCashRegister() {
         const checkResponse = await fetch(`${API_URL}/api/cash-closures/${closureDate}`);
         const checkData = await checkResponse.json();
 
-        // 🚨 ACTUALIZAR TÍTULO PARA EL DÍA SELECCIONADO
         dailySquareSection.querySelector('h3').textContent = `Cierre de Caja Diario (${new Date(closureDate).toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })}`;
 
         if (checkData.closed) {
@@ -994,20 +987,45 @@ async function filterCashRegister() {
         }
     }
 
-    // Se elimina la llamada a renderCashRegisterTable(dailySummary)
-    // renderCashRegisterTable(dailySummary); 
-    
+    renderCashRegisterTable(dailySummary);
+
     // 🔹 NUEVA LÍNEA: Renderizar historial de cierres
     await renderClosureHistory();
 }
 
-// SE ELIMINA LA FUNCIÓN renderCashRegisterTable()
-/*
 function renderCashRegisterTable(dailySummary) {
     const tbody = getDomElement('cashRegisterTableBody');
-    // ... código de renderizado de movimientos diarios (ELIMINADO)
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    // 🚨 CAMBIO: Se revierte la tabla al resumen diario por fecha
+    getDomElement('cashRegisterTable').querySelector('thead tr').innerHTML = `
+        <th>Fecha</th>
+        <th>Efectivo Neto</th>
+        <th>Transferencia/Yape</th>
+        <th>Otros MP</th>
+        <th>Total Ingresos</th>
+    `;
+
+    if (dailySummary.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #9CA3AF;">No se encontraron movimientos.</td></tr>';
+        return;
+    }
+
+    dailySummary.forEach(m => {
+        const row = document.createElement('tr');
+        const dateString = new Date(m.date).toLocaleDateString('es-PE', { timeZone: 'UTC' });
+
+        row.innerHTML = `
+            <td>${dateString}</td>
+            <td style="color: var(--success-color); font-weight: 600;">S/ ${m.cash.toFixed(2)}</td>
+            <td style="color: var(--primary-color); font-weight: 600;">S/ ${m.transfer.toFixed(2)}</td>
+            <td style="color: #9CA3AF;">S/ ${m.mp.toFixed(2)}</td>
+            <td style="font-weight: 700; color: var(--success-color);">S/ ${m.total.toFixed(2)}</td>
+        `;
+        tbody.appendChild(row);
+    });
 }
-*/
 
 function getMovementsByDateRange(dateFrom, dateTo, methodFilter = null) {
     const startDate = dateFrom ? new Date(dateFrom).setHours(0, 0, 0, 0) : 0;
@@ -1076,15 +1094,9 @@ async function saveDailySquare() {
         });
 
         if (!response.ok) {
-            // Manejo de error 404/409, etc.
-            let errorData;
-            try {
-                 errorData = await response.json();
-            } catch (e) {
-                 errorData = { error: `Error ${response.status}`, status: response.status };
-            }
-            
+            const errorData = await response.json();
             if (response.status === 409) {
+                // Error 409 (Conflict) significa que ya se cerró
                 throw new Error("Ya existe un cierre de caja para esta fecha.");
             }
             throw new Error(errorData.error || `Error ${response.status}`);
@@ -1094,7 +1106,7 @@ async function saveDailySquare() {
         validationMessage.className = 'alert alert-success';
         validationMessage.innerHTML = `<span>✅</span> <strong>¡Caja Cuadrada!</strong> Cierre de caja registrado para el día ${new Date(date).toLocaleDateString('es-PE')}.`;
 
-        // Vuelve a filtrar para mostrar el estado de "Cerrado" y actualizar el historial visible
+        // Vuelve a filtrar para mostrar el estado de "Cerrado"
         await filterCashRegister();
 
         // 🔹 NUEVA LÍNEA: Mostrar animación de éxito
@@ -2563,6 +2575,7 @@ function downloadReceipt() {
             2: { halign: 'right', cellWidth: 35, fontStyle: 'bold' }
         },
         didParseCell: function(data) {
+            // Resaltar mora en rojo
             if (data.row.index === 1 && moraPagada > 0 && data.column.index === 2) {
                 data.cell.styles.textColor = [244, 67, 54];
             }
@@ -2696,7 +2709,7 @@ function downloadReceipt() {
     // Actualizar yPos al final del QR + Info
     yPos = Math.max(qrY + qrSize + 10, infoY + legalText.length * 5 + 5);
 
-    // Marca de agua
+    // Marca de agua (opcional)
     doc.setTextColor(200, 200, 200);
     doc.setFontSize(40);
     doc.setFont(undefined, 'bold');
@@ -2705,43 +2718,9 @@ function downloadReceipt() {
         angle: 45
     });
 
-    // Convertir PDF a blob
-    const pdfBlob = doc.output('blob');
+    // Guardar el PDF
     const fileName = `Boleta_B001-${correlativo.toString().padStart(8, '0')}_${loan.apellidos}.pdf`;
-
-    // Verificar si la API de compartir está disponible
-    if (navigator.share && navigator.canShare) {
-        try {
-            const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-
-            // Verificar si se puede compartir el archivo
-            if (navigator.canShare({ files: [file] })) {
-                await navigator.share({
-                    files: [file],
-                    title: `Boleta de Pago - ${loan.nombres} ${loan.apellidos}`,
-                    text: `Boleta de pago por S/ ${totalPagado.toFixed(2)} - PrestaPro`
-                });
-
-                showSuccessAnimation('✅ Boleta compartida exitosamente');
-            } else {
-                // Si canShare falla (por ejemplo, en PC sin apps compatibles), se va a descarga.
-                // Esto es un error controlado.
-                throw new Error('El dispositivo no soporta compartir archivos PDF');
-            }
-        } catch (error) {
-            // AbortError ocurre si el usuario cancela, no mostrar alerta en ese caso.
-            if (error.name !== 'AbortError') {
-                console.error('Error al compartir:', error);
-                // Fallback: descargar el PDF
-                alert('No se pudo compartir el archivo. Se descargará en su lugar.');
-                doc.save(fileName);
-            }
-        }
-    } else {
-        // Fallback para navegadores que no soportan la API de compartir
-        alert('Tu navegador no soporta la función de compartir. El PDF se descargará automáticamente.');
-        doc.save(fileName);
-    }
+    doc.save(fileName);
 }
 
 function toggleFormLock(locked) {
@@ -3183,6 +3162,7 @@ function printModalContent(contentElement) {
                     font-size: 13px;
                     font-weight: 700;
                     text-transform: uppercase;
+                    letter-spacing: 0.5px;
                     padding-bottom: 8px;
                     border-bottom: 2px solid #ccc;
                 }
@@ -3397,6 +3377,411 @@ function printModalContent(contentElement) {
 
 
 // ==========================================
+// --- LÓGICA DE TEMAS Y USUARIO (NUEVO) ---
+// ==========================================
+
+function setTheme(themeName) {
+    const html = document.documentElement;
+    localStorage.setItem('theme', themeName);
+
+    if (themeName === 'system') {
+        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        html.setAttribute('data-theme', systemDark ? 'dark' : 'light');
+    } else {
+        html.setAttribute('data-theme', themeName);
+    }
+}
+
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme') || 'system';
+    setTheme(savedTheme);
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+        if (localStorage.getItem('theme') === 'system') {
+            document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+        }
+    });
+
+
+}
+
+// Exponer globalmente
+window.setTheme = setTheme;
+
+// --- UTILIDAD: ACTUALIZAR RELOJ ---
+function updateClock() {
+    const now = new Date();
+    const dateOptions = { day: '2-digit', month: 'short', year: 'numeric' };
+    const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
+
+    const dateStr = now.toLocaleDateString('es-PE', dateOptions);
+    const timeStr = now.toLocaleTimeString('es-PE', timeOptions);
+
+    const displayElement = getDomElement('currentDateTime');
+    if (displayElement) {
+        displayElement.textContent = `${dateStr.toUpperCase()} | ${timeStr}`;
+    }
+}
+
+// ==========================================
+// --- LÓGICA DE COMPARTIR FINAL (SIN ALERTAS) ---
+// ==========================================
+
+function handleSmartShare(platform) {
+    let subject, bodyText;
+
+    // A. LÓGICA PARA RECIBOS (PAGOS)
+    if (currentShareType === 'receipt') {
+        if (!currentReceiptData) return;
+
+        // 1. Descarga silenciosa
+        downloadReceipt();
+
+        // 2. Preparar texto
+        const { loan, totalPagado } = currentReceiptData;
+        subject = `Comprobante de Pago - ${loan.nombres} ${loan.apellidos}`;
+        bodyText = `Hola, adjunto el comprobante de pago por S/ ${totalPagado.toFixed(2)}.`;
+    }
+
+    // B. LÓGICA PARA DETALLES (PRÉSTAMOS)
+    else if (currentShareType === 'details') {
+        if (!currentLoanForDetails) return;
+
+        // SI ES WINDOWS NATIVO, USAMOS LA FUNCIÓN VIEJA Y SALIMOS
+        if (platform === 'native') {
+            compartirPDF(); // Esta sí abre el menú gris
+            closeModal(getDomElement('shareOptionsModal'));
+            return;
+        }
+
+        // 1. Descarga silenciosa (Usando la nueva función que NO abre menús)
+        descargarPDFDetalles(currentLoanForDetails);
+
+        // 2. Preparar texto
+        const loan = currentLoanForDetails;
+        subject = `Detalle de Préstamo - ${loan.nombres} ${loan.apellidos}`;
+        bodyText = `Adjunto el cronograma y detalles del préstamo activo.`;
+    }
+
+    // C. REDIRECCIÓN INMEDIATA
+    // Pequeño timeout para asegurar que la descarga inició antes de cambiar de pestaña
+    setTimeout(() => {
+        if (platform === 'gmail') {
+            const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyText)}`;
+            window.open(gmailUrl, '_blank');
+        }
+        else if (platform === 'whatsapp') {
+            const waUrl = `https://wa.me/?text=${encodeURIComponent(subject + "\n" + bodyText)}`;
+            window.open(waUrl, '_blank');
+        }
+        else if (platform === 'copy') {
+            navigator.clipboard.writeText(`${subject}\n\n${bodyText}`);
+            // Solo mostramos animación visual breve, sin alerta intrusiva
+            const btn = document.querySelector('.share-option-btn.copy .text');
+            if(btn) {
+                const original = btn.textContent;
+                btn.textContent = "¡Copiado!";
+                setTimeout(() => btn.textContent = original, 2000);
+            }
+        }
+
+        // Cerrar el modal al finalizar
+        closeModal(getDomElement('shareOptionsModal'));
+    }, 100);
+}
+
+// --- FUNCIÓN AUXILIAR: SOLO DESCARGAR PDF DETALLES (SIN MENÚ WINDOWS) ---
+// En public/logica.js (Reemplazar la función descargarPDFDetalles)
+// En public/logica.js -> Reemplaza descargarPDFDetalles
+
+// En public/logica.js -> Reemplaza descargarPDFDetalles
+
+// En public/logica.js -> Reemplaza descargarPDFDetalles
+
+// En public/logica.js -> Reemplaza descargarPDFDetalles
+
+function descargarPDFDetalles(loan) {
+    if (typeof window.jspdf === 'undefined') return;
+
+    try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+
+        const { schedule } = calculateSchedule(loan);
+
+        // --- COLORES ---
+        const colorNegro = [0, 0, 0];
+        const colorBlanco = [255, 255, 255];
+
+        // 🚨 MODIFICACIÓN: Usar tasa anual calculada
+        const interesAnualMostrado = (loan.interes * 12).toFixed(2);
+
+
+        // 1. HEADER & LOGO
+        const logoImg = new Image();
+        logoImg.src = 'assets/presta-logo.png';
+
+        try {
+            // 🚨 CAMBIO: Logo más grande (55x55) y posición X ajustada (140)
+            // Coordenadas: X=140, Y=10, Ancho=55, Alto=55
+            doc.addImage(logoImg, 'PNG', 140, 10, 55, 55);
+        } catch (e) {
+            console.warn("No imagen");
+        }
+
+        doc.setFontSize(20);
+        doc.setTextColor(...colorNegro);
+        // Centramos verticalmente el título respecto al logo
+        doc.text("Cronograma y Detalles", 14, 40);
+
+        // Línea divisoria (Bajada a Y=70 para que no corte el logo)
+        doc.setDrawColor(...colorNegro);
+        doc.setLineWidth(0.5);
+        doc.line(14, 70, 196, 70);
+
+        // 2. CUADRO RESUMEN (Bajado a Y=75 por el logo grande)
+        doc.setDrawColor(...colorNegro);
+        doc.setLineWidth(0.5);
+        doc.rect(14, 75, 182, 35);
+
+        doc.setFontSize(10);
+        doc.setTextColor(...colorNegro);
+
+        // Textos dentro del cuadro (Ajustados +30 en Y)
+        doc.text(`Cliente: ${loan.nombres} ${loan.apellidos}`, 20, 85);
+        doc.text(`DNI: ${loan.dni}`, 110, 85);
+        doc.text(`Monto Prestado: S/ ${parseFloat(loan.monto).toFixed(2)}`, 20, 95);
+        // 🚨 MODIFICACIÓN: Mostrar tasa anual calculada
+        doc.text(`Interés Anual: ${interesAnualMostrado}%`, 110, 95);
+        doc.text(`Fecha: ${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}`, 20, 105);
+
+        // La tabla empieza más abajo ahora
+        let finalY = 120;
+
+        // 3. ESTILOS TABLA (Blanco/Negro)
+        const tableStyles = {
+            theme: 'grid',
+            headStyles: {
+                fillColor: colorBlanco,
+                textColor: colorNegro,
+                lineColor: colorNegro,
+                lineWidth: 0.1,
+                fontStyle: 'bold'
+            },
+            bodyStyles: {
+                textColor: colorNegro,
+                lineColor: colorNegro
+            },
+            styles: {
+                lineColor: colorNegro,
+                lineWidth: 0.1
+            }
+        };
+
+        // TABLA CRONOGRAMA
+        const tableData = schedule.map(item => [item.cuota.toString(), item.fecha, `S/ ${item.monto}`]);
+        doc.autoTable({
+            head: [['Cuota', 'Vencimiento', 'Monto']],
+            body: tableData,
+            startY: finalY,
+            ...tableStyles
+        });
+
+        // TABLA HISTORIAL (Si existe)
+        if(loan.payments && loan.payments.length > 0) {
+            let pagstartY = doc.lastAutoTable.finalY + 15;
+
+            // Si falta espacio en la hoja, saltar página
+            if (pagstartY > 270) {
+                doc.addPage();
+                pagstartY = 20;
+            }
+
+            doc.setFontSize(12);
+            doc.setTextColor(...colorNegro);
+            doc.text("Historial de Pagos Realizados", 14, pagstartY);
+
+            const pagosData = loan.payments.map((p, index) => [
+                (index + 1).toString(),
+                new Date(p.payment_date).toLocaleDateString('es-PE', { timeZone: 'UTC' }),
+                `S/ ${(p.payment_amount - (p.mora_amount||0)).toFixed(2)}`,
+                `S/ ${(p.mora_amount||0).toFixed(2)}`,
+                p.payment_method || 'Efectivo'
+            ]);
+
+            doc.autoTable({
+                head: [['#', 'Fecha', 'Monto', 'Mora', 'Método']],
+                body: pagosData,
+                startY: pagstartY + 5,
+                ...tableStyles
+            });
+        }
+
+        const fileName = `Detalle_${loan.dni}.pdf`;
+        doc.save(fileName);
+
+    } catch (error) {
+        console.error("Error generando PDF", error);
+    }
+}
+
+// --- FUNCIÓN: EXPORTAR REPORTE DE CAJA A PDF ---
+function exportarCajaPDF() {
+    if (typeof window.jspdf === 'undefined') {
+        alert("Error: Librería jsPDF no cargada.");
+        return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    // 1. Obtener datos de la interfaz
+    const dateFrom = getDomElement('cashRegisterDateFrom').value;
+    const dateTo = getDomElement('cashRegisterDateTo').value;
+    const summaryText = getDomElement('cashRegisterSummary').innerText.split('\n').filter(line => line.trim() !== '');
+
+    // 2. Encabezado
+    doc.setFontSize(18);
+    doc.setTextColor(0, 93, 255); // Azul PrestaPro
+    doc.text("REPORTE DE MOVIMIENTOS DE CAJA", 105, 20, { align: 'center' });
+
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Generado el: ${new Date().toLocaleString('es-PE')}`, 105, 28, { align: 'center' });
+    doc.text(`Rango: Del ${dateFrom} al ${dateTo}`, 105, 33, { align: 'center' });
+
+    // 3. Resumen (Caja de totales)
+    doc.setDrawColor(0, 93, 255);
+    doc.setFillColor(240, 245, 255);
+    doc.rect(14, 40, 182, 35, 'FD'); // Caja de fondo (Aumentada altura para 4 líneas)
+
+    doc.setFontSize(11);
+    doc.setTextColor(0, 0, 0);
+
+    let yResumen = 48;
+    summaryText.forEach((line) => {
+        // Limpiamos un poco el texto para que se vea bien
+        if(line.includes('Diferencia')) return; // Omitir línea de diferencia si no es cierre
+        doc.text(line, 20, yResumen);
+        yResumen += 7;
+    });
+
+    // 4. Tabla de Movimientos
+    doc.autoTable({
+        html: '#cashRegisterTable', // Jala los datos directo de tu tabla HTML
+        startY: 85,
+        theme: 'grid',
+        headStyles: {
+            fillColor: [0, 93, 255],
+            textColor: [255, 255, 255],
+            halign: 'center',
+            fontStyle: 'bold'
+        },
+        bodyStyles: {
+            textColor: [50, 50, 50],
+            fontSize: 10
+        },
+        columnStyles: {
+            0: { halign: 'center' }, // Fecha
+            4: { fontStyle: 'bold', halign: 'right' }, // Total
+            1: { halign: 'right' },
+            2: { halign: 'right' },
+            3: { halign: 'right' }
+        },
+        footStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: 'bold'
+        }
+    });
+
+    // 5. Descargar
+    const fileName = `Reporte_Caja_${dateFrom}_${dateTo}.pdf`;
+    doc.save(fileName);
+}
+
+// --- FUNCIÓN: IMPRIMIR REPORTE DE CAJA ---
+function imprimirCaja() {
+    const dateFrom = getDomElement('cashRegisterDateFrom').value;
+    const dateTo = getDomElement('cashRegisterDateTo').value;
+
+    // Clonamos el resumen y la tabla para no afectar la vista actual
+    const summaryHTML = getDomElement('cashRegisterSummary').innerHTML;
+    const tableHTML = getDomElement('cashRegisterTable').outerHTML;
+
+    // Crear iframe temporal para imprimir
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    const iframeDoc = iframe.contentWindow.document;
+    iframeDoc.open();
+
+    iframeDoc.write(`
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+            <meta charset="UTF-8">
+            <title>Reporte de Caja</title>
+            <style>
+                body { font-family: sans-serif; padding: 20px; color: #333; }
+                h1 { text-align: center; color: #000; margin-bottom: 5px; }
+                .subtitle { text-align: center; font-size: 12px; color: #666; margin-bottom: 20px; }
+                
+                /* Estilos del Resumen */
+                .summary-box { 
+                    border: 2px solid #333; 
+                    padding: 15px; 
+                    margin-bottom: 20px; 
+                    border-radius: 5px;
+                    background-color: #f9f9f9;
+                }
+                .summary-box p { margin: 5px 0; font-size: 14px; }
+                
+                /* Estilos de la Tabla */
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+                th { background-color: #eee; border: 1px solid #999; padding: 8px; text-transform: uppercase; }
+                td { border: 1px solid #999; padding: 8px; text-align: right; }
+                td:first-child { text-align: center; } /* Fecha centrada */
+                
+                /* Utilidades de impresión */
+                @media print {
+                    @page { margin: 10mm; }
+                    body { -webkit-print-color-adjust: exact; }
+                }
+            </style>
+        </head>
+        <body>
+            <h1>REPORTE DE MOVIMIENTOS DE CAJA</h1>
+            <p class="subtitle">
+                Rango: ${dateFrom} al ${dateTo} <br>
+                Impreso el: ${new Date().toLocaleString('es-PE')}
+            </p>
+
+            <div class="summary-box">
+                ${summaryHTML}
+            </div>
+
+            ${tableHTML}
+        </body>
+        </html>
+    `);
+
+    iframeDoc.close();
+
+    iframe.onload = function() {
+        setTimeout(function() {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+            setTimeout(() => { document.body.removeChild(iframe); }, 1000);
+        }, 500);
+    };
+}
+
+// ==========================================
 // IMPLEMENTACIÓN DE CUADRE DE CAJA CON HISTORIAL
 // ==========================================
 
@@ -3404,17 +3789,11 @@ function printModalContent(contentElement) {
 async function loadClosureHistory() {
     try {
         const response = await fetch(`${API_URL}/api/cash-closures/history`);
-        if (!response.ok) {
-             // Intenta parsear el error si no es un 404 simple (aunque un 404 es más probable aquí)
-             let errorData;
-             try { errorData = await response.json(); } catch(e) { errorData = { error: `HTTP Error ${response.status}` }; }
-             throw new Error(errorData.error || `Error al cargar historial: ${response.status}`);
-        }
+        if (!response.ok) throw new Error('Error al cargar historial de cierres');
 
         const closures = await response.json();
         return closures;
     } catch (error) {
-        // Mostrar error en consola para depuración
         console.error('Error cargando historial:', error);
         return [];
     }
@@ -3679,8 +4058,8 @@ function imprimirHistorialCierres() {
                 iframe.contentWindow.focus();
                 iframe.contentWindow.print();
                 // 4. Limpiar
-                setTimeout(() => { 
-                    document.body.removeChild(iframe); 
+                setTimeout(() => {
+                    document.body.removeChild(iframe);
                     document.body.removeChild(tempTable); // Eliminar la tabla temporal
                 }, 1000);
             }, 500);
