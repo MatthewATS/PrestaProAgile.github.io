@@ -18,9 +18,9 @@
     <div class="login-card">
         <div class="login-header">
             <h1 style="display: flex; align-items: center; justify-content: center; gap: 10px;">
-              <img src="assets/logo-verde.png" alt="Logo" style="height: 45px; width: auto;">
-              PrestaPro </h1>
-        <p>Bienvenido. Ingresa para continuar.</p>
+                <img src="assets/logo-verde.png" alt="Logo" style="height: 45px; width: auto;">
+                PrestaPro </h1>
+            <p>Bienvenido. Ingresa para continuar.</p>
         </div>
         <form id="loginForm">
             <div class="form-group">
@@ -45,7 +45,7 @@
         <h1 id="appTitle">
             <img src="assets/logo-verde.png" alt="Logo PrestaPro" class="header-logo">
             PrestaPro
-            </h1>
+        </h1>
 
         <div class="header-user-controls">
             <span id="moraAlertIndicator" class="mora-indicator" style="display: none;">⚠️</span>
@@ -204,7 +204,7 @@
 
                                     <div id="multiple-payment-info" class="payment-option-detail" style="display: none;">
                                         <div class="form-group">
-                                            <label for="num_installments_to_pay">N° de Cuotas a Pagar (Máx: <span id="max_installments_available">0</span>)</label>
+                                            <label for="num_installments_to-pay">N° de Cuotas a Pagar (Máx: <span id="max_installments_available">0</span>)</label>
                                             <input type="number" id="num_installments_to_pay" min="1" value="1" max="1" placeholder="Ej: 3">
                                         </div>
                                     </div>
@@ -265,57 +265,67 @@
                 <div class="modal-body">
                     <div class="cash-register-controls">
                         <div class="form-group">
-                            <label for="cashRegisterDateFrom">Fecha Desde</label>
+                            <label for="cashRegisterDateFrom">Fecha Desde (Rango/Cuadre)</label>
                             <input type="date" id="cashRegisterDateFrom">
                         </div>
-                        <div class="form-group">
-                            <label for="cashRegisterDateTo">Fecha Hasta</label>
+                        <div class="form-group" style="display: block;">
+                            <label for="cashRegisterDateTo">Fecha Hasta (Rango/Cuadre)</label>
                             <input type="date" id="cashRegisterDateTo">
                         </div>
                         <div class="form-group" style="display: flex; align-items: flex-end;">
-                            <button class="button button-primary" id="filterCashRegisterBtn" style="width: 100%;">🔍 Filtrar</button>
+                            <button class="button button-primary" id="filterCashRegisterBtn" style="width: 100%;">🔍 Ver Reporte/Cuadre</button>
                         </div>
                     </div>
 
                     <div id="cashRegisterSummary" class="cash-register-summary">
-                        <p><strong>Total de Ingresos (Caja + Transferencias):</strong> S/ 0.00</p>
+                        <p><strong>Total de Ingresos del Día:</strong> S/ 0.00</p>
                         <p><strong>Ingreso Neto en Efectivo (Cuadre):</strong> S/ 0.00</p>
-                        <p style="border-top: 1px solid var(--border-color); padding-top: 5px; margin-top: 10px;"><strong>Diferencia:</strong> N/A (Solo aplicable al cierre diario)</p>
+                        <p><strong>Ingreso por Transferencia/Yape:</strong> S/ 0.00</p>
+                        <p><strong>Ingreso por Otros MP:</strong> S/ 0.00</p>
                     </div>
 
-                    <div id="dailySquareSection" style="display: none;">
+                    <div id="dailySquareSection">
                         <h3 style="margin-bottom: 15px; color: var(--secondary-color);">Cierre de Caja Diario</h3>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="declaredAmount">Monto Total Contado (Efectivo)</label>
-                                <input type="number" id="declaredAmount" step="0.01" min="0" placeholder="Monto total contado en efectivo hoy" required>
+                        <div id="squareStatusMessage" class="alert" style="display: none;"></div>
+                        <div id="squareFormContainer">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="declaredAmount">Monto Total Contado (Efectivo)</label>
+                                    <input type="number" id="declaredAmount" step="0.01" min="0" placeholder="Monto total contado en efectivo hoy" required>
+                                </div>
+                                <div class="form-group" style="display: flex; align-items: flex-end;">
+                                    <button class="button button-success" id="saveDailySquareBtn" style="width: 100%;">✅ Realizar Cierre de Caja</button>
+                                </div>
                             </div>
-                            <div class="form-group" style="display: flex; align-items: flex-end;">
-                                <button class="button button-success" id="saveDailySquareBtn" style="width: 100%;">✅ Realizar Cierre de Caja</button>
-                            </div>
+                            <div id="squareValidationMessage" class="alert" style="display: none;"></div>
                         </div>
-                        <div id="squareValidationMessage" class="alert" style="display: none;"></div>
                     </div>
 
-                    <h3 style="margin-top: 30px; margin-bottom: 15px; color: var(--secondary-color);">💰 Resumen de Movimientos Diarios</h3>
+                    <h3 style="margin-top: 30px; margin-bottom: 15px; color: var(--secondary-color);">📜 Historial de Cierres Oficiales (Recuento)</h3>
                     <div class="table-container">
-                        <table id="cashRegisterTable" class="main-table">
+                        <table id="closureHistoryTable" class="main-table">
                             <thead>
                             <tr>
-                                <th>Fecha</th>
-                                <th>Efectivo Neto</th>
-                                <th>Transferencia/Yape</th>
-                                <th>Otros MP</th>
-                                <th>Total Ingresos</th>
+                                <th>Fecha Cierre</th>
+                                <th>Hora Cierre</th>
+                                <th>Sistema (Efectivo)</th>
+                                <th>Declarado (Efectivo)</th>
+                                <th>Diferencia</th>
+                                <th>Cerrado Por</th>
                             </tr>
                             </thead>
-                            <tbody id="cashRegisterTableBody"></tbody>
+                            <tbody id="closureHistoryTableBody">
+                            </tbody>
                         </table>
                     </div>
+
                 </div>
                 <div class="modal-footer">
-                    <button class="button button-secondary" id="exportCashRegisterBtn">📥 Exportar PDF</button>
-                    <button class="button button-primary" id="printCashRegisterBtn">🖨️ Imprimir</button>
+                    <button class="button button-secondary" onclick="exportarHistorialCierresPDF()">📥 Exportar Historial</button>
+                    <button class="button button-primary" onclick="imprimirHistorialCierres()">🖨️ Imprimir Historial</button>
+
+                    <button class="button button-secondary" id="exportCashRegisterBtn" style="display: none;">📥 Exportar PDF</button>
+                    <button class="button button-primary" id="printCashRegisterBtn" style="display: none;">🖨️ Imprimir</button>
                 </div>
             </div>
         </div>
@@ -623,3 +633,4 @@
 <script src="logica.js"></script>
 </body>
 </html>
+}
