@@ -285,7 +285,7 @@
                     </div>
 
                     <div id="dailySquareSection">
-                        <h3 style="margin-bottom: 15px; color: var(--secondary-color);">Cierre de Caja Diario</h3>
+                        <h3 style="margin-bottom: 15px; color: var(--secondary-color);">Cierre de Caja Diario (<span id="dailySquareDate">Fecha</span>)</h3>
                         <div id="squareStatusMessage" class="alert" style="display: none;"></div>
                         <div id="squareFormContainer">
                             <div class="form-row">
@@ -301,16 +301,16 @@
                         </div>
                     </div>
 
-                    <h3 style="margin-top: 30px; margin-bottom: 15px; color: var(--secondary-color);">💰 Resumen de Movimientos por Día</h3>
+                    <h3 style="margin-top: 30px; margin-bottom: 15px; color: var(--secondary-color);">💰 Resumen de Movimientos del Día</h3>
                     <div class="table-container">
                         <table id="cashRegisterTable" class="main-table">
                             <thead>
                             <tr>
-                                <th>Fecha</th>
-                                <th>Efectivo Neto</th>
-                                <th>Transferencia/Yape</th>
-                                <th>Otros MP</th>
-                                <th>Total Ingresos</th>
+                                <th>Cliente</th>
+                                <th>Método</th>
+                                <th>Capital/Interés</th>
+                                <th>Mora</th>
+                                <th>Total Ingreso</th>
                             </tr>
                             </thead>
                             <tbody id="cashRegisterTableBody"></tbody>
@@ -339,9 +339,6 @@
                 <div class="modal-footer">
                     <button class="button button-secondary" onclick="exportarHistorialCierresPDF()">📥 Exportar Historial</button>
                     <button class="button button-primary" onclick="imprimirHistorialCierres()">🖨️ Imprimir Historial</button>
-
-                    <button class="button button-secondary" id="exportCashRegisterBtn" style="display: none;">📥 Exportar PDF</button>
-                    <button class="button button-primary" id="printCashRegisterBtn" style="display: none;">🖨️ Imprimir</button>
                 </div>
             </div>
         </div>
