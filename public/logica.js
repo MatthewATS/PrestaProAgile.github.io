@@ -1,7 +1,7 @@
 // --- VARIABLES GLOBALES Y CONFIGURACIÓN ---
 const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
 const VALOR_UIT = 5150;
-const TASA_INTERES_ANUAL = 10;
+// ❌ MODIFICACIÓN: TASA_INTERES_ANUAL ELIMINADA. SE USA EL VALOR DEL INPUT.
 const TASA_MORA_MENSUAL = 1; // 1% de mora por mes
 const MP_LIMIT_YAPE = 500; // Nuevo límite para Yape/Plin
 
@@ -240,7 +240,6 @@ function initializeApp() {
     getDomElement('printReceiptBtn')?.addEventListener('click', () => printModalContent(getDomElement('receiptContent')));
     getDomElement('downloadReceiptBtn')?.addEventListener('click', downloadReceipt);
 
-   
 
     moduleCards.forEach(card => {
         card.addEventListener('click', () => {
@@ -251,7 +250,7 @@ function initializeApp() {
 
 
     getDomElement('closeChangePasswordModalBtn')?.addEventListener('click', () => {
-    closeModal(getDomElement('changePasswordModal'));
+        closeModal(getDomElement('changePasswordModal'));
     });
 
     backToMenuBtn?.addEventListener('click', () => {
@@ -436,12 +435,21 @@ async function deleteLoan(loanId) {
 }
 
 
-// --- LÓGICA DE CUADRE DE CAJA (Mínima) ---
-function openCashRegister() {
-    const today = new Date().toISOString().split('T')[0];
-    getDomElement('cashRegisterDateFrom').value = today;
-    getDomElement('cashRegisterDateTo').value = today;
-    filterCashRegister();
+// --- LÓGICA DE CUADRE DE CAJA (MODIFICADA) ---
+async function openCashRegister() {
+    const today = getTodayDateISO();
+    
+    // Si no tienen valores, establecerlos al día de hoy para el reporte inicial
+    if (!getDomElement('cashRegisterDateFrom').value) {
+        getDomElement('cashRegisterDateFrom').value = today;
+    }
+    // Si no tienen valores, establecerlos al día de hoy para el reporte inicial
+    // ESTO PERMITE QUE POR DEFECTO MUESTRE EL DÍA ACTUAL PARA EL CUADRE INICIAL
+    if (!getDomElement('cashRegisterDateTo').value) {
+        getDomElement('cashRegisterDateTo').value = today;
+    }
+
+    await filterCashRegister();
 }
 
 function initCashRegisterListeners() {
@@ -450,9 +458,12 @@ function initCashRegisterListeners() {
 
     getDomElement('exportCashRegisterBtn')?.addEventListener('click', exportarCajaPDF);
     getDomElement('printCashRegisterBtn')?.addEventListener('click', imprimirCaja);
+
+    // Permitir la selección de rango de fechas
+    getDomElement('cashRegisterDateFrom')?.addEventListener('change', filterCashRegister);
+    getDomElement('cashRegisterDateTo')?.addEventListener('change', filterCashRegister);
 }
 
-// BUSCA ESTA SECCIÓN Y ACTUALIZA:
 function initReceiptButtonListeners() {
     const paymentHistoryBody = getDomElement('paymentHistoryBody');
 
@@ -897,17 +908,22 @@ async function shareReceipt() {
     }
 }
 
-function filterCashRegister() {
+async function filterCashRegister() {
     const dateFrom = getDomElement('cashRegisterDateFrom').value;
     const dateTo = getDomElement('cashRegisterDateTo').value;
 
     const allMovements = getMovementsByDateRange(dateFrom, dateTo, null);
     const cashMovements = allMovements.filter(m => m.method === 'Efectivo');
+    const transferMovements = allMovements.filter(m => m.method === 'Transferencia' || m.method === 'Yape/Plin');
+    const mpMovements = allMovements.filter(m => m.method === 'Mercado Pago');
+
 
     const totalAllIngresos = allMovements.reduce((sum, m) => sum + m.total, 0);
     const totalCashIngresos = cashMovements.reduce((sum, m) => sum + m.total, 0);
+    const totalTransferIngresos = transferMovements.reduce((sum, m) => sum + m.total, 0);
+    const totalMpIngresos = mpMovements.reduce((sum, m) => sum + m.total, 0);
 
-    // Agrupar movimientos por fecha
+    // Agrupar movimientos por fecha para el resumen (revertido a la lógica anterior)
     const dailyMovements = {};
     allMovements.forEach(m => {
         const dateString = new Date(m.date).toISOString().split('T')[0];
@@ -932,49 +948,66 @@ function filterCashRegister() {
 
     const dailySummary = Object.values(dailyMovements).sort((a, b) => new Date(b.date) - new Date(a.date));
 
+
     // Mostrar el resumen del rango
     const summaryContent = `
-        <p><strong>Total de Ingresos (Caja + Transferencias):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalAllIngresos.toFixed(2)}</span></p>
+        <p><strong>Total de Ingresos (Caja + Transferencias + MP):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalAllIngresos.toFixed(2)}</span></p>
         <p><strong>Ingreso Neto en Efectivo (Cuadre):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalCashIngresos.toFixed(2)}</span></p>
-        <p style="border-top: 1px solid var(--border-color); padding-top: 5px; margin-top: 10px;"><strong>Diferencia:</strong> N/A (Solo aplicable al cierre diario)</p>
+        <p><strong>Ingreso por Transferencia/Yape:</strong> <span style="font-weight: 700; color: var(--primary-color);">S/ ${totalTransferIngresos.toFixed(2)}</span></p>
+        <p><strong>Ingreso por Otros MP:</strong> <span style="font-weight: 700; color: var(--secondary-color);">S/ ${totalMpIngresos.toFixed(2)}</span></p>
     `;
     getDomElement('cashRegisterSummary').innerHTML = summaryContent;
 
-    // Control de la sección de cuadre diario
+    // Control de la sección de cuadre diario (Solo si es un único día)
     const isDaily = dateFrom === dateTo;
-    getDomElement('dailySquareSection').style.display = isDaily ? 'block' : 'none';
-    getDomElement('dailySquareSection').querySelector('h3').textContent = `Cierre de Caja Diario (${new Date(dateFrom).toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })})`;
+    const dailySquareSection = getDomElement('dailySquareSection');
+    const squareFormContainer = getDomElement('squareFormContainer');
+    const squareStatusMessage = getDomElement('squareStatusMessage');
+    const declaredAmountInput = getDomElement('declaredAmount');
 
-    // Resetear el input y mensaje
-    getDomElement('declaredAmount').value = totalCashIngresos.toFixed(2);
-    getDomElement('squareValidationMessage').style.display = 'none';
+    // MOSTRAR LA SECCIÓN DE CUADRE SOLO SI ES UN ÚNICO DÍA (No importa cuál)
+    dailySquareSection.style.display = isDaily ? 'block' : 'none';
 
-    renderCashRegisterTable(dailySummary);
-}
+    if (isDaily) {
+        // 1. Verificar estado del cierre en DB
+        const closureDate = dateFrom;
+        const checkResponse = await fetch(`${API_URL}/api/cash-closures/${closureDate}`);
+        const checkData = await checkResponse.json();
 
-function renderCashRegisterTable(dailySummary) {
-    const tbody = getDomElement('cashRegisterTableBody');
-    if (!tbody) return;
-    tbody.innerHTML = '';
-    if (dailySummary.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #9CA3AF;">No se encontraron movimientos.</td></tr>';
-        return;
+        // 🚨 ACTUALIZAR TÍTULO PARA EL DÍA SELECCIONADO
+        dailySquareSection.querySelector('h3').textContent = `Cierre de Caja Diario (${new Date(closureDate).toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })}`;
+
+        if (checkData.closed) {
+            // Cierre ya realizado
+            squareFormContainer.style.display = 'none';
+            squareStatusMessage.className = 'alert alert-info';
+            squareStatusMessage.innerHTML = `<span>🔒</span> <strong>Cierre de Caja Realizado.</strong> Monto del Sistema: S/ ${checkData.data.system_cash_amount.toFixed(2)}. Diferencia: S/ ${checkData.data.difference.toFixed(2)}. Cerrado el ${new Date(checkData.data.closed_at).toLocaleString('es-PE')}.`;
+            squareStatusMessage.style.display = 'flex';
+        } else {
+            // Cierre pendiente
+            squareFormContainer.style.display = 'block';
+            squareStatusMessage.style.display = 'none';
+
+            declaredAmountInput.value = totalCashIngresos.toFixed(2);
+            getDomElement('squareValidationMessage').style.display = 'none';
+            getDomElement('saveDailySquareBtn').disabled = false;
+        }
     }
 
-    dailySummary.forEach(m => {
-        const row = document.createElement('tr');
-        const dateString = new Date(m.date).toLocaleDateString('es-PE', { timeZone: 'UTC' });
-
-        row.innerHTML = `
-            <td>${dateString}</td>
-            <td style="color: var(--success-color); font-weight: 600;">S/ ${m.cash.toFixed(2)}</td>
-            <td style="color: var(--primary-color); font-weight: 600;">S/ ${m.transfer.toFixed(2)}</td>
-            <td style="color: #9CA3AF;">S/ ${(m.total - m.cash - m.transfer).toFixed(2)}</td>
-            <td style="font-weight: 700; color: var(--success-color);">S/ ${m.total.toFixed(2)}</td>
-        `;
-        tbody.appendChild(row);
-    });
+    // Se elimina la llamada a renderCashRegisterTable(dailySummary)
+    // renderCashRegisterTable(dailySummary); 
+    
+    // 🔹 NUEVA LÍNEA: Renderizar historial de cierres
+    await renderClosureHistory();
 }
+
+// SE ELIMINA LA FUNCIÓN renderCashRegisterTable()
+/*
+function renderCashRegisterTable(dailySummary) {
+    const tbody = getDomElement('cashRegisterTableBody');
+    // ... código de renderizado de movimientos diarios (ELIMINADO)
+}
+*/
 
 function getMovementsByDateRange(dateFrom, dateTo, methodFilter = null) {
     const startDate = dateFrom ? new Date(dateFrom).setHours(0, 0, 0, 0) : 0;
@@ -1004,7 +1037,7 @@ function getMovementsByDateRange(dateFrom, dateTo, methodFilter = null) {
     return filteredMovements;
 }
 
-function saveDailySquare() {
+async function saveDailySquare() {
     const date = getDomElement('cashRegisterDateFrom').value;
     const declaredAmount = parseFloat(getDomElement('declaredAmount').value);
     const validationMessage = getDomElement('squareValidationMessage');
@@ -1022,14 +1055,54 @@ function saveDailySquare() {
 
     const difference = declaredAmount - totalCashIngresos;
 
-    if (Math.abs(difference) < 0.01) {
-        // Simulación de cierre de caja exitoso
-        validationMessage.className = 'alert alert-success';
-        validationMessage.innerHTML = `<span>✅</span> <strong>¡Caja Cuadrada!</strong> El monto declarado (S/ ${declaredAmount.toFixed(2)}) coincide con el sistema. Cierre de caja registrado para el día ${new Date(date).toLocaleDateString('es-PE')}.`;
-        getDomElement('saveDailySquareBtn').disabled = true;
-    } else {
+    // 1. Validar el cuadre antes de enviar a DB
+    if (Math.abs(difference) >= 0.01) {
         validationMessage.className = 'alert alert-danger';
         validationMessage.innerHTML = `<span>❌</span> <strong>¡Descuadre!</strong> El monto declarado (S/ ${declaredAmount.toFixed(2)}) no coincide con el ingreso en efectivo del sistema (S/ ${totalCashIngresos.toFixed(2)}). <br><strong>Diferencia:</strong> S/ ${difference.toFixed(2)}. Corrija el monto antes de cerrar.`;
+        return;
+    }
+
+    // 2. Si cuadra, registrar en DB (Esto evita el doble registro gracias al backend)
+    try {
+        const response = await fetch(`${API_URL}/api/cash-closures`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                closure_date: date,
+                declared_amount: declaredAmount.toFixed(2),
+                system_cash_amount: totalCashIngresos.toFixed(2),
+                difference: difference.toFixed(2)
+            })
+        });
+
+        if (!response.ok) {
+            // Manejo de error 404/409, etc.
+            let errorData;
+            try {
+                 errorData = await response.json();
+            } catch (e) {
+                 errorData = { error: `Error ${response.status}`, status: response.status };
+            }
+            
+            if (response.status === 409) {
+                throw new Error("Ya existe un cierre de caja para esta fecha.");
+            }
+            throw new Error(errorData.error || `Error ${response.status}`);
+        }
+
+        // 3. Éxito: Deshabilitar el botón y actualizar el estado
+        validationMessage.className = 'alert alert-success';
+        validationMessage.innerHTML = `<span>✅</span> <strong>¡Caja Cuadrada!</strong> Cierre de caja registrado para el día ${new Date(date).toLocaleDateString('es-PE')}.`;
+
+        // Vuelve a filtrar para mostrar el estado de "Cerrado" y actualizar el historial visible
+        await filterCashRegister();
+
+        // 🔹 NUEVA LÍNEA: Mostrar animación de éxito
+        showSuccessAnimation('✅ Cierre de Caja Guardado en Historial');
+
+    } catch (error) {
+        validationMessage.className = 'alert alert-danger';
+        validationMessage.innerHTML = `<span>❌</span> <strong>Error al Guardar:</strong> ${error.message}`;
     }
 }
 
@@ -1088,9 +1161,15 @@ function initLoanFormLogic() {
                 </div>
             </div>
             <div class="form-group">
-                <label>Tasa de Interés Anual</label>
-                <div class="static-value">${TASA_INTERES_ANUAL.toFixed(2)}% (Fijo)</div>
+                <label for="interes_anual">Tasa de Interés Anual (%)</label>
+                <input type="number" id="interes_anual" required step="0.01" min="1" placeholder="10.00" value="10.00">
+                <small id="interes-info">Tasa anual (TEA) con la que se calculará la cuota.</small>
             </div>
+            
+            <div id="monthly-payment-preview" class="summary-info" style="display: none; padding: 10px; font-size: 14px; margin-top: 5px;">
+                <strong>Cuota Mensual Estimada (Amortizado):</strong> <span id="estimated-monthly-payment">S/ 0.00</span>
+            </div>
+
             <div class="form-group">
                 <label for="loan_tipo_calculo">Tipo de Cálculo</label>
                 <select id="loan_tipo_calculo" required>
@@ -1122,12 +1201,42 @@ function initLoanFormLogic() {
     const apellidosInput = getDomElement('apellidos');
     const dniStatus = getDomElement('dni-status');
     const montoInput = getDomElement('monto');
+    const plazoInput = getDomElement('plazo');
+    const interesAnualInput = getDomElement('interes_anual');
     const isPepCheckbox = getDomElement('is_pep');
     const declaracionContainer = getDomElement('declaracion-container');
     const declaracionCheckbox = getDomElement('declaracion_jurada');
     const tipoCalculoSelect = getDomElement('loan_tipo_calculo');
     const hibridoOptions = getDomElement('hibrido_options');
     const mesesSoloInteresInput = getDomElement('meses_solo_interes');
+    const monthlyPaymentPreview = getDomElement('monthly-payment-preview');
+    const estimatedMonthlyPayment = getDomElement('estimated-monthly-payment');
+
+
+    // 🚨 NUEVA FUNCIÓN: Lógica para previsualizar la cuota mensual
+    function calculateEstimatedMonthlyPayment() {
+        const monto = parseFloat(montoInput.value) || 0;
+        const interesAnual = parseFloat(interesAnualInput.value) || 0;
+        const plazo = parseInt(plazoInput.value) || 0;
+
+        // Solo calcular si todos los campos requeridos tienen valores válidos y es Amortizado
+        if (monto > 0 && interesAnual > 0 && plazo > 0 && tipoCalculoSelect.value === 'Amortizado') {
+            const monthlyInterestRate = (interesAnual / 12) / 100; // Tasa mensual en decimal
+
+            // Fórmula de cuota fija (Amortizado)
+            const monthlyPayment = (monto * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -plazo));
+
+            if (isFinite(monthlyPayment) && monthlyPayment > 0) {
+                estimatedMonthlyPayment.textContent = `S/ ${monthlyPayment.toFixed(2)}`;
+                monthlyPaymentPreview.style.display = 'block';
+                return;
+            }
+        }
+
+        monthlyPaymentPreview.style.display = 'none';
+        estimatedMonthlyPayment.textContent = 'S/ 0.00';
+    }
+
 
     // Lógica para mostrar/ocultar el campo híbrido
     tipoCalculoSelect?.addEventListener('change', (e) => {
@@ -1138,7 +1247,14 @@ function initLoanFormLogic() {
             hibridoOptions.style.display = 'none';
             mesesSoloInteresInput.required = false;
         }
+        calculateEstimatedMonthlyPayment(); // 🚨 LLAMAR A LA FUNCIÓN
     });
+
+    // 🚨 LISTENERS PARA RECALCULAR LA CUOTA
+    montoInput.addEventListener('input', calculateEstimatedMonthlyPayment);
+    plazoInput.addEventListener('input', calculateEstimatedMonthlyPayment);
+    interesAnualInput.addEventListener('input', calculateEstimatedMonthlyPayment);
+
 
     // Lógica de validación PEP/UIT
     function updateDeclaracionVisibility() {
@@ -1164,8 +1280,10 @@ function initLoanFormLogic() {
         const infoEl = getDomElement('hibrido-info');
         if (!infoEl) return;
         const monto = parseFloat(montoInput.value) || 0;
-        const interesMensual = TASA_INTERES_ANUAL / 12;
+        const interesAnual = parseFloat(interesAnualInput.value) || 0; // Usar el nuevo input
+        const interesMensual = interesAnual / 12; // Tasa mensual en %
         const meses = parseInt(mesesSoloInteresInput.value) || 0;
+
         if (monto > 0 && interesMensual > 0 && meses > 0) {
             const pagoSoloInteres = monto * (interesMensual / 100);
             infoEl.textContent = `Durante ${meses} mes(es), pagará S/ ${pagoSoloInteres.toFixed(2)} (solo interés).`;
@@ -1173,6 +1291,7 @@ function initLoanFormLogic() {
     }
 
     montoInput.addEventListener('input', () => { updateDeclaracionVisibility(); updateHibridoInfo(); });
+    interesAnualInput.addEventListener('input', updateHibridoInfo); // 🚨 Nuevo listener
     isPepCheckbox.addEventListener('change', updateDeclaracionVisibility);
     mesesSoloInteresInput.addEventListener('input', updateHibridoInfo);
 
@@ -1217,10 +1336,15 @@ function initLoanFormLogic() {
     // Event Listener del formulario de Préstamos (submit)
     getDomElement('loanForm').addEventListener('submit', async function(event) {
         event.preventDefault();
+
+        // 🚨 MODIFICACIÓN: Capturar la tasa anual
+        const interes_anual = parseFloat(interesAnualInput.value);
+
         const newLoanData = {
             client: { dni: dniInput.value, nombres: nombresInput.value, apellidos: apellidosInput.value, is_pep: isPepCheckbox.checked },
             monto: parseFloat(montoInput.value),
-            interes: TASA_INTERES_ANUAL / 12,
+            // 🚨 MODIFICACIÓN: Enviar la tasa ANUAL
+            interes_anual: interes_anual,
             fecha: getDomElement('fecha').value,
             plazo: parseInt(getDomElement('plazo').value),
             status: 'Activo',
@@ -1235,6 +1359,9 @@ function initLoanFormLogic() {
             showSuccessAnimation('¡Préstamo Registrado!');
         } catch (error) { alert(`No se pudo guardar el préstamo: ${error.message}`); }
     });
+
+    // Ejecutar el cálculo inicial
+    calculateEstimatedMonthlyPayment();
 }
 
 // --- LÓGICA DE PAGOS INDIVIDUALES (MODAL DE DETALLES) ---
@@ -2436,7 +2563,6 @@ function downloadReceipt() {
             2: { halign: 'right', cellWidth: 35, fontStyle: 'bold' }
         },
         didParseCell: function(data) {
-            // Resaltar mora en rojo
             if (data.row.index === 1 && moraPagada > 0 && data.column.index === 2) {
                 data.cell.styles.textColor = [244, 67, 54];
             }
@@ -2570,7 +2696,7 @@ function downloadReceipt() {
     // Actualizar yPos al final del QR + Info
     yPos = Math.max(qrY + qrSize + 10, infoY + legalText.length * 5 + 5);
 
-    // Marca de agua (opcional)
+    // Marca de agua
     doc.setTextColor(200, 200, 200);
     doc.setFontSize(40);
     doc.setFont(undefined, 'bold');
@@ -2579,9 +2705,43 @@ function downloadReceipt() {
         angle: 45
     });
 
-    // Guardar el PDF
+    // Convertir PDF a blob
+    const pdfBlob = doc.output('blob');
     const fileName = `Boleta_B001-${correlativo.toString().padStart(8, '0')}_${loan.apellidos}.pdf`;
-    doc.save(fileName);
+
+    // Verificar si la API de compartir está disponible
+    if (navigator.share && navigator.canShare) {
+        try {
+            const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+
+            // Verificar si se puede compartir el archivo
+            if (navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                    files: [file],
+                    title: `Boleta de Pago - ${loan.nombres} ${loan.apellidos}`,
+                    text: `Boleta de pago por S/ ${totalPagado.toFixed(2)} - PrestaPro`
+                });
+
+                showSuccessAnimation('✅ Boleta compartida exitosamente');
+            } else {
+                // Si canShare falla (por ejemplo, en PC sin apps compatibles), se va a descarga.
+                // Esto es un error controlado.
+                throw new Error('El dispositivo no soporta compartir archivos PDF');
+            }
+        } catch (error) {
+            // AbortError ocurre si el usuario cancela, no mostrar alerta en ese caso.
+            if (error.name !== 'AbortError') {
+                console.error('Error al compartir:', error);
+                // Fallback: descargar el PDF
+                alert('No se pudo compartir el archivo. Se descargará en su lugar.');
+                doc.save(fileName);
+            }
+        }
+    } else {
+        // Fallback para navegadores que no soportan la API de compartir
+        alert('Tu navegador no soporta la función de compartir. El PDF se descargará automáticamente.');
+        doc.save(fileName);
+    }
 }
 
 function toggleFormLock(locked) {
@@ -2628,7 +2788,8 @@ function populateDetailsModal(loan) {
         day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC'
     });
 
-    const interesAnualMostrado = TASA_INTERES_ANUAL.toFixed(2);
+    // 🚨 MODIFICACIÓN: Calcular TASA ANUAL para mostrarla, ya que solo guardamos la mensual (loan.interes)
+    const interesAnualMostrado = (loan.interes * 12).toFixed(2);
 
     getDomElement('scheduleSummary').innerHTML = `
         <p><strong>Cliente:</strong> ${loan.nombres} ${loan.apellidos} ${loan.is_pep ? '<strong style="color: var(--danger-color);">(PEP)</strong>' : ''}</p>
@@ -2705,14 +2866,6 @@ function populateDetailsModal(loan) {
     openModal(getDomElement('detailsModal'));
 }
 
-// En public/logica.js (Reemplazar la función printSchedule)
-// En public/logica.js -> Reemplazar printSchedule
-
-// En public/logica.js -> Reemplaza toda la función printSchedule
-
-// En public/logica.js -> Reemplaza printSchedule
-// En public/logica.js -> Reemplaza printSchedule
-
 // En public/logica.js -> Reemplaza printSchedule
 
 function printSchedule() {
@@ -2742,7 +2895,7 @@ function printSchedule() {
     // 4. ESTILOS NEGROS PARA RESUMEN
     const summaryInfo = contentToPrint.querySelector('#scheduleSummary');
     if (summaryInfo) {
-        summaryInfo.style.border = '2px solid #000'; 
+        summaryInfo.style.border = '2px solid #000';
         summaryInfo.style.color = '#000';
         summaryInfo.style.backgroundColor = '#fff';
         const textElements = summaryInfo.querySelectorAll('*');
@@ -2812,7 +2965,8 @@ function compartirPDF() {
         const doc = new jsPDF();
         let finalY = 40; // Inicializar finalY después del encabezado
 
-        const interesAnualMostrado = TASA_INTERES_ANUAL.toFixed(2);
+        // 🚨 MODIFICACIÓN: Usar tasa anual calculada
+        const interesAnualMostrado = (loan.interes * 12).toFixed(2);
 
         doc.setFontSize(22); doc.setTextColor(0, 93, 255); doc.text("PRESTAPRO", 105, 20, { align: 'center' });
         doc.setFontSize(16); doc.setTextColor(52, 64, 84); doc.text("Detalles del Préstamo", 105, 30, { align: 'center' });
@@ -2862,13 +3016,13 @@ function compartirPDF() {
         if (navigator.share) {
             const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
             navigator.share({ files: [file], title: 'Detalles del Préstamo', text: `Detalles del préstamo de ${loan.nombres} ${loan.apellidos}`})
-                .catch((error) => { 
+                .catch((error) => {
                     if (error.name !== 'AbortError') {
-                        console.log('Error al compartir, iniciando descarga:', error); 
-                        descargarPDF(doc, fileName); 
+                        console.log('Error al compartir, iniciando descarga:', error);
+                        descargarPDF(doc, fileName);
                     }
                 });
-        } else { 
+        } else {
             descargarPDF(doc, fileName); // Fallback si no hay soporte nativo
         }
 
@@ -2923,7 +3077,7 @@ function printModalContent(contentElement) {
                 body { 
                     font-family: 'Poppins', sans-serif; 
                     font-size: 12px; 
-                    line-height: 1.5; 
+                    line-height: 1.6; 
                     color: #000;
                     background: white;
                 }
@@ -3029,7 +3183,6 @@ function printModalContent(contentElement) {
                     font-size: 13px;
                     font-weight: 700;
                     text-transform: uppercase;
-                    letter-spacing: 0.5px;
                     padding-bottom: 8px;
                     border-bottom: 2px solid #ccc;
                 }
@@ -3244,401 +3397,297 @@ function printModalContent(contentElement) {
 
 
 // ==========================================
-// --- LÓGICA DE TEMAS Y USUARIO (NUEVO) ---
+// IMPLEMENTACIÓN DE CUADRE DE CAJA CON HISTORIAL
 // ==========================================
 
-function setTheme(themeName) {
-    const html = document.documentElement;
-    localStorage.setItem('theme', themeName);
-
-    if (themeName === 'system') {
-        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        html.setAttribute('data-theme', systemDark ? 'dark' : 'light');
-    } else {
-        html.setAttribute('data-theme', themeName);
-    }
-}
-
-function initTheme() {
-    const savedTheme = localStorage.getItem('theme') || 'system';
-    setTheme(savedTheme);
-
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
-        if (localStorage.getItem('theme') === 'system') {
-            document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
-        }
-    });
-
-    
-}
-
-// Exponer globalmente
-window.setTheme = setTheme;
-
-// --- UTILIDAD: ACTUALIZAR RELOJ ---
-function updateClock() {
-    const now = new Date();
-    const dateOptions = { day: '2-digit', month: 'short', year: 'numeric' };
-    const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
-
-    const dateStr = now.toLocaleDateString('es-PE', dateOptions);
-    const timeStr = now.toLocaleTimeString('es-PE', timeOptions);
-
-    const displayElement = getDomElement('currentDateTime');
-    if (displayElement) {
-        displayElement.textContent = `${dateStr.toUpperCase()} | ${timeStr}`;
-    }
-}
-
-// ==========================================
-// --- LÓGICA DE COMPARTIR FINAL (SIN ALERTAS) ---
-// ==========================================
-
-function handleSmartShare(platform) {
-    let subject, bodyText;
-
-    // A. LÓGICA PARA RECIBOS (PAGOS)
-    if (currentShareType === 'receipt') {
-        if (!currentReceiptData) return;
-
-        // 1. Descarga silenciosa
-        downloadReceipt(); 
-
-        // 2. Preparar texto
-        const { loan, totalPagado } = currentReceiptData;
-        subject = `Comprobante de Pago - ${loan.nombres} ${loan.apellidos}`;
-        bodyText = `Hola, adjunto el comprobante de pago por S/ ${totalPagado.toFixed(2)}.`;
-    } 
-    
-    // B. LÓGICA PARA DETALLES (PRÉSTAMOS)
-    else if (currentShareType === 'details') {
-        if (!currentLoanForDetails) return;
-
-        // SI ES WINDOWS NATIVO, USAMOS LA FUNCIÓN VIEJA Y SALIMOS
-        if (platform === 'native') {
-            compartirPDF(); // Esta sí abre el menú gris
-            closeModal(getDomElement('shareOptionsModal'));
-            return;
-        }
-
-        // 1. Descarga silenciosa (Usando la nueva función que NO abre menús)
-        descargarPDFDetalles(currentLoanForDetails);
-
-        // 2. Preparar texto
-        const loan = currentLoanForDetails;
-        subject = `Detalle de Préstamo - ${loan.nombres} ${loan.apellidos}`;
-        bodyText = `Adjunto el cronograma y detalles del préstamo activo.`;
-    }
-
-    // C. REDIRECCIÓN INMEDIATA
-    // Pequeño timeout para asegurar que la descarga inició antes de cambiar de pestaña
-    setTimeout(() => {
-        if (platform === 'gmail') {
-            const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyText)}`;
-            window.open(gmailUrl, '_blank');
-        } 
-        else if (platform === 'whatsapp') {
-            const waUrl = `https://wa.me/?text=${encodeURIComponent(subject + "\n" + bodyText)}`;
-            window.open(waUrl, '_blank');
-        }
-        else if (platform === 'copy') {
-            navigator.clipboard.writeText(`${subject}\n\n${bodyText}`);
-            // Solo mostramos animación visual breve, sin alerta intrusiva
-            const btn = document.querySelector('.share-option-btn.copy .text');
-            if(btn) { 
-                const original = btn.textContent;
-                btn.textContent = "¡Copiado!";
-                setTimeout(() => btn.textContent = original, 2000);
-            }
-        }
-        
-        // Cerrar el modal al finalizar
-        closeModal(getDomElement('shareOptionsModal'));
-    }, 100); 
-}
-
-// --- FUNCIÓN AUXILIAR: SOLO DESCARGAR PDF DETALLES (SIN MENÚ WINDOWS) ---
-// En public/logica.js (Reemplazar la función descargarPDFDetalles)
-// En public/logica.js -> Reemplaza descargarPDFDetalles
-
-// En public/logica.js -> Reemplaza descargarPDFDetalles
-
-// En public/logica.js -> Reemplaza descargarPDFDetalles
-
-// En public/logica.js -> Reemplaza descargarPDFDetalles
-
-function descargarPDFDetalles(loan) {
-    if (typeof window.jspdf === 'undefined') return;
-    
+// 🔹 NUEVA FUNCIÓN: Cargar historial de cierres desde el backend
+async function loadClosureHistory() {
     try {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        
-        const { schedule } = calculateSchedule(loan);
-
-        // --- COLORES ---
-        const colorNegro = [0, 0, 0];
-        const colorBlanco = [255, 255, 255];
-
-        // 1. HEADER & LOGO
-        const logoImg = new Image();
-        logoImg.src = 'assets/presta-logo.png';
-        
-        try {
-           // 🚨 CAMBIO: Logo más grande (55x55) y posición X ajustada (140)
-           // Coordenadas: X=140, Y=10, Ancho=55, Alto=55
-           doc.addImage(logoImg, 'PNG', 140, 10, 55, 55); 
-        } catch (e) {
-           console.warn("No imagen");
+        const response = await fetch(`${API_URL}/api/cash-closures/history`);
+        if (!response.ok) {
+             // Intenta parsear el error si no es un 404 simple (aunque un 404 es más probable aquí)
+             let errorData;
+             try { errorData = await response.json(); } catch(e) { errorData = { error: `HTTP Error ${response.status}` }; }
+             throw new Error(errorData.error || `Error al cargar historial: ${response.status}`);
         }
 
-        doc.setFontSize(20); 
-        doc.setTextColor(...colorNegro); 
-        // Centramos verticalmente el título respecto al logo
-        doc.text("Cronograma y Detalles", 14, 40); 
-        
-        // Línea divisoria (Bajada a Y=70 para que no corte el logo)
-        doc.setDrawColor(...colorNegro);
-        doc.setLineWidth(0.5);
-        doc.line(14, 70, 196, 70);
+        const closures = await response.json();
+        return closures;
+    } catch (error) {
+        // Mostrar error en consola para depuración
+        console.error('Error cargando historial:', error);
+        return [];
+    }
+}
 
-        // 2. CUADRO RESUMEN (Bajado a Y=75 por el logo grande)
-        doc.setDrawColor(...colorNegro); 
-        doc.setLineWidth(0.5);
-        doc.rect(14, 75, 182, 35);
+// 🔹 NUEVA FUNCIÓN: Renderizar tabla de historial de cierres
+async function renderClosureHistory() {
+    const historyTableBody = getDomElement('closureHistoryTableBody');
+    if (!historyTableBody) return;
 
-        doc.setFontSize(10); 
-        doc.setTextColor(...colorNegro);
-        
-        // Textos dentro del cuadro (Ajustados +30 en Y)
-        doc.text(`Cliente: ${loan.nombres} ${loan.apellidos}`, 20, 85);
-        doc.text(`DNI: ${loan.dni}`, 110, 85);
-        doc.text(`Monto: S/ ${parseFloat(loan.monto).toFixed(2)}`, 20, 95);
-        doc.text(`Interés Anual: ${TASA_INTERES_ANUAL.toFixed(2)}%`, 110, 95);
-        doc.text(`Fecha: ${new Date(loan.fecha).toLocaleDateString('es-PE', { timeZone: 'UTC' })}`, 20, 105);
-        
-        // La tabla empieza más abajo ahora
-        let finalY = 120;
+    historyTableBody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Cargando historial...</td></tr>';
 
-        // 3. ESTILOS TABLA (Blanco/Negro)
-        const tableStyles = {
-            theme: 'grid',
-            headStyles: { 
-                fillColor: colorBlanco, 
-                textColor: colorNegro,  
-                lineColor: colorNegro,  
-                lineWidth: 0.1,
-                fontStyle: 'bold'
-            },
-            bodyStyles: { 
-                textColor: colorNegro, 
-                lineColor: colorNegro 
-            },
-            styles: { 
-                lineColor: colorNegro, 
-                lineWidth: 0.1 
-            }
-        };
+    const closures = await loadClosureHistory();
 
-        // TABLA CRONOGRAMA
-        const tableData = schedule.map(item => [item.cuota.toString(), item.fecha, `S/ ${item.monto}`]);
-        doc.autoTable({
-            head: [['Cuota', 'Vencimiento', 'Monto']],
-            body: tableData, 
-            startY: finalY, 
-            ...tableStyles
+    if (closures.length === 0) {
+        historyTableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #9CA3AF;">No hay cierres registrados aún.</td></tr>';
+        return;
+    }
+
+    // Ordenar por fecha descendente (más reciente primero)
+    closures.sort((a, b) => new Date(b.closure_date) - new Date(a.closure_date));
+
+    historyTableBody.innerHTML = closures.map(closure => {
+        const fecha = new Date(closure.closure_date).toLocaleDateString('es-PE', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            timeZone: 'UTC'
         });
 
-        // TABLA HISTORIAL (Si existe)
-        if(loan.payments && loan.payments.length > 0) {
-            let pagstartY = doc.lastAutoTable.finalY + 15;
-            
-            // Si falta espacio en la hoja, saltar página
-            if (pagstartY > 270) {
-                doc.addPage();
-                pagstartY = 20;
-            }
-            
-            doc.setFontSize(12);
-            doc.setTextColor(...colorNegro);
-            doc.text("Historial de Pagos Realizados", 14, pagstartY);
+        const horaCierre = new Date(closure.closed_at).toLocaleString('es-PE', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
 
-            const pagosData = loan.payments.map((p, index) => [
-                (index + 1).toString(),
-                new Date(p.payment_date).toLocaleDateString('es-PE', { timeZone: 'UTC' }),
-                `S/ ${(p.payment_amount - (p.mora_amount||0)).toFixed(2)}`,
-                `S/ ${(p.mora_amount||0).toFixed(2)}`,
-                p.payment_method || 'Efectivo'
-            ]);
+        const systemAmount = parseFloat(closure.system_cash_amount);
+        const declaredAmount = parseFloat(closure.declared_amount);
+        const difference = parseFloat(closure.difference);
 
-            doc.autoTable({
-                head: [['#', 'Fecha', 'Monto', 'Mora', 'Método']], 
-                body: pagosData,
-                startY: pagstartY + 5,
-                ...tableStyles
-            });
+        // Determinar el color de la diferencia
+        let diffColor = 'var(--success-color)';
+        let diffIcon = '✅';
+        if (Math.abs(difference) > 0.01) {
+            diffColor = 'var(--danger-color)';
+            diffIcon = '⚠️';
         }
 
-        const fileName = `Detalle_${loan.dni}.pdf`;
-        doc.save(fileName);
-        
-    } catch (error) {
-        console.error("Error generando PDF", error);
-    }
+        return `
+            <tr>
+                <td>${fecha}</td>
+                <td>${horaCierre}</td>
+                <td style="font-weight: 600;">S/ ${systemAmount.toFixed(2)}</td>
+                <td style="font-weight: 600;">S/ ${declaredAmount.toFixed(2)}</td>
+                <td style="color: ${diffColor}; font-weight: 700;">
+                    ${diffIcon} S/ ${Math.abs(difference).toFixed(2)}
+                </td>
+                <td>${closure.closed_by || 'Admin'}</td>
+            </tr>
+        `;
+    }).join('');
 }
 
-// --- FUNCIÓN: EXPORTAR REPORTE DE CAJA A PDF ---
-function exportarCajaPDF() {
+// 🔹 EXPORTAR E IMPRIMIR HISTORIAL DE CIERRES
+function exportarHistorialCierresPDF() {
     if (typeof window.jspdf === 'undefined') {
         alert("Error: Librería jsPDF no cargada.");
         return;
     }
 
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
+    // 1. Crear una tabla temporal para el historial y rellenarla
+    const tempTable = document.createElement('table');
+    tempTable.id = 'closureHistoryTableTemp'; // Usar un ID temporal
+    tempTable.innerHTML = `
+        <thead>
+            <tr>
+                <th>Fecha Cierre</th>
+                <th>Hora Cierre</th>
+                <th>Sistema (Efectivo)</th>
+                <th>Declarado (Efectivo)</th>
+                <th>Diferencia</th>
+                <th>Cerrado Por</th>
+            </tr>
+        </thead>
+        <tbody id="closureHistoryTableBodyTemp">
+        </tbody>
+    `;
+    document.body.appendChild(tempTable);
 
-    // 1. Obtener datos de la interfaz
-    const dateFrom = getDomElement('cashRegisterDateFrom').value;
-    const dateTo = getDomElement('cashRegisterDateTo').value;
-    const summaryText = getDomElement('cashRegisterSummary').innerText.split('\n').filter(line => line.trim() !== '');
+    // 2. Rellenar el tbody
+    const historyTableBody = getDomElement('closureHistoryTableBodyTemp');
 
-    // 2. Encabezado
-    doc.setFontSize(18);
-    doc.setTextColor(0, 93, 255); // Azul PrestaPro
-    doc.text("REPORTE DE MOVIMIENTOS DE CAJA", 105, 20, { align: 'center' });
+    loadClosureHistory().then(closures => {
+        if (closures.length === 0) {
+            historyTableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #9CA3AF;">No hay cierres registrados aún.</td></tr>';
+        } else {
+            closures.sort((a, b) => new Date(b.closure_date) - new Date(a.closure_date));
+            historyTableBody.innerHTML = closures.map(closure => {
+                const fecha = new Date(closure.closure_date).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+                const horaCierre = new Date(closure.closed_at).toLocaleString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true });
+                const systemAmount = parseFloat(closure.system_cash_amount);
+                const declaredAmount = parseFloat(closure.declared_amount);
+                const difference = parseFloat(closure.difference);
 
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Generado el: ${new Date().toLocaleString('es-PE')}`, 105, 28, { align: 'center' });
-    doc.text(`Rango: Del ${dateFrom} al ${dateTo}`, 105, 33, { align: 'center' });
+                // Determinar el color de la diferencia (se usa solo para la lógica de ícono/texto en PDF)
+                let diffIcon = Math.abs(difference) > 0.01 ? '⚠️ ' : '✅ ';
 
-    // 3. Resumen (Caja de totales)
-    doc.setDrawColor(0, 93, 255);
-    doc.setFillColor(240, 245, 255);
-    doc.rect(14, 40, 182, 25, 'FD'); // Caja de fondo
-
-    doc.setFontSize(11);
-    doc.setTextColor(0, 0, 0);
-    
-    let yResumen = 48;
-    summaryText.forEach((line) => {
-        // Limpiamos un poco el texto para que se vea bien
-        if(line.includes('Diferencia')) return; // Omitir línea de diferencia si no es cierre
-        doc.text(line, 20, yResumen);
-        yResumen += 7;
-    });
-
-    // 4. Tabla de Movimientos
-    doc.autoTable({
-        html: '#cashRegisterTable', // Jala los datos directo de tu tabla HTML
-        startY: 75,
-        theme: 'grid',
-        headStyles: { 
-            fillColor: [0, 93, 255], 
-            textColor: [255, 255, 255],
-            halign: 'center',
-            fontStyle: 'bold'
-        },
-        bodyStyles: { 
-            textColor: [50, 50, 50],
-            fontSize: 10
-        },
-        columnStyles: {
-            0: { halign: 'center' }, // Fecha
-            4: { fontStyle: 'bold', halign: 'right' }, // Total
-            1: { halign: 'right' }, 
-            2: { halign: 'right' }, 
-            3: { halign: 'right' }
-        },
-        footStyles: {
-            fillColor: [240, 240, 240],
-            textColor: [0, 0, 0],
-            fontStyle: 'bold'
+                return `
+                    <tr>
+                        <td>${fecha}</td>
+                        <td>${horaCierre}</td>
+                        <td>S/ ${systemAmount.toFixed(2)}</td>
+                        <td>S/ ${declaredAmount.toFixed(2)}</td>
+                        <td>${diffIcon} S/ ${difference.toFixed(2)}</td>
+                        <td>${closure.closed_by || 'Admin'}</td>
+                    </tr>
+                `;
+            }).join('');
         }
+
+        // 3. Generar PDF
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+
+        // Encabezado
+        doc.setFontSize(18);
+        doc.setTextColor(0, 93, 255);
+        doc.text("HISTORIAL DE CIERRES DE CAJA", 105, 20, { align: 'center' });
+
+        doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
+        doc.text(`Generado el: ${new Date().toLocaleString('es-PE')}`, 105, 28, { align: 'center' });
+
+        // Tabla
+        doc.autoTable({
+            html: '#closureHistoryTableTemp',
+            startY: 35,
+            theme: 'grid',
+            headStyles: {
+                fillColor: [0, 93, 255],
+                textColor: [255, 255, 255],
+                halign: 'center',
+                fontStyle: 'bold'
+            },
+            bodyStyles: {
+                textColor: [50, 50, 50],
+                fontSize: 9
+            },
+            columnStyles: {
+                0: { halign: 'center' },
+                1: { halign: 'center' },
+                2: { halign: 'right' },
+                3: { halign: 'right' },
+                4: { halign: 'right' },
+                5: { halign: 'center' }
+            }
+        });
+
+        // 4. Limpiar y Descargar
+        document.body.removeChild(tempTable);
+        const fileName = `Historial_Cierres_Caja_${new Date().toISOString().split('T')[0]}.pdf`;
+        doc.save(fileName);
     });
-
-    // 5. Descargar
-    const fileName = `Reporte_Caja_${dateFrom}_${dateTo}.pdf`;
-    doc.save(fileName);
 }
 
-// --- FUNCIÓN: IMPRIMIR REPORTE DE CAJA ---
-function imprimirCaja() {
-    const dateFrom = getDomElement('cashRegisterDateFrom').value;
-    const dateTo = getDomElement('cashRegisterDateTo').value;
-    
-    // Clonamos el resumen y la tabla para no afectar la vista actual
-    const summaryHTML = getDomElement('cashRegisterSummary').innerHTML;
-    const tableHTML = getDomElement('cashRegisterTable').outerHTML;
+function imprimirHistorialCierres() {
+    // 1. Crear una tabla temporal para el historial y rellenarla
+    const tempTable = document.createElement('table');
+    tempTable.id = 'closureHistoryTableTemp';
+    tempTable.innerHTML = `
+        <thead>
+            <tr>
+                <th>Fecha Cierre</th>
+                <th>Hora Cierre</th>
+                <th>Sistema (Efectivo)</th>
+                <th>Declarado (Efectivo)</th>
+                <th>Diferencia</th>
+                <th>Cerrado Por</th>
+            </tr>
+        </thead>
+        <tbody id="closureHistoryTableBodyTemp">
+        </tbody>
+    `;
+    document.body.appendChild(tempTable); // Se añade temporalmente
 
-    // Crear iframe temporal para imprimir
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'absolute';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = 'none';
-    document.body.appendChild(iframe);
+    // 2. Rellenar el tbody con los datos del historial
+    const historyTableBody = getDomElement('closureHistoryTableBodyTemp');
 
-    const iframeDoc = iframe.contentWindow.document;
-    iframeDoc.open();
+    loadClosureHistory().then(closures => {
+        if (closures.length === 0) {
+            historyTableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #9CA3AF;">No hay cierres registrados aún.</td></tr>';
+        } else {
+            closures.sort((a, b) => new Date(b.closure_date) - new Date(a.closure_date));
+            historyTableBody.innerHTML = closures.map(closure => {
+                const fecha = new Date(closure.closure_date).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+                const horaCierre = new Date(closure.closed_at).toLocaleString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true });
+                const systemAmount = parseFloat(closure.system_cash_amount);
+                const declaredAmount = parseFloat(closure.declared_amount);
+                const difference = parseFloat(closure.difference);
+                let diffIcon = Math.abs(difference) > 0.01 ? '⚠️ ' : '✅ ';
 
-    iframeDoc.write(`
-        <!DOCTYPE html>
-        <html lang="es">
-        <head>
-            <meta charset="UTF-8">
-            <title>Reporte de Caja</title>
-            <style>
-                body { font-family: sans-serif; padding: 20px; color: #333; }
-                h1 { text-align: center; color: #000; margin-bottom: 5px; }
-                .subtitle { text-align: center; font-size: 12px; color: #666; margin-bottom: 20px; }
-                
-                /* Estilos del Resumen */
-                .summary-box { 
-                    border: 2px solid #333; 
-                    padding: 15px; 
-                    margin-bottom: 20px; 
-                    border-radius: 5px;
-                    background-color: #f9f9f9;
-                }
-                .summary-box p { margin: 5px 0; font-size: 14px; }
-                
-                /* Estilos de la Tabla */
-                table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
-                th { background-color: #eee; border: 1px solid #999; padding: 8px; text-transform: uppercase; }
-                td { border: 1px solid #999; padding: 8px; text-align: right; }
-                td:first-child { text-align: center; } /* Fecha centrada */
-                
-                /* Utilidades de impresión */
-                @media print {
-                    @page { margin: 10mm; }
-                    body { -webkit-print-color-adjust: exact; }
-                }
-            </style>
-        </head>
-        <body>
-            <h1>REPORTE DE MOVIMIENTOS DE CAJA</h1>
-            <p class="subtitle">
-                Rango: ${dateFrom} al ${dateTo} <br>
-                Impreso el: ${new Date().toLocaleString('es-PE')}
-            </p>
+                return `
+                    <tr>
+                        <td>${fecha}</td>
+                        <td>${horaCierre}</td>
+                        <td>S/ ${systemAmount.toFixed(2)}</td>
+                        <td>S/ ${declaredAmount.toFixed(2)}</td>
+                        <td>${diffIcon} S/ ${difference.toFixed(2)}</td>
+                        <td>${closure.closed_by || 'Admin'}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
 
-            <div class="summary-box">
-                ${summaryHTML}
-            </div>
+        // 3. Imprimir
+        const tableHTML = tempTable.outerHTML;
 
-            ${tableHTML}
-        </body>
-        </html>
-    `);
-    
-    iframeDoc.close();
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'absolute';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = 'none';
+        document.body.appendChild(iframe);
 
-    iframe.onload = function() {
-        setTimeout(function() {
-            iframe.contentWindow.focus();
-            iframe.contentWindow.print();
-            setTimeout(() => { document.body.removeChild(iframe); }, 1000);
-        }, 500);
-    };
+        const iframeDoc = iframe.contentWindow.document;
+        iframeDoc.open();
+
+        iframeDoc.write(`
+            <!DOCTYPE html>
+            <html lang="es">
+            <head>
+                <meta charset="UTF-8">
+                <title>Historial de Cierres de Caja</title>
+                <style>
+                    body { font-family: sans-serif; padding: 20px; color: #333; }
+                    h1 { text-align: center; color: #000; margin-bottom: 5px; }
+                    .subtitle { text-align: center; font-size: 12px; color: #666; margin-bottom: 20px; }
+                    
+                    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
+                    th { background-color: #eee; border: 1px solid #999; padding: 8px; text-transform: uppercase; }
+                    td { border: 1px solid #999; padding: 8px; text-align: center; }
+                    td:nth-child(3), td:nth-child(4), td:nth-child(5) { text-align: right; }
+                    
+                    @media print {
+                        @page { margin: 10mm; }
+                        body { -webkit-print-color-adjust: exact; }
+                    }
+                </style>
+            </head>
+            <body>
+                <h1>HISTORIAL DE CIERRES DE CAJA</h1>
+                <p class="subtitle">Impreso el: ${new Date().toLocaleString('es-PE')}</p>
+                ${tableHTML}
+            </body>
+            </html>
+        `);
+
+        iframeDoc.close();
+
+        iframe.onload = function() {
+            setTimeout(function() {
+                iframe.contentWindow.focus();
+                iframe.contentWindow.print();
+                // 4. Limpiar
+                setTimeout(() => { 
+                    document.body.removeChild(iframe); 
+                    document.body.removeChild(tempTable); // Eliminar la tabla temporal
+                }, 1000);
+            }, 500);
+        };
+    });
 }
+
+// 🔹 EXPONER FUNCIONES GLOBALMENTE
+window.exportarHistorialCierresPDF = exportarHistorialCierresPDF;
+window.imprimirHistorialCierres = imprimirHistorialCierres;
