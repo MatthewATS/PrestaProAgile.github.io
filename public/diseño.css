@@ -3,7 +3,11 @@
     --primary-color: #5D88FF;
     --primary-light: #E0E7FF; /* Fondo claro para tema claro */
     --primary-dark: #0045B8;
+
+    --brand-green: #4CAF50;
+
     --secondary-color: #1F2937; /* Texto oscuro para fondos claros */
+
 
     /* Fondos */
     --bg-primary: #F3F4F6;   /* Gris muy claro */
@@ -213,13 +217,21 @@ body {
 }
 
 .main-header h1 {
-    color: var(--primary-color);
+    /* color: var(--primary-color); */
+    color: var(--text-color); 
     font-size: 28px;
     font-weight: 700;
     margin: 0;
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+/* === ESTILO PARA EL NUEVO LOGO VERDE === */
+.header-logo {
+    height: 35px; /* Altura ideal para el encabezado */
+    width: auto;  /* Mantiene la proporción de la imagen */
+    /* El espacio entre la imagen y el texto ya lo maneja el "gap: 8px" del h1 padre */
 }
 
 .header-actions {
@@ -256,7 +268,7 @@ body {
 .card-header h2 {
     font-size: 20px;
     font-weight: 600;
-    color: var(--secondary-color);
+    color: var(--text-color); 
     margin: 0;
 }
 
@@ -526,6 +538,50 @@ body {
     background-color: var(--warning-light);
     color: var(--warning-color);
 }
+
+
+/* === ESTILOS MODAL COMPARTIR (NUEVO) === */
+.share-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* 2 columnas */
+    gap: 15px;
+}
+
+.share-option-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background-color: var(--bg-primary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    height: 100px;
+}
+
+.share-option-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--primary-color);
+}
+
+.share-option-btn .icon {
+    font-size: 28px;
+    margin-bottom: 8px;
+}
+
+.share-option-btn .text {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--secondary-color);
+}
+
+/* Colores específicos para cada botón (Opcional) */
+.share-option-btn.gmail:hover { background-color: #fce8e6; border-color: #ea4335; }
+.share-option-btn.whatsapp:hover { background-color: #e8f5e9; border-color: #25D366; }
+.share-option-btn.native:hover { background-color: #e0f2f1; border-color: #009688; }
 
 /* === MODAL === */
 .modal {
@@ -1306,7 +1362,13 @@ small {
     justify-content: center;
     min-height: 100vh;
     padding: 20px;
-    background: linear-gradient(135deg, #005DFF 0%, #0D244F 100%);
+    
+    /* USA LA VARIABLE DEL TEMA (Blanco en Claro / Gris Oscuro en Oscuro) */
+    background-color: var(--bg-primary); 
+    
+    /* Quitamos el linear-gradient verde anterior */
+    background-image: none; 
+    transition: background-color 0.3s ease;
 }
 
 .login-card {
@@ -1321,7 +1383,9 @@ small {
 }
 
 .login-header h1 {
-    color: var(--primary-color);
+    color: var(--text-color);
+    font-size: 32px;
+    margin-bottom: 5px;
 }
 
 .login-header p {
@@ -1330,6 +1394,13 @@ small {
 
 .login-footer a {
     color: var(--primary-color);
+}
+
+.login-card .submit-button {
+    background-color: var(--brand-green);
+}
+.login-card .submit-button:hover {
+    background-color: #388E3C; /* Verde un poco más oscuro al pasar el mouse */
 }
 
 /* === RECEIPT STYLES (Adaptado a Oscuro) === */
@@ -1613,7 +1684,8 @@ small {
     justify-content: center;
     min-height: 100vh;
     padding: 20px;
-    background: linear-gradient(135deg, #005DFF 0%, #0D244F 100%);
+    background-color: var(--bg-primary); 
+    transition: background-color 0.3s ease;
 }
 
 .login-card {
