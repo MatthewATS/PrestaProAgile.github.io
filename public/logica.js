@@ -596,7 +596,7 @@ function getMovementsByDateRange(dateFrom, dateTo, methodFilter = null) {
         }
     });
 
-    return filteredMovements;
+    return filteredMovements.sort((a, b) => a.date - b.date);
 }
 
 async function saveDailySquare() {
@@ -1101,6 +1101,37 @@ function initPaymentListeners() {
     });
 
     getDomElement('paymentForm').addEventListener('submit', handlePaymentSubmit);
+
+    // *****************************************************************
+    // FIX CRÍTICO: DELEGACIÓN DE EVENTOS PARA EL BOTÓN "VER RECIBO"
+    // *****************************************************************
+    const detailsModal = getDomElement('detailsModal');
+    if (detailsModal) {
+        // Adjuntamos el listener al modal de detalles, que siempre está presente.
+        detailsModal.addEventListener('click', function(event) {
+            const target = event.target.closest('.view-receipt-btn');
+            if (target) {
+                const loanId = target.getAttribute('data-loan-id');
+                const paymentIndex = parseInt(target.getAttribute('data-payment-index'));
+
+                const loan = loans.find(l => l.id == loanId);
+                // El payment index en la tabla HTML es el índice del array loan.payments
+                if (loan && loan.payments && loan.payments.length > paymentIndex) {
+                    const payment = loan.payments[paymentIndex];
+                    showReceipt(payment, loan);
+                }
+            }
+        });
+    }
+    // *****************************************************************
+}
+
+function initReceiptButtonListeners() {
+    // 🚨 FIX: Inicialización del botón de compartir del recibo
+    getDomElement('shareReceiptBtn')?.addEventListener('click', () => {
+        currentShareType = 'receipt';
+        openModal(getDomElement('shareOptionsModal'));
+    });
 }
 
 function openPaymentModal(loan) {
@@ -1783,6 +1814,7 @@ function calculateMora(loan) {
 }
 
 function calculateSchedule(loan) {
+    // 🚨 CORRECCIÓN: Convertir la tasa de interés mensual (loan.interes) a decimal
     const monthlyInterestRate = parseFloat(loan.interes) / 100;
     const principal = parseFloat(loan.monto);
     const schedule = [];
@@ -1804,6 +1836,14 @@ function calculateSchedule(loan) {
         }
 
         const remainingTerm = loan.plazo - loan.meses_solo_interes;
+
+        // Si el plazo restante es 0 o negativo, el total due es solo el interés.
+        if (remainingTerm <= 0) {
+            const totalDue = interestOnlyPayment * loan.plazo;
+            return { payments, schedule, totalDue: parseFloat(totalDue.toFixed(2)) };
+        }
+
+        // Si hay plazo restante, calcular amortizado
         const amortizedPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -remainingTerm));
         payments.amortizedPayment = amortizedPayment;
 
@@ -1817,7 +1857,11 @@ function calculateSchedule(loan) {
             });
         }
 
+        const totalDue = (interestOnlyPayment * loan.meses_solo_interes) + (amortizedPayment * remainingTerm);
+        return { payments, schedule, totalDue: parseFloat(totalDue.toFixed(2)) };
+
     } else {
+        // Cálculo Amortizado estándar
         const monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
         payments.amortizedPayment = monthlyPayment;
 
@@ -1830,10 +1874,12 @@ function calculateSchedule(loan) {
                 monto: monthlyPayment.toFixed(2)
             });
         }
+
+        const totalDue = monthlyPayment * loan.plazo;
+        return { payments, schedule, totalDue: parseFloat(totalDue.toFixed(2)) };
     }
-    const totalDue = schedule.reduce((sum, item) => sum + parseFloat(item.monto), 0);
-    return { payments, schedule, totalDue: parseFloat(totalDue.toFixed(2)) };
 }
+
 
 function getTodayDateISO() {
     return new Date().toISOString().split('T')[0];
@@ -1950,6 +1996,41 @@ function updateDashboard() {
     getDomElement('activeLoans').textContent = activeLoans;
     getDomElement('totalClients').textContent = clients.size;
     getDomElement('collectedToday').textContent = `S/ ${collectedToday.toFixed(2)}`;
+}
+
+/**
+ * Genera un Data URL para un código QR a partir de un texto.
+ * Utiliza la librería global QRCode.js (asumido que está cargada).
+ * @param {string} text Texto a codificar.
+ * @param {number} size Tamaño del QR.
+ * @returns {string} Data URL de la imagen QR.
+ */
+function generateQrDataURL(text, size) {
+    if (typeof QRCode === 'undefined') {
+        console.error("QRCode.js no está cargado.");
+        return '';
+    }
+    const tempDiv = document.createElement('div');
+    new QRCode(tempDiv, {
+        text: text,
+        width: size,
+        height: size,
+        colorDark : "#000000",
+        colorLight : "#ffffff",
+        correctLevel : QRCode.CorrectLevel.H
+    });
+
+    // Esperar un ciclo para que el QR se genere en el DOM
+    // Esto es un workaround síncrono para obtener el data URL
+    const canvas = tempDiv.querySelector('canvas');
+    if (canvas) {
+        const dataURL = canvas.toDataURL('image/png');
+        tempDiv.remove(); // Limpiar el elemento temporal
+        return dataURL;
+    }
+
+    tempDiv.remove();
+    return '';
 }
 
 // MODIFICADA: Implementa el nuevo diseño de HTML para el modal de recibo
@@ -2157,7 +2238,7 @@ function downloadReceipt() {
     doc.rect(130, yPos, 65, 35);
 
     doc.setFontSize(9);
-    doc.setTextColor(...darkColor);
+    doc.setTextColor(100, 100, 100);
     doc.setFont(undefined, 'bold');
     doc.text(`R.U.C. N° ${RUC_EMPRESA}`, 162.5, yPos + 6, { align: 'center' });
 
@@ -2545,12 +2626,16 @@ function populateDetailsModal(loan) {
                     <td><button class="button button-secondary button-sm view-receipt-btn" data-loan-id="${loan.id}" data-payment-index="${index}">Ver 🧾</button></td>
                 </tr>`
         }).join('');
+
+        // 🚨 CRÍTICO: SE ELIMINA EL LISTENER DELEGADO QUE ESTABA AQUÍ
+        // Ahora se usa la delegación en initPaymentListeners()
     } else {
         paymentHistoryBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: #9CA3AF;">No hay pagos registrados.</td></tr>';
     }
 
     openModal(getDomElement('detailsModal'));
 }
+
 
 // En public/logica.js -> Reemplaza printSchedule
 
@@ -3199,13 +3284,13 @@ function handleSmartShare(platform) {
 
 // --- FUNCIÓN AUXILIAR: SOLO DESCARGAR PDF DETALLES (SIN MENÚ WINDOWS) ---
 // En public/logica.js (Reemplazar la función descargarPDFDetalles)
-// En public/logica.js -> Reemplaza descargarPDFDetalles
+// En public/logica.js (Reemplazar la función descargarPDFDetalles)
 
-// En public/logica.js -> Reemplaza descargarPDFDetalles
+// En public/logica.js (Reemplazar la función descargarPDFDetalles)
 
-// En public/logica.js -> Reemplaza descargarPDFDetalles
+// En public/logica.js (Reemplazar la función descargarPDFDetalles)
 
-// En public/logica.js -> Reemplaza descargarPDFDetalles
+// En public/logica.js (Reemplazar la función descargarPDFDetalles)
 
 function descargarPDFDetalles(loan) {
     if (typeof window.jspdf === 'undefined') return;
