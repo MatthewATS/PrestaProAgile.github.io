@@ -204,7 +204,7 @@
 
                                     <div id="multiple-payment-info" class="payment-option-detail" style="display: none;">
                                         <div class="form-group">
-                                            <label for="num_installments_to_pay">N° de Cuotas a Pagar (Máx: <span id="max_installments_available">0</span>)</label>
+                                            <label for="num_installments_to-pay">N° de Cuotas a Pagar (Máx: <span id="max_installments_available">0</span>)</label>
                                             <input type="number" id="num_installments_to_pay" min="1" value="1" max="1" placeholder="Ej: 3">
                                         </div>
                                     </div>
@@ -265,15 +265,15 @@
                 <div class="modal-body">
                     <div class="cash-register-controls">
                         <div class="form-group">
-                            <label for="cashRegisterDateFrom">Fecha del Cuadre</label>
+                            <label for="cashRegisterDateFrom">Fecha Desde (Rango/Cuadre)</label>
                             <input type="date" id="cashRegisterDateFrom">
                         </div>
-                        <div class="form-group" style="display: none;">
-                            <label for="cashRegisterDateTo">Fecha Hasta</label>
-                            <input type="date" id="cashRegisterDateTo" readonly>
+                        <div class="form-group" style="display: block;">
+                            <label for="cashRegisterDateTo">Fecha Hasta (Rango/Cuadre)</label>
+                            <input type="date" id="cashRegisterDateTo">
                         </div>
                         <div class="form-group" style="display: flex; align-items: flex-end;">
-                            <button class="button button-primary" id="filterCashRegisterBtn" style="width: 100%;">🔍 Ver Cuadre</button>
+                            <button class="button button-primary" id="filterCashRegisterBtn" style="width: 100%;">🔍 Ver Reporte/Cuadre</button>
                         </div>
                     </div>
 
@@ -301,23 +301,7 @@
                         </div>
                     </div>
 
-                    <h3 style="margin-top: 30px; margin-bottom: 15px; color: var(--secondary-color);">💰 Resumen de Movimientos por Día</h3>
-                    <div class="table-container">
-                        <table id="cashRegisterTable" class="main-table">
-                            <thead>
-                            <tr>
-                                <th>Fecha</th>
-                                <th>Efectivo Neto</th>
-                                <th>Transferencia/Yape</th>
-                                <th>Otros MP</th>
-                                <th>Total Ingresos</th>
-                            </tr>
-                            </thead>
-                            <tbody id="cashRegisterTableBody"></tbody>
-                        </table>
-                    </div>
-
-                    <h3 style="margin-top: 30px; margin-bottom: 15px; color: var(--secondary-color);">📜 Historial de Cierres Oficiales</h3>
+                    <h3 style="margin-top: 30px; margin-bottom: 15px; color: var(--secondary-color);">📜 Historial de Cierres Oficiales (Recuento)</h3>
                     <div class="table-container">
                         <table id="closureHistoryTable" class="main-table">
                             <thead>
@@ -649,3 +633,4 @@
 <script src="logica.js"></script>
 </body>
 </html>
+}
