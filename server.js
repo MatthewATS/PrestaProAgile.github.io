@@ -18,7 +18,7 @@ app.use((req, res, next) => {
 const pool = mysql.createPool(process.env.DATABASE_URL);
 
 // --- CONSTANTES DE NEGOCIO Y API DE MERCADO PAGO ---
-const TASA_INTERES_ANUAL = 10;
+// 🚨 MODIFICACIÓN: TASA_INTERES_ANUAL ELIMINADA. LA TASA SE RECIBE EN EL POST.
 const TASA_MORA_MENSUAL = 1;
 
 // 🚨 CREDENCIALES DE MERCADO PAGO DE PRODUCCIÓN 🚨
@@ -218,6 +218,8 @@ app.post('/api/loans', async (req, res) => {
         const {
             client,
             monto,
+            // 🚨 MODIFICACIÓN: Recibir interes_anual
+            interes_anual,
             fecha,
             plazo,
             status,
@@ -227,7 +229,8 @@ app.post('/api/loans', async (req, res) => {
         } = req.body;
 
         const { dni, nombres, apellidos, is_pep = false } = client;
-        const interes = TASA_INTERES_ANUAL / 12;
+        // 🚨 MODIFICACIÓN: Calcular tasa mensual a partir de la tasa anual recibida
+        const interes = parseFloat(interes_anual) / 12;
 
         if (monto < 100 || monto > 20000) {
             await connection.rollback();
@@ -401,8 +404,92 @@ app.get('/api/dni/:dni', async (req, res) => {
     }
 });
 
+
 // ==========================================================
-// 3. RUTAS DE MERCADO PAGO
+// 3. RUTAS DE CIERRE DE CAJA (CASH CLOSURES)
+// ==========================================================
+
+// POST /api/cash-closures (Registra un nuevo cierre diario)
+app.post('/api/cash-closures', async (req, res) => {
+    const { closure_date, declared_amount, system_cash_amount, difference } = req.body;
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        // 1. Verificar si ya existe un cierre para esa fecha
+        const [existing] = await connection.query(
+            'SELECT id FROM cash_closures WHERE closure_date = ?',
+            [closure_date]
+        );
+
+        if (existing.length > 0) {
+            await connection.rollback();
+            return res.status(409).json({ error: 'Ya existe un cierre de caja registrado para esta fecha.' });
+        }
+
+        // 2. Registrar el cierre
+        await connection.query(
+            `INSERT INTO cash_closures (closure_date, declared_amount, system_cash_amount, difference, closed_by)
+             VALUES (?, ?, ?, ?, 'admin')`, // Asumimos 'admin' como usuario
+            [closure_date, declared_amount, system_cash_amount, difference]
+        );
+
+        await connection.commit();
+        res.status(201).json({ message: 'Cierre de caja registrado exitosamente.' });
+
+    } catch (err) {
+        await connection.rollback();
+        console.error("ERROR en POST /api/cash-closures:", err.message);
+        res.status(500).json({ error: 'Error al registrar el cierre en la base de datos.' });
+    } finally {
+        connection.release();
+    }
+});
+
+// ********** ORDEN CRÍTICO CORREGIDO: RUTA ESPECÍFICA ANTES DE RUTA DINÁMICA **********
+
+// GET /api/cash-closures/history (NUEVA RUTA: Obtiene todo el historial de cierres)
+app.get('/api/cash-closures/history', async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            'SELECT closure_date, declared_amount, system_cash_amount, difference, closed_at, closed_by FROM cash_closures ORDER BY closure_date DESC'
+        );
+        // Convertir fechas a strings para manejo consistente en frontend
+        const history = rows.map(row => ({
+            ...row,
+            closed_at: new Date(row.closed_at).toISOString()
+        }));
+
+        res.json(history);
+    } catch (err) {
+        console.error("ERROR en GET /api/cash-closures/history:", err.message);
+        res.status(500).json({ error: 'Error al obtener el historial de cierres.' });
+    }
+});
+
+// GET /api/cash-closures/:date (Verifica si hay un cierre registrado para una fecha)
+app.get('/api/cash-closures/:date', async (req, res) => {
+    const { date } = req.params;
+    try {
+        const [rows] = await pool.query(
+            'SELECT id, closed_at, declared_amount, system_cash_amount, difference FROM cash_closures WHERE closure_date = ?',
+            [date]
+        );
+        if (rows.length > 0) {
+            // Asegurarse de que `closed_at` sea una cadena ISO o similar para el frontend
+            rows[0].closed_at = new Date(rows[0].closed_at).toISOString();
+            return res.json({ closed: true, data: rows[0] });
+        }
+        res.json({ closed: false });
+    } catch (err) {
+        console.error("ERROR en GET /api/cash-closures/:date:", err.message);
+        res.status(500).json({ error: 'Error al consultar el cierre de caja.' });
+    }
+});
+
+
+// ==========================================================
+// 4. RUTAS DE MERCADO PAGO
 // ==========================================================
 
 // POST /api/mp/create-order (CREAR PREFERENCIA DE PAGO)
@@ -586,7 +673,7 @@ app.post('/api/mp/webhook', async (req, res) => {
 
 
 // ==========================================================
-// 4. CONFIGURACIÓN FINAL DEL SERVIDOR
+// 5. CONFIGURACIÓN FINAL DEL SERVIDOR
 // ==========================================================
 
 // Sirve archivos estáticos (HTML, CSS, JS)
