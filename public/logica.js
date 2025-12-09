@@ -524,26 +524,51 @@ async function filterCashRegister() {
 
 
     // 🚨 MODIFICADO: Renderizar la tabla de movimientos detallada del día seleccionado
-    renderCashRegisterTable(todayMovements);
+    // *** PASAMOS EL ESTADO DE CIERRE A LA FUNCIÓN DE RENDERIZADO ***
+    renderCashRegisterTable(todayMovements, checkData.closed);
 
     // 🔹 IMPORTANTE: El historial de cierres se renderiza aparte y sin filtro
     await renderClosureHistory();
 }
 
-// 🚨 MODIFICADA: Ahora muestra los movimientos detallados del día
-function renderCashRegisterTable(dailyMovements) {
+// 🚨 MODIFICADA: Ahora muestra los movimientos detallados del día y gestiona el estado de cierre
+// 🚨 MODIFICADA: Ahora muestra los movimientos detallados del día y gestiona el estado de cierre
+// 🚨 MODIFICADA: Ahora muestra los movimientos detallados del día y gestiona el estado de cierre
+function renderCashRegisterTable(dailyMovements, isClosed) {
     const tbody = getDomElement('cashRegisterTableBody');
-    if (!tbody) return;
+    const tableContainer = tbody.closest('.table-container');
+
+    if (!tbody || !tableContainer) return;
     tbody.innerHTML = '';
 
-    // 🚨 CAMBIO: Se ajusta el encabezado para mostrar movimientos
+    // 🚨 CAMBIO: Se ajusta el encabezado para mostrar movimientos (No cambia, pero se deja para referencia)
     getDomElement('cashRegisterTable').querySelector('thead tr').innerHTML = `
-        <th>Cliente</th>
-        <th>Método</th>
-        <th>Capital/Interés</th>
-        <th>Mora</th>
-        <th>Total Ingreso</th>
+        <th style="text-align: left;">Cliente</th>
+        <th style="text-align: center;">Método</th>
+        <th style="text-align: right;">Capital/Interés</th>
+        <th style="text-align: right;">Mora</th>
+        <th style="text-align: right;">Total Ingreso</th>
     `;
+
+    // Si la caja está cerrada, sobreescribir con el mensaje
+    if (isClosed) {
+        // Aplicar estilos para un aspecto de "bloqueado"
+        tableContainer.style.pointerEvents = 'none';
+        tableContainer.style.opacity = '0.6';
+
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" style="text-align: center; color: var(--danger-color); font-weight: 700; padding: 40px; font-size: 16px;">
+                    🔒 NO DISPONIBLE - CUADRE DE CAJA HECHO
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    // Si no está cerrada, asegurar que sea interactuable
+    tableContainer.style.pointerEvents = 'auto';
+    tableContainer.style.opacity = '1';
 
     if (dailyMovements.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #9CA3AF;">No se encontraron movimientos para este día.</td></tr>';
@@ -553,12 +578,13 @@ function renderCashRegisterTable(dailyMovements) {
     dailyMovements.forEach(m => {
         const row = document.createElement('tr');
 
+        // 🚨 MEJORA: Centrado y alineación optimizada
         row.innerHTML = `
-            <td>${m.client}</td>
-            <td>${m.method}</td>
-            <td style="text-align: right;">S/ ${m.amount.toFixed(2)}</td>
-            <td style="color: var(--danger-color); text-align: right;">S/ ${m.mora.toFixed(2)}</td>
-            <td style="font-weight: 700; color: var(--success-color); text-align: right;">S/ ${m.total.toFixed(2)}</td>
+            <td style="text-align: left; vertical-align: middle;">${m.client}</td>
+            <td style="text-align: center; vertical-align: middle;">${m.method}</td>
+            <td style="text-align: right; vertical-align: middle;">S/ ${m.amount.toFixed(2)}</td>
+            <td style="color: var(--danger-color); text-align: right; vertical-align: middle;">S/ ${m.mora.toFixed(2)}</td>
+            <td style="font-weight: 700; color: var(--success-color); text-align: right; vertical-align: middle;">S/ ${m.total.toFixed(2)}</td>
         `;
         tbody.appendChild(row);
     });
