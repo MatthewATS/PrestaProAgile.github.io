@@ -440,7 +440,7 @@ async function openCashRegister() {
     const today = getTodayDateISO();
     // Se fuerza la misma fecha en ambos campos para cuadre diario
     getDomElement('cashRegisterDateFrom').value = today;
-    getDomElement('cashRegisterDateTo').value = today;
+    getDomElement('cashRegisterDateTo').value = today; // Mantener, aunque esté oculto
     await filterCashRegister();
 }
 
@@ -448,503 +448,39 @@ function initCashRegisterListeners() {
     getDomElement('filterCashRegisterBtn')?.addEventListener('click', filterCashRegister);
     getDomElement('saveDailySquareBtn')?.addEventListener('click', saveDailySquare);
 
-    getDomElement('exportCashRegisterBtn')?.addEventListener('click', exportarCajaPDF);
-    getDomElement('printCashRegisterBtn')?.addEventListener('click', imprimirCaja);
-
-    // 🚨 NUEVO: Permitir la selección de rango pero forzar DateTo para la funcionalidad de Cierre Diario
+    // 🚨 MODIFICADO: Solo listener en DateFrom
     getDomElement('cashRegisterDateFrom')?.addEventListener('change', (e) => {
-        // Al cambiar "Desde", actualizamos el reporte
+        const dateFrom = e.target.value;
+        // Forzar DateTo a ser igual a DateFrom
+        getDomElement('cashRegisterDateTo').value = dateFrom;
         filterCashRegister();
     });
-    getDomElement('cashRegisterDateTo')?.addEventListener('change', filterCashRegister);
+
+    // 🚨 ELIMINADO: Ya no se filtra por DateTo independientemente.
+
+    getDomElement('exportCashRegisterBtn')?.addEventListener('click', exportarCajaPDF);
+    getDomElement('printCashRegisterBtn')?.addEventListener('click', imprimirCaja);
 }
 
-function initReceiptButtonListeners() {
-    const paymentHistoryBody = getDomElement('paymentHistoryBody');
-
-    if (paymentHistoryBody) {
-        paymentHistoryBody.addEventListener('click', function(event) {
-            const target = event.target.closest('button');
-            if (!target || !target.classList.contains('view-receipt-btn')) return;
-
-            const loanId = target.getAttribute('data-loan-id');
-            const paymentIndex = parseInt(target.getAttribute('data-payment-index'));
-
-            const loan = loans.find(l => l.id == loanId);
-            if (!loan || !loan.payments || !loan.payments[paymentIndex]) {
-                alert('No se pudo encontrar el pago seleccionado.');
-                return;
-            }
-
-            const payment = loan.payments[paymentIndex];
-            showReceipt(payment, loan);
-        });
-    }
-
-    // CRÍTICO: Se corrigió la inicialización de los listeners de botones de PDF/Compartir
-    const printReceiptBtn = getDomElement('printReceiptBtn');
-    if (printReceiptBtn) {
-        // Clonar para asegurar que los listeners antiguos se remuevan si los hubiera
-        const newPrintBtn = printReceiptBtn.cloneNode(true);
-        printReceiptBtn.parentNode.replaceChild(newPrintBtn, printReceiptBtn);
-        newPrintBtn.addEventListener('click', () => {
-            const receiptContent = getDomElement('receiptContent');
-            if (receiptContent) {
-                printModalContent(receiptContent);
-            } else {
-                alert('No se pudo encontrar el contenido del recibo para imprimir.');
-            }
-        });
-    }
-
-    // AGREGAR ESTE BLOQUE NUEVO PARA EL BOTÓN DE COMPARTIR
-    const shareReceiptBtn = getDomElement('shareReceiptBtn');
-    if (shareReceiptBtn) {
-        const newShareBtn = shareReceiptBtn.cloneNode(true);
-        shareReceiptBtn.parentNode.replaceChild(newShareBtn, shareReceiptBtn);
-
-        newShareBtn.addEventListener('click', () => {
-            currentShareType = 'receipt'; // Marcamos que es un recibo
-            openModal(getDomElement('shareOptionsModal')); // Abrimos el nuevo menú
-        });
-    }
-}
-
-// NUEVO: Función para generar el Data URL del QR usando la librería qrcode.js
-function generateQrDataURL(text, size = 100) {
-    if (typeof QRCode === 'undefined') {
-        console.error("Librería QRCode no cargada. Usando placeholder.");
-        return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0BVAwCAAAAAQMAAAAAAElFTkSuQmCC';
-    }
-
-    // Crear un elemento div temporal para que la librería qrcode.js pueda renderizar
-    const tempDiv = document.createElement('div');
-    tempDiv.style.display = 'none';
-    document.body.appendChild(tempDiv);
-
-    // Inicializar el QR en el div
-    new QRCode(tempDiv, {
-        text: text,
-        width: size,
-        height: size,
-        colorDark: "#000000",
-        colorLight: "#ffffff",
-        correctLevel: QRCode.CorrectLevel.H
-    });
-
-    // La librería renderiza el QR como una tabla dentro del div.
-    // Buscamos el canvas o la imagen generada.
-    const canvas = tempDiv.querySelector('canvas');
-    let dataUrl = '';
-
-    if (canvas) {
-        dataUrl = canvas.toDataURL('image/png');
-    } else {
-        // Fallback si la librería usa imagen u otro formato (depende de la versión)
-        // La versión 1.0.0 suele usar solo un div/table
-        console.warn("No se encontró canvas para generar DataURL. Devolviendo placeholder.");
-        dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0BVAwCAAAAAQMAAAAAAElFTkSuQmCC';
-    }
-
-    // Limpiar el div temporal
-    document.body.removeChild(tempDiv);
-    return dataUrl;
-}
-
-// MODIFICADA: Implementa el nuevo diseño de PDF con jsPDF, autotable y QR
-async function shareReceipt() {
-    if (!currentReceiptData) {
-        alert('No hay datos del recibo para compartir.');
-        return;
-    }
-
-    const {
-        loan,
-        totalPagado,
-        paymentMethod,
-        capitalInteresPagado,
-        moraPagada,
-        payment,
-        transactionId,
-        correlativo
-    } = currentReceiptData;
-
-    const paymentDate = new Date(payment.payment_date).toLocaleDateString('es-PE', { timeZone: 'UTC' });
-    const valorVenta = capitalInteresPagado;
-    const IGV = 0.00;
-    const subtotal = totalPagado - IGV;
-
-    // Texto del QR (SUNAT: RUC, Tipo Doc, Serie, Numero, Total, IGV, Fecha, Tipo Doc Cliente, Num Doc Cliente)
-    const qrText = `|${RUC_EMPRESA}|03|B001|${correlativo.toString().padStart(8, '0')}|${totalPagado.toFixed(2)}|${IGV.toFixed(2)}|${paymentDate}|1|${loan.dni}|`;
-    const qrDataUrl = generateQrDataURL(qrText, 100);
-
-    // Generar el PDF
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-
-    // Colores corporativos
-    const primaryColor = [93, 136, 255]; // Azul principal
-    const darkColor = [52, 64, 84]; // Texto oscuro
-    const grayColor = [100, 100, 100]; // Gris de labels
-    const lightGray = [200, 200, 200]; // Gris claro para líneas
-    const successColor = [76, 175, 80]; // Verde para total
-
-    let yPos = 20;
-
-    // ==================== HEADER (Mejorado) ====================
-    doc.setFillColor(...primaryColor);
-    doc.rect(14, yPos, 60, 12, 'F');
-    doc.setFontSize(16);
-    doc.setTextColor(255, 255, 255);
-    doc.setFont(undefined, 'bold');
-    doc.text("PRESTAPRO", 44, yPos + 8, { align: 'center' });
-
-    doc.setDrawColor(...primaryColor);
-    doc.setLineWidth(0.8);
-    doc.rect(130, yPos, 65, 35);
-
-    doc.setFontSize(9);
-    doc.setTextColor(...darkColor);
-    doc.setFont(undefined, 'bold');
-    doc.text(`R.U.C. N° ${RUC_EMPRESA}`, 162.5, yPos + 6, { align: 'center' });
-
-    doc.setFontSize(12);
-    doc.setTextColor(...primaryColor);
-    doc.text("BOLETA DE VENTA", 162.5, yPos + 13, { align: 'center' });
-    doc.text("ELECTRÓNICA", 162.5, yPos + 19, { align: 'center' });
-
-    doc.setFontSize(11);
-    doc.setTextColor(...darkColor);
-    doc.setFont(undefined, 'bold');
-    doc.text(`B001-${correlativo.toString().padStart(8, '0')}`, 162.5, yPos + 28, { align: 'center' });
-
-    yPos += 2;
-    doc.setFontSize(12);
-    doc.setTextColor(...darkColor);
-    doc.setFont(undefined, 'bold');
-    doc.text(RAZON_SOCIAL_EMPRESA, 14, yPos + 13);
-
-    doc.setFontSize(9);
-    doc.setTextColor(...grayColor);
-    doc.setFont(undefined, 'normal');
-    doc.text(DIRECCION_EMPRESA, 14, yPos + 19);
-    doc.text("Teléfono: (01) 123-4567", 14, yPos + 24);
-    doc.text("Email: info@prestapro.com.pe", 14, yPos + 29);
-    doc.setFontSize(8);
-    doc.setFont(undefined, 'italic');
-    doc.text("SERVICIOS DE PRÉSTAMOS PERSONALES", 14, yPos + 34);
-
-    yPos += 42;
-    doc.setDrawColor(...lightGray);
-    doc.setLineWidth(0.3);
-    doc.line(14, yPos, 196, yPos);
-    yPos += 8;
-
-    // ==================== DATOS DEL CLIENTE ====================
-    doc.setFillColor(245, 247, 250);
-    doc.rect(14, yPos, 182, 8, 'F');
-
-    doc.setFontSize(10);
-    doc.setTextColor(...primaryColor);
-    doc.setFont(undefined, 'bold');
-    doc.text("📋 DATOS DEL CLIENTE", 16, yPos + 5.5);
-
-    yPos += 12;
-    doc.setFontSize(9);
-    doc.setTextColor(...grayColor);
-    doc.setFont(undefined, 'normal');
-    doc.text("Tipo/N° Documento:", 16, yPos);
-    doc.setTextColor(...darkColor);
-    doc.setFont(undefined, 'bold');
-    doc.text(`DNI / ${loan.dni}`, 60, yPos);
-
-    yPos += 6;
-    doc.setTextColor(...grayColor);
-    doc.setFont(undefined, 'normal');
-    doc.text("Apellidos y Nombres:", 16, yPos);
-    doc.setTextColor(...darkColor);
-    doc.setFont(undefined, 'bold');
-    doc.text(`${loan.nombres} ${loan.apellidos}`, 60, yPos);
-
-    yPos += 6;
-    doc.setTextColor(...grayColor);
-    doc.setFont(undefined, 'normal');
-    doc.text("Fecha de Emisión:", 16, yPos);
-    doc.setTextColor(...darkColor);
-    doc.setFont(undefined, 'bold');
-    doc.text(paymentDate, 60, yPos);
-
-    yPos += 10;
-    doc.setDrawColor(...lightGray);
-    doc.line(14, yPos, 196, yPos);
-    yPos += 8;
-
-    // ==================== DETALLE DE LA OPERACIÓN ====================
-    doc.setFillColor(245, 247, 250);
-    doc.rect(14, yPos, 182, 8, 'F');
-
-    doc.setFontSize(10);
-    doc.setTextColor(...primaryColor);
-    doc.setFont(undefined, 'bold');
-    doc.text("📄 DETALLE DE LA OPERACIÓN", 16, yPos + 5.5);
-
-    yPos += 12;
-
-    const tableData = [
-        [
-            `AMORTIZACIÓN PRÉSTAMO N° ${loan.id}\nCapital e Intereses - Cuota programada`,
-            `S/ ${valorVenta.toFixed(2)}`,
-            `S/ ${capitalInteresPagado.toFixed(2)}`
-        ]
-    ];
-
-    if (moraPagada > 0) {
-        tableData.push([
-            'MORA / PENALIDAD POR ATRASO\nInterés moratorio aplicado',
-            'S/ 0.00',
-            `S/ ${moraPagada.toFixed(2)}`
-        ]);
-    }
-
-    doc.autoTable({
-        startY: yPos,
-        head: [['DESCRIPCIÓN', 'VALOR VENTA', 'IMPORTE']],
-        body: tableData,
-        theme: 'grid',
-        headStyles: {
-            fillColor: primaryColor,
-            textColor: [255, 255, 255],
-            fontStyle: 'bold',
-            fontSize: 9,
-            halign: 'center'
-        },
-        bodyStyles: {
-            fontSize: 8,
-            textColor: darkColor,
-            cellPadding: 4
-        },
-        columnStyles: {
-            0: { cellWidth: 100 },
-            1: { halign: 'right', cellWidth: 35 },
-            2: { halign: 'right', cellWidth: 35, fontStyle: 'bold' }
-        },
-        didParseCell: function(data) {
-            if (data.row.index === 1 && moraPagada > 0 && data.column.index === 2) {
-                data.cell.styles.textColor = [244, 67, 54];
-            }
-        }
-    });
-
-    yPos = doc.lastAutoTable.finalY + 10;
-
-    // ==================== RESUMEN DE MONTOS (Mejorado) ====================
-    const summaryX = 130;
-    const summaryWidth = 66;
-
-    doc.setFontSize(9);
-    doc.setTextColor(...grayColor);
-    doc.setFont(undefined, 'normal');
-    doc.text("SUBTOTAL", summaryX, yPos);
-    doc.setTextColor(...darkColor);
-    doc.setFont(undefined, 'bold');
-    doc.text(`S/ ${subtotal.toFixed(2)}`, summaryX + summaryWidth, yPos, { align: 'right' });
-
-    yPos += 6;
-    doc.setTextColor(...grayColor);
-    doc.setFont(undefined, 'normal');
-    doc.text("IGV (0%)", summaryX, yPos);
-    doc.setTextColor(...darkColor);
-    doc.setFont(undefined, 'bold');
-    doc.text(`S/ ${IGV.toFixed(2)}`, summaryX + summaryWidth, yPos, { align: 'right' });
-
-    yPos += 8;
-    doc.setDrawColor(...primaryColor);
-    doc.setLineWidth(0.8);
-    doc.line(summaryX, yPos - 2, summaryX + summaryWidth, yPos - 2);
-
-    doc.setFillColor(245, 250, 255);
-    doc.rect(summaryX - 2, yPos - 3, summaryWidth + 4, 10, 'F');
-
-    doc.setFontSize(11);
-    doc.setTextColor(...primaryColor);
-    doc.setFont(undefined, 'bold');
-    doc.text("IMPORTE TOTAL", summaryX, yPos + 4);
-
-    doc.setFontSize(13);
-    doc.setTextColor(...successColor);
-    doc.text(`S/ ${totalPagado.toFixed(2)}`, summaryX + summaryWidth, yPos + 4, { align: 'right' });
-
-    yPos += 18;
-
-    // ==================== FOOTER (Mejorado con QR) ====================
-    // --- QR Y TEXTO LEGAL EN DOS COLUMNAS ---
-    const qrSize = 40;
-    const qrX = 14;
-    const qrY = yPos + 6;
-
-    // 1. DIBUJAR EL QR REAL
-    doc.setFontSize(8);
-    doc.setTextColor(...darkColor);
-    doc.setFont(undefined, 'bold');
-    doc.text("Código QR SUNAT", qrX + (qrSize / 2), qrY - 3, { align: 'center' });
-
-    // Dibuja la imagen QR generada (si existe)
-    if (qrDataUrl.length > 100) {
-        doc.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize);
-    } else {
-        // Placeholder si falla la generación del DataURL
-        doc.setDrawColor(...darkColor);
-        doc.setLineWidth(0.5);
-        doc.rect(qrX, qrY, qrSize, qrSize);
-        doc.setFontSize(6);
-        doc.setTextColor(150, 150, 150);
-        doc.text("QR No Disponible", qrX + (qrSize / 2), qrY + 15, { align: 'center' });
-    }
-
-    // 2. Información en letras y detalles (Columna derecha)
-    const infoX = qrX + qrSize + 10;
-    let infoY = yPos;
-
-    doc.setDrawColor(...lightGray);
-    doc.setLineWidth(0.3);
-    doc.line(infoX - 5, yPos, infoX - 5, yPos + 75); // Línea divisoria vertical
-
-    // Monto en letras (Destacado)
-    infoY += 6;
-    doc.setFillColor(255, 249, 230); // Color amarillo claro
-    doc.setDrawColor(255, 193, 7); // Borde amarillo
-    doc.setLineWidth(0.5);
-    doc.rect(infoX, infoY, 196 - infoX - 10, 12, 'FD');
-
-    doc.setFontSize(9);
-    doc.setTextColor(...darkColor);
-    doc.setFont(undefined, 'bold');
-    doc.text("SON:", infoX + 2, infoY + 5);
-    doc.setFont(undefined, 'normal');
-    doc.text(numeroALetras(totalPagado) + " SOLES", infoX + 2, infoY + 9);
-
-    infoY += 16;
-    doc.setFontSize(8);
-    doc.setTextColor(...grayColor);
-    doc.setFont(undefined, 'bold');
-    doc.text("Forma de Pago: ", infoX, infoY);
-    doc.setFont(undefined, 'normal');
-    doc.text(paymentMethod, infoX + 26, infoY);
-
-    doc.setFont(undefined, 'bold');
-    doc.text("ID Transacción: ", infoX + 60, infoY);
-    doc.setFont(undefined, 'normal');
-    doc.text(transactionId, infoX + 86, infoY);
-
-    infoY += 6;
-    doc.setFont(undefined, 'bold');
-    doc.text("Observaciones: ", infoX, infoY);
-    doc.setFont(undefined, 'normal');
-    doc.text(`Pago correspondiente al préstamo N° ${loan.id}. Operación registrada correctamente.`, infoX + 28, infoY);
-
-    infoY += 8;
-    doc.setFontSize(7);
-    doc.setTextColor(150, 150, 150);
-    doc.setFont(undefined, 'italic');
-    const legalText = doc.splitTextToSize(
-        'Representación impresa de la Boleta de Venta Electrónica. Puede verificar la autenticidad de este documento en www.sunat.gob.pe. Este es un documento simulado para fines demostrativos.',
-        196 - infoX - 10
-    );
-    doc.text(legalText, infoX, infoY);
-
-    // Actualizar yPos al final del QR + Info
-    yPos = Math.max(qrY + qrSize + 10, infoY + legalText.length * 5 + 5);
-
-    // Marca de agua
-    doc.setTextColor(200, 200, 200);
-    doc.setFontSize(40);
-    doc.setFont(undefined, 'bold');
-    doc.text('SIMULACIÓN', 105, 150, {
-        align: 'center',
-        angle: 45
-    });
-
-    // Convertir PDF a blob
-    const pdfBlob = doc.output('blob');
-    const fileName = `Boleta_B001-${correlativo.toString().padStart(8, '0')}_${loan.apellidos}.pdf`;
-
-    // Verificar si la API de compartir está disponible
-    if (navigator.share && navigator.canShare) {
-        try {
-            const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-
-            // Verificar si se puede compartir el archivo
-            if (navigator.canShare({ files: [file] })) {
-                await navigator.share({
-                    files: [file],
-                    title: `Boleta de Pago - ${loan.nombres} ${loan.apellidos}`,
-                    text: `Boleta de pago por S/ ${totalPagado.toFixed(2)} - PrestaPro`
-                });
-
-                showSuccessAnimation('✅ Boleta compartida exitosamente');
-            } else {
-                // Si canShare falla (por ejemplo, en PC sin apps compatibles), se va a descarga.
-                // Esto es un error controlado.
-                throw new Error('El dispositivo no soporta compartir archivos PDF');
-            }
-        } catch (error) {
-            // AbortError ocurre si el usuario cancela, no mostrar alerta en ese caso.
-            if (error.name !== 'AbortError') {
-                console.error('Error al compartir:', error);
-                // Fallback: descargar el PDF
-                alert('No se pudo compartir el archivo. Se descargará en su lugar.');
-                doc.save(fileName);
-            }
-        }
-    } else {
-        // Fallback para navegadores que no soportan la API de compartir
-        alert('Tu navegador no soporta la función de compartir. El PDF se descargará automáticamente.');
-        doc.save(fileName);
-    }
-}
-
+// 🚨 MODIFICADA: La función ahora solo se centra en un solo día
 async function filterCashRegister() {
     const dateFrom = getDomElement('cashRegisterDateFrom').value;
-    const dateTo = getDomElement('cashRegisterDateTo').value;
+    const dateTo = dateFrom; // Forzamos la igualdad
 
     const allMovements = getMovementsByDateRange(dateFrom, dateTo, null);
-    const cashMovements = allMovements.filter(m => m.method === 'Efectivo');
-    const transferMovements = allMovements.filter(m => m.method === 'Transferencia' || m.method === 'Yape/Plin');
-    const mpMovements = allMovements.filter(m => m.method === 'Mercado Pago');
 
-
-    const totalAllIngresos = allMovements.reduce((sum, m) => sum + m.total, 0);
-    const totalCashIngresos = cashMovements.reduce((sum, m) => sum + m.total, 0);
-    const totalTransferIngresos = transferMovements.reduce((sum, m) => sum + m.total, 0);
-    const totalMpIngresos = mpMovements.reduce((sum, m) => sum + m.total, 0);
-
-    // Agrupar movimientos por fecha para el resumen (revertido a la lógica anterior)
-    const dailyMovements = {};
-    allMovements.forEach(m => {
-        const dateString = new Date(m.date).toISOString().split('T')[0];
-        if (!dailyMovements[dateString]) {
-            dailyMovements[dateString] = {
-                date: dateString,
-                cash: 0,
-                transfer: 0,
-                mp: 0,
-                total: 0
-            };
-        }
-        if (m.method === 'Efectivo') {
-            dailyMovements[dateString].cash += m.total;
-        } else if (m.method === 'Transferencia' || m.method === 'Yape/Plin') {
-            dailyMovements[dateString].transfer += m.total;
-        } else {
-            dailyMovements[dateString].mp += m.total; // Incluir pagos de Mercado Pago no registrados como Transferencia/Yape (webhook)
-        }
-        dailyMovements[dateString].total += m.total;
+    // 1. Filtrar movimientos del día seleccionado
+    const todayMovements = allMovements.filter(m => {
+        const paymentDate = new Date(m.date).toISOString().split('T')[0];
+        return paymentDate === dateFrom;
     });
 
-    const dailySummary = Object.values(dailyMovements).sort((a, b) => new Date(b.date) - new Date(a.date));
+    const totalAllIngresos = todayMovements.reduce((sum, m) => sum + m.total, 0);
+    const totalCashIngresos = todayMovements.filter(m => m.method === 'Efectivo').reduce((sum, m) => sum + m.total, 0);
+    const totalTransferIngresos = todayMovements.filter(m => m.method === 'Transferencia' || m.method === 'Yape/Plin').reduce((sum, m) => sum + m.total, 0);
+    const totalMpIngresos = todayMovements.filter(m => m.method === 'Mercado Pago').reduce((sum, m) => sum + m.total, 0);
 
-
-    // Mostrar el resumen del rango
+    // Mostrar el resumen del día seleccionado
     const summaryContent = `
         <p><strong>Total de Ingresos (Caja + Transferencias + MP):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalAllIngresos.toFixed(2)}</span></p>
         <p><strong>Ingreso Neto en Efectivo (Cuadre):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalCashIngresos.toFixed(2)}</span></p>
@@ -953,79 +489,81 @@ async function filterCashRegister() {
     `;
     getDomElement('cashRegisterSummary').innerHTML = summaryContent;
 
-    // Control de la sección de cuadre diario (Solo si es un único día)
-    const isDaily = dateFrom === dateTo;
+
+    // Control de la sección de cuadre diario (Siempre visible si hay una fecha seleccionada)
     const dailySquareSection = getDomElement('dailySquareSection');
     const squareFormContainer = getDomElement('squareFormContainer');
     const squareStatusMessage = getDomElement('squareStatusMessage');
     const declaredAmountInput = getDomElement('declaredAmount');
 
-    dailySquareSection.style.display = isDaily ? 'block' : 'none';
+    // dailySquareSection.style.display = 'block'; // Ya está visible en front.html
 
-    if (isDaily) {
-        // 1. Verificar estado del cierre en DB
-        const closureDate = dateFrom;
-        const checkResponse = await fetch(`${API_URL}/api/cash-closures/${closureDate}`);
-        const checkData = await checkResponse.json();
+    // 1. Verificar estado del cierre en DB
+    const closureDate = dateFrom;
+    const checkResponse = await fetch(`${API_URL}/api/cash-closures/${closureDate}`);
+    const checkData = await checkResponse.json();
 
-        dailySquareSection.querySelector('h3').textContent = `Cierre de Caja Diario (${new Date(closureDate).toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })}`;
+    const formattedDateTitle = new Date(closureDate).toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' });
+    getDomElement('dailySquareDate').textContent = formattedDateTitle;
 
-        if (checkData.closed) {
-            // Cierre ya realizado
-            squareFormContainer.style.display = 'none';
-            squareStatusMessage.className = 'alert alert-info';
-            squareStatusMessage.innerHTML = `<span>🔒</span> <strong>Cierre de Caja Realizado.</strong> Monto del Sistema: S/ ${checkData.data.system_cash_amount.toFixed(2)}. Diferencia: S/ ${checkData.data.difference.toFixed(2)}. Cerrado el ${new Date(checkData.data.closed_at).toLocaleString('es-PE')}.`;
-            squareStatusMessage.style.display = 'flex';
-        } else {
-            // Cierre pendiente
-            squareFormContainer.style.display = 'block';
-            squareStatusMessage.style.display = 'none';
+    if (checkData.closed) {
+        // Cierre ya realizado
+        squareFormContainer.style.display = 'none';
+        squareStatusMessage.className = 'alert alert-info';
+        squareStatusMessage.innerHTML = `<span>🔒</span> <strong>Cierre de Caja Realizado.</strong> Monto del Sistema: S/ ${checkData.data.system_cash_amount.toFixed(2)}. Diferencia: S/ ${checkData.data.difference.toFixed(2)}. Cerrado el ${new Date(checkData.data.closed_at).toLocaleString('es-PE')}.`;
+        squareStatusMessage.style.display = 'flex';
+    } else {
+        // Cierre pendiente
+        squareFormContainer.style.display = 'block';
+        squareStatusMessage.style.display = 'none';
 
-            declaredAmountInput.value = totalCashIngresos.toFixed(2);
-            getDomElement('squareValidationMessage').style.display = 'none';
-            getDomElement('saveDailySquareBtn').disabled = false;
-        }
+        declaredAmountInput.value = totalCashIngresos.toFixed(2);
+        getDomElement('squareValidationMessage').style.display = 'none';
+        getDomElement('saveDailySquareBtn').disabled = false;
     }
 
-    renderCashRegisterTable(dailySummary);
 
-    // 🔹 NUEVA LÍNEA: Renderizar historial de cierres
+    // 🚨 MODIFICADO: Renderizar la tabla de movimientos detallada del día seleccionado
+    renderCashRegisterTable(todayMovements);
+
+    // 🔹 IMPORTANTE: El historial de cierres se renderiza aparte y sin filtro
     await renderClosureHistory();
 }
 
-function renderCashRegisterTable(dailySummary) {
+// 🚨 MODIFICADA: Ahora muestra los movimientos detallados del día
+function renderCashRegisterTable(dailyMovements) {
     const tbody = getDomElement('cashRegisterTableBody');
     if (!tbody) return;
     tbody.innerHTML = '';
 
-    // 🚨 CAMBIO: Se revierte la tabla al resumen diario por fecha
+    // 🚨 CAMBIO: Se ajusta el encabezado para mostrar movimientos
     getDomElement('cashRegisterTable').querySelector('thead tr').innerHTML = `
-        <th>Fecha</th>
-        <th>Efectivo Neto</th>
-        <th>Transferencia/Yape</th>
-        <th>Otros MP</th>
-        <th>Total Ingresos</th>
+        <th>Cliente</th>
+        <th>Método</th>
+        <th>Capital/Interés</th>
+        <th>Mora</th>
+        <th>Total Ingreso</th>
     `;
 
-    if (dailySummary.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #9CA3AF;">No se encontraron movimientos.</td></tr>';
+    if (dailyMovements.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #9CA3AF;">No se encontraron movimientos para este día.</td></tr>';
         return;
     }
 
-    dailySummary.forEach(m => {
+    dailyMovements.forEach(m => {
         const row = document.createElement('tr');
-        const dateString = new Date(m.date).toLocaleDateString('es-PE', { timeZone: 'UTC' });
 
         row.innerHTML = `
-            <td>${dateString}</td>
-            <td style="color: var(--success-color); font-weight: 600;">S/ ${m.cash.toFixed(2)}</td>
-            <td style="color: var(--primary-color); font-weight: 600;">S/ ${m.transfer.toFixed(2)}</td>
-            <td style="color: #9CA3AF;">S/ ${m.mp.toFixed(2)}</td>
-            <td style="font-weight: 700; color: var(--success-color);">S/ ${m.total.toFixed(2)}</td>
+            <td>${m.client}</td>
+            <td>${m.method}</td>
+            <td style="text-align: right;">S/ ${m.amount.toFixed(2)}</td>
+            <td style="color: var(--danger-color); text-align: right;">S/ ${m.mora.toFixed(2)}</td>
+            <td style="font-weight: 700; color: var(--success-color); text-align: right;">S/ ${m.total.toFixed(2)}</td>
         `;
         tbody.appendChild(row);
     });
 }
+
 
 function getMovementsByDateRange(dateFrom, dateTo, methodFilter = null) {
     const startDate = dateFrom ? new Date(dateFrom).setHours(0, 0, 0, 0) : 0;
@@ -1036,16 +574,22 @@ function getMovementsByDateRange(dateFrom, dateTo, methodFilter = null) {
         if (loan.payments) {
             loan.payments.forEach(p => {
                 const paymentDate = new Date(p.payment_date).getTime();
-                const method = p.payment_method || 'Efectivo';
+                let method = p.payment_method || 'Efectivo';
+                // Estandarizar métodos que se convierten en Mercado Pago
+                if (method === 'Transferencia' || method === 'Yape/Plin') {
+                    // En el frontend, Yape/Plin/Transferencia son métodos que inician flujo MP
+                    // Para los reportes de caja, los mantenemos para agrupar en Transferencia/Yape o Mercado Pago (si fuera por webhook)
+                    // Para este reporte detallado, usamos el método original (Transferencia/Yape/Efectivo)
+                }
 
                 if (paymentDate >= startDate && paymentDate <= endDate && (!methodFilter || method === methodFilter)) {
                     filteredMovements.push({
                         date: paymentDate,
                         client: `${loan.nombres} ${loan.apellidos}`,
-                        amount: parseFloat(p.payment_amount) - (parseFloat(p.mora_amount) || 0),
+                        amount: parseFloat(p.payment_amount) - (parseFloat(p.mora_amount) || 0), // Capital/Interés
                         mora: parseFloat(p.mora_amount || 0),
-                        total: parseFloat(p.payment_amount),
-                        method: method // Mantener el método original para el filtro
+                        total: parseFloat(p.payment_amount), // Total pagado
+                        method: method
                     });
                 }
             });
@@ -1061,11 +605,14 @@ async function saveDailySquare() {
     const validationMessage = getDomElement('squareValidationMessage');
     validationMessage.style.display = 'block';
 
-    if (getDomElement('cashRegisterDateFrom').value !== getDomElement('cashRegisterDateTo').value) {
+    // 🚨 ELIMINADO: Ya no es necesaria la validación de fechas porque la forzamos en el listener.
+    // Solo validamos que el campo no esté vacío (aunque es `required`)
+    if (!date) {
         validationMessage.className = 'alert alert-danger';
-        validationMessage.innerHTML = '<span>❌</span> Solo se puede realizar el cierre de caja para **un único día** (Fecha Desde = Fecha Hasta).';
+        validationMessage.innerHTML = '<span>❌</span> Seleccione una fecha para el cierre de caja.';
         return;
     }
+
 
     const allMovements = getMovementsByDateRange(date, date, null);
     const cashMovements = allMovements.filter(m => m.method === 'Efectivo');
@@ -1106,7 +653,7 @@ async function saveDailySquare() {
         validationMessage.className = 'alert alert-success';
         validationMessage.innerHTML = `<span>✅</span> <strong>¡Caja Cuadrada!</strong> Cierre de caja registrado para el día ${new Date(date).toLocaleDateString('es-PE')}.`;
 
-        // Vuelve a filtrar para mostrar el estado de "Cerrado"
+        // Vuelve a filtrar para mostrar el estado de "Cerrado" y actualizar el historial
         await filterCashRegister();
 
         // 🔹 NUEVA LÍNEA: Mostrar animación de éxito
@@ -1116,6 +663,166 @@ async function saveDailySquare() {
         validationMessage.className = 'alert alert-danger';
         validationMessage.innerHTML = `<span>❌</span> <strong>Error al Guardar:</strong> ${error.message}`;
     }
+}
+
+
+// --- FUNCIÓN: EXPORTAR REPORTE DE CAJA A PDF (MODIFICADA) ---
+function exportarCajaPDF() {
+    if (typeof window.jspdf === 'undefined') {
+        alert("Error: Librería jsPDF no cargada.");
+        return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    // 1. Obtener datos de la interfaz (Solo un día)
+    const dateFrom = getDomElement('cashRegisterDateFrom').value;
+    const dateTo = dateFrom; // Forzado
+    const summaryText = getDomElement('cashRegisterSummary').innerText.split('\n').filter(line => line.trim() !== '');
+
+    // 2. Encabezado
+    doc.setFontSize(18);
+    doc.setTextColor(0, 93, 255); // Azul PrestaPro
+    doc.text("REPORTE DE MOVIMIENTOS DE CAJA", 105, 20, { align: 'center' });
+
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Generado el: ${new Date().toLocaleString('es-PE')}`, 105, 28, { align: 'center' });
+    doc.text(`Día Seleccionado: ${dateFrom}`, 105, 33, { align: 'center' });
+
+    // 3. Resumen (Caja de totales)
+    doc.setDrawColor(0, 93, 255);
+    doc.setFillColor(240, 245, 255);
+    doc.rect(14, 40, 182, 35, 'FD'); // Caja de fondo
+
+    doc.setFontSize(11);
+    doc.setTextColor(0, 0, 0);
+
+    let yResumen = 48;
+    summaryText.forEach((line) => {
+        if(line.includes('Diferencia')) return;
+        doc.text(line, 20, yResumen);
+        yResumen += 7;
+    });
+
+    // 4. Tabla de Movimientos
+    doc.autoTable({
+        html: '#cashRegisterTable', // Jala los datos directo de tu tabla HTML
+        startY: 85,
+        theme: 'grid',
+        headStyles: {
+            fillColor: [0, 93, 255],
+            textColor: [255, 255, 255],
+            halign: 'center',
+            fontStyle: 'bold'
+        },
+        bodyStyles: {
+            textColor: [50, 50, 50],
+            fontSize: 10
+        },
+        columnStyles: {
+            0: { halign: 'left' },
+            1: { halign: 'center' },
+            2: { halign: 'right' },
+            3: { halign: 'right', textColor: [200, 0, 0] }, // Mora
+            4: { fontStyle: 'bold', halign: 'right', textColor: [16, 185, 129] } // Total Ingreso
+        },
+        footStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: 'bold'
+        }
+    });
+
+    // 5. Descargar
+    const fileName = `Reporte_Movimientos_${dateFrom}.pdf`;
+    doc.save(fileName);
+}
+
+// --- FUNCIÓN: IMPRIMIR REPORTE DE CAJA (MODIFICADA) ---
+function imprimirCaja() {
+    const dateFrom = getDomElement('cashRegisterDateFrom').value;
+    const dateTo = dateFrom; // Forzado
+
+    // Clonamos el resumen y la tabla para no afectar la vista actual
+    const summaryHTML = getDomElement('cashRegisterSummary').innerHTML;
+    const tableHTML = getDomElement('cashRegisterTable').outerHTML;
+
+    // Crear iframe temporal para imprimir
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    const iframeDoc = iframe.contentWindow.document;
+    iframeDoc.open();
+
+    iframeDoc.write(`
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+            <meta charset="UTF-8">
+            <title>Reporte de Caja</title>
+            <style>
+                body { font-family: sans-serif; padding: 20px; color: #333; }
+                h1 { text-align: center; color: #000; margin-bottom: 5px; }
+                .subtitle { text-align: center; font-size: 12px; color: #666; margin-bottom: 20px; }
+                
+                /* Estilos del Resumen */
+                .summary-box { 
+                    border: 2px solid #333; 
+                    padding: 15px; 
+                    margin-bottom: 20px; 
+                    border-radius: 5px;
+                    background-color: #f9f9f9;
+                }
+                .summary-box p { margin: 5px 0; font-size: 14px; }
+                .summary-box strong { font-weight: 700; color: #000; }
+                .summary-box span { font-weight: 700; }
+                
+                /* Estilos de la Tabla */
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+                th { background-color: #eee; border: 1px solid #999; padding: 8px; text-transform: uppercase; }
+                td { border: 1px solid #999; padding: 8px; text-align: right; }
+                td:first-child { text-align: left; } /* Cliente a la izquierda */
+                td:nth-child(2) { text-align: center; } /* Método centrado */
+                
+                /* Utilidades de impresión */
+                @media print {
+                    @page { margin: 10mm; }
+                    body { -webkit-print-color-adjust: exact; }
+                }
+            </style>
+        </head>
+        <body>
+            <h1>REPORTE DE MOVIMIENTOS DE CAJA</h1>
+            <p class="subtitle">
+                Día: ${dateFrom} <br>
+                Impreso el: ${new Date().toLocaleString('es-PE')}
+            </p>
+
+            <div class="summary-box">
+                ${summaryHTML}
+            </div>
+
+            <h2 style="font-size: 16px; margin-bottom: 10px;">Movimientos del Día</h2>
+            ${tableHTML}
+        </body>
+        </html>
+    `);
+
+    iframeDoc.close();
+
+    iframe.onload = function() {
+        setTimeout(function() {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+            setTimeout(() => { document.body.removeChild(iframe); }, 1000);
+        }, 500);
+    };
 }
 
 
@@ -3682,11 +3389,11 @@ function exportarCajaPDF() {
             fontSize: 10
         },
         columnStyles: {
-            0: { halign: 'center' }, // Fecha
-            4: { fontStyle: 'bold', halign: 'right' }, // Total
-            1: { halign: 'right' },
-            2: { halign: 'right' },
-            3: { halign: 'right' }
+            0: { halign: 'left' }, // Cliente
+            1: { halign: 'center' }, // Método
+            2: { halign: 'right' }, // Capital/Interés
+            3: { halign: 'right' }, // Mora
+            4: { fontStyle: 'bold', halign: 'right' } // Total Ingreso
         },
         footStyles: {
             fillColor: [240, 240, 240],
@@ -3757,7 +3464,7 @@ function imprimirCaja() {
         <body>
             <h1>REPORTE DE MOVIMIENTOS DE CAJA</h1>
             <p class="subtitle">
-                Rango: ${dateFrom} al ${dateTo} <br>
+                Rango: Del ${dateFrom} al ${dateTo} <br>
                 Impreso el: ${new Date().toLocaleString('es-PE')}
             </p>
 
