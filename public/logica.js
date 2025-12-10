@@ -1033,12 +1033,26 @@ function initLoanFormLogic() {
     });
 
     mesesSoloInteresInput.addEventListener('input', (e) => {
-        e.target.value = e.target.value.replace(/[^0-9]/g, '');
+        // 1. Quitar caracteres no numéricos
+        let value = e.target.value.replace(/[^0-9]/g, '');
 
-        // 🚨 NUEVA RESTRICCIÓN: Limitar a 2 dígitos
-        if (e.target.value.length > 2) {
-            e.target.value = e.target.value.slice(0, 2);
+        // 2. 🚨 CORRECCIÓN CRÍTICA: Limitar la longitud a 2 dígitos
+        if (value.length > 2) {
+            value = value.slice(0, 2);
         }
+
+        // 3. Convertir a número y limitar al máximo permitido (99)
+        let numValue = parseInt(value, 10);
+
+        if (isNaN(numValue) || numValue > 99) {
+            // Si es inválido o excede 99, forzar a 99 si no es vacío, o dejar vacío.
+            e.target.value = (numValue > 99) ? '99' : value;
+        } else {
+            e.target.value = value;
+        }
+
+        // Llamar a la función de info
+        updateHibridoInfo();
     });
 
     // 🚨 NUEVA FUNCIÓN: Lógica para previsualizar la cuota mensual
