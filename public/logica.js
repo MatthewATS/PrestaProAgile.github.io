@@ -991,7 +991,7 @@ function initLoanFormLogic() {
             </div>
             <div class="form-group" id="hibrido_options" style="display: none;">
                 <label for="meses_solo_interes">Meses de "Solo Interés"</label>
-                <input type="number" id="meses_solo_interes" min="1" step="1" placeholder="3" inputmode="numeric">
+                <input type="number" id="meses_solo_interes" min="1" max="10" step="1" placeholder="3" inputmode="numeric">
                 <small id="hibrido-info">Cantidad de meses donde solo se paga el interés mensual.</small>
             </div>
             
