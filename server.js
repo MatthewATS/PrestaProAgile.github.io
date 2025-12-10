@@ -24,18 +24,18 @@ const pool = mysql.createPool(process.env.DATABASE_URL);
 // --- CONSTANTES DE NEGOCIO Y API DE IZIPAY (PAYZEN/LYRA) ---
 const TASA_MORA_MENSUAL = 1;
 
-// 🚨🚨🚨 MODIFICACIÓN CRÍTICA: Credenciales de PRODUCCIÓN 🚨🚨🚨
+// 🚨🚨🚨 CREDENCIALES DE PRODUCCIÓN PROPORCIONADAS 🚨🚨🚨
 // Merchant ID (user id)
 const IZP_MERCHANT_ID = '68304620'; 
 // Contraseña de Producción
 const IZP_PASSWORD = 'prodpassword_CEhMhCy3YlZblRGkqVOGZJKlR5ei2a6cUR6KgtAMIdLWG'; 
 // Clave Pública de Producción (Se mantiene la provista, aunque no se usa en este código)
 const IZP_PUBLIC_KEY = '68304620:publickey_wjo2urlfqtyvbTiMaVZSdF1fSkGenL5fG87WNzb1aEu4V';
-// 🚨 CAMBIO CRÍTICO: Endpoint de PRODUCCIÓN (Usando el tuyo)
+// Endpoint de PRODUCCIÓN (Usando el tuyo)
 const IZP_ENDPOINT_BASE_API = 'https://api.micuentaweb.pe/api-payment/V4/Charge/CreatePayment';
 const IZP_HMAC_KEY = 'xenUz7o7m1yTrLTqpHJq4QekjbKA4DsyY0lDMwmlpzSj'; // Clave de firma (suele ser fija)
 
-// **Asegúrate de que esta URL sea la correcta y accesible (ej. http://localhost:3000 o la URL de Railway)**
+// URL de Railway
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app';
 
 
@@ -534,7 +534,7 @@ app.get('/api/cash-closures/:date', async (req, res) => {
 // 4. RUTAS DE IZIPAY (Sustituye a Mercado Pago)
 // ==========================================================
 
-// 🚨 POST /api/izipay/create-order (MODIFICADO PARA INTENTAR LLAMADA REAL)
+// 🚨 POST /api/izipay/create-order (CORREGIDO CON DETALLE DE ERROR)
 app.post('/api/izipay/create-order', async (req, res) => {
     console.log('[IZIPAY] 📥 Recibida solicitud de creación de orden:', req.body);
 
@@ -593,6 +593,10 @@ app.post('/api/izipay/create-order', async (req, res) => {
             }
         };
 
+        // *************** DEPURACIÓN: MOSTRAR PAYLOAD EN CONSOLA ***************
+        console.log('[IZIPAY DEBUG] Enviando Payload:', izipayPayload);
+        // **********************************************************************
+
         const response = await axios.post(IZP_ENDPOINT_BASE_API, izipayPayload, {
             headers: {
                 'Authorization': `Basic ${authString}`,
@@ -617,8 +621,16 @@ app.post('/api/izipay/create-order', async (req, res) => {
 
     } catch (error) {
         // Este bloque se ejecuta si la llamada a Izipay falla por cualquier razón
-        // (ej. falta de SSL, credenciales erróneas, problema de red, etc.)
-        console.error('[IZIPAY ERROR] ❌ Falló la llamada REAL a la API de Izipay.', error.response ? error.response.data : error.message);
+        
+        // *************** DEPURACIÓN: MOSTRAR ERROR COMPLETO DE AXIOS ***************
+        console.error('[IZIPAY ERROR] ❌ Falló la llamada REAL a la API de Izipay.');
+        if (error.response) {
+            console.error('   Estado HTTP:', error.response.status);
+            console.error('   Respuesta de Izipay:', error.response.data);
+        } else {
+            console.error('   Error de Red/Conexión:', error.message);
+        }
+        // ***************************************************************************
 
         // --- FALLBACK: RETORNO DE URL SIMULADO (FLUJO DEMO) ---
         console.log('[IZIPAY] ⚠️ Recurriendo a la URL de SIMULACIÓN debido al error anterior.');
@@ -632,6 +644,7 @@ app.post('/api/izipay/create-order', async (req, res) => {
             payment_date: payment_date
         })).toString('base64');
 
+        // **USAMOS LA URL DE RAILWAY para que sea accesible al front**
         const checkoutUrlSimulated = `${YOUR_BACKEND_URL}/izipay/manual-payment?txn=${transaction_id}&metadata=${encodedMetadata}`;
 
         return res.json({
@@ -804,8 +817,9 @@ const startServer = async () => {
             console.log(`\n${'='.repeat(60)}`);
             console.log(`🚀 Servidor PrestaPro escuchando en el puerto ${PORT}`);
             console.log(`📡 URL de Backend: ${YOUR_BACKEND_URL}`);
-            // 🚨 CAMBIO DE LOG: Ahora verifica Izipay
+            // 🚨 LOG: Ahora verifica Izipay
             console.log(`💳 Izipay (Merchant ID): ${IZP_MERCHANT_ID ? '✅' : '❌'}`);
+            console.log(`⚠️ REVISA EL LOG DEL SERVIDOR AL INTENTAR CREAR UNA ORDEN DE PAGO IZIPAY PARA VER EL ERROR DE CONEXIÓN.`);
             console.log(`${'='.repeat(60)}\n`);
         });
 
