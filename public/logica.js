@@ -973,7 +973,7 @@ function initLoanFormLogic() {
             </div>
             <div class="form-group">
                 <label for="interes_anual">Tasa de Interés Anual (%)</label>
-                <input type="number" id="interes_anual" required step="0.01" min="1" placeholder="10.00" value="10.00">
+                <input type="number" id="interes_anual" required step="0.01" min="1" max="99.99" maxlength="2" placeholder="10.00" value="10.00">
                 <small id="interes-info">Tasa anual (TEA) con la que se calculará la cuota.</small>
             </div>
             
@@ -991,7 +991,7 @@ function initLoanFormLogic() {
             </div>
             <div class="form-group" id="hibrido_options" style="display: none;">
                 <label for="meses_solo_interes">Meses de "Solo Interés"</label>
-                <input type="number" id="meses_solo_interes" min="1" max="99" maxlength="2" step="1" placeholder="3" inputmode="numeric">
+                <input type="number" id="meses_solo_interes" min="1" max="12" maxlength="2" step="1" placeholder="3" inputmode="numeric">
                 <small id="hibrido-info">Cantidad de meses donde solo se paga el interés mensual.</small>
             </div>
             
@@ -1022,6 +1022,34 @@ function initLoanFormLogic() {
     const mesesSoloInteresInput = getDomElement('meses_solo_interes');
     const monthlyPaymentPreview = getDomElement('monthly-payment-preview');
     const estimatedMonthlyPayment = getDomElement('estimated-monthly-payment');
+    
+    interesAnualInput.addEventListener('input', (e) => {
+        let value = e.target.value;
+        const parts = value.split('.');
+        let integerPart = parts[0];
+
+        // 🚨 NUEVA RESTRICCIÓN: Limitar la parte entera a 2 dígitos
+        if (integerPart.length > 2) {
+            integerPart = integerPart.slice(0, 2);
+        }
+
+        // 3. Forzar el valor limpio y la limitación a 99
+        let finalValue = integerPart;
+        if (parts.length > 1) {
+            finalValue += '.' + parts[1];
+        }
+
+        // Si el valor numérico supera 99, lo limitamos
+        let numValue = parseFloat(finalValue);
+        if (numValue > 99) {
+            e.target.value = '99' + (parts.length > 1 ? '.' + parts[1] : '');
+        } else {
+            e.target.value = finalValue;
+        }
+
+        calculateEstimatedMonthlyPayment();
+        updateHibridoInfo();
+    });
 
     // Validación para evitar símbolos en campos numéricos de meses
     plazoInput.addEventListener('input', (e) => {
