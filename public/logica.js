@@ -117,9 +117,9 @@ function initializeApp() {
 
     // Nuevo Modal Link
     getDomElement('closeCheckoutLinkModalBtn')?.addEventListener('click', () => closeModal(getDomElement('checkoutLinkModal')));
-    getDomElement('copyLinkBtn')?.addEventListener('click', copyMpLink);
-    // 🚨 CAMBIO: Usa la función shareMpLink
-    getDomElement('shareMpLinkBtn')?.addEventListener('click', shareMpLink);
+    getDomElement('copyLinkBtn')?.addEventListener('click', copyIzpLink);
+    // 🚨 CAMBIO: Usa la función shareIzpLink
+    getDomElement('shareMpLinkBtn')?.addEventListener('click', shareIzpLink);
 
 
     // --- FUNCIÓN DE MOSTRAR APLICACIÓN (MODIFICADA) ---
@@ -736,7 +736,7 @@ function exportarCajaPDF() {
     // 1.1. Verificar si la caja está cerrada revisando el contenido de la tabla
     const tbody = getDomElement('cashRegisterTableBody');
     // Si el primer TD contiene el texto de cierre, está cerrado
-    const isClosed = tbody.querySelector('td')?.textContent.includes('CUADRE DE CAJA HECHO');
+    const isClosed = tbody.querySelector('td')?.textContent.includes('🔒 NO DISPONIBLE - CUADRE DE CAJA HECHO');
 
 
     // 2. Encabezado
@@ -816,7 +816,7 @@ function imprimirCaja() {
 
     // 1. Verificar si la caja está cerrada revisando el contenido de la tabla
     const tbody = getDomElement('cashRegisterTableBody');
-    const isClosed = tbody.querySelector('td')?.textContent.includes('CUADRE DE CAJA HECHO');
+    const isClosed = tbody.querySelector('td')?.textContent.includes('🔒 NO DISPONIBLE - CUADRE DE CAJA HECHO');
 
     let tableContentHTML = '';
 
@@ -847,7 +847,6 @@ function imprimirCaja() {
         <!DOCTYPE html>
         <html lang="es">
         <head>
-            <meta charset="UTF-8">
             <title>Reporte de Caja</title>
             <style>
                 body { font-family: sans-serif; padding: 20px; color: #333; }
@@ -1450,6 +1449,17 @@ function showCheckoutLinkModal(izpUrl, totalAmount, paymentMethod, clientName, c
     titleEl.textContent = `🔗 Enlace de Pago Generado (Boleta N° ${correlativo.toString().padStart(8, '0')})`;
     getDomElement('mpLinkOutput').previousElementSibling.textContent = 'Enlace de Pago (Izipay)';
 
+    // 🚨 CRÍTICO: MODIFICACIÓN DEL MENSAJE PARA EXPLICAR LA SIMULACIÓN
+    const instructionsDiv = getDomElement('checkoutLinkModal').querySelector('.alert-success div');
+    instructionsDiv.innerHTML = `
+        <p style="margin: 0;"><strong>¡ATENCIÓN! ESTA ES UNA SIMULACIÓN.</strong></p>
+        <p style="margin: 5px 0 0 0;">
+            El enlace real de Izipay requiere HTTPS/Dominio. Para probar el flujo de pago, copia el enlace 
+            de abajo, ábrelo en una nueva pestaña y **sigue las instrucciones de cURL/Postman** que aparecerán 
+            para simular la confirmación del pago (Webhook). El pago **NO** se registrará hasta que ejecutes la simulación del Webhook.
+        </p>
+    `;
+
 
     // Asegurarse de que el input esté enfocado para copiar si es posible
     const linkInput = getDomElement('mpLinkOutput');
@@ -1469,7 +1479,7 @@ function showCheckoutLinkModal(izpUrl, totalAmount, paymentMethod, clientName, c
     openModal(getDomElement('checkoutLinkModal'));
 }
 
-function copyMpLink() {
+function copyIzpLink() {
     const linkInput = getDomElement('mpLinkOutput');
     linkInput.select();
     linkInput.setSelectionRange(0, 99999);
@@ -1479,10 +1489,11 @@ function copyMpLink() {
 }
 
 // NUEVA FUNCIÓN: Utiliza la API nativa de compartir
-async function shareMpLink() {
+async function shareIzpLink() {
     // 🚨 CAMBIO: Usar currentIzpUrl
     if (!navigator.share || !currentIzpUrl) {
-        alert('La función de compartir no está disponible en este dispositivo o navegador.');
+        // En lugar de alert, solo copiamos y salimos
+        copyIzpLink();
         return;
     }
 
@@ -1490,14 +1501,14 @@ async function shareMpLink() {
         await navigator.share({
             title: `Pago Préstamo PrestaPro (S/ ${getDomElement('checkoutLinkAmount').textContent})`,
             text: `¡Hola ${currentClientName || 'cliente'}! Tu enlace de pago para PrestaPro (vía Izipay) ha sido generado. Paga S/ ${getDomElement('checkoutLinkAmount').textContent} usando este link:`,
-            url: currentIzpUrl, // 🚨 CAMBIO: Usar currentIzpUrl
+            url: currentIzpUrl,
         });
         // Opcional: Mostrar una animación de éxito aquí si la compartición fue exitosa (aunque la API de Share no lo garantiza)
     } catch (error) {
         if (error.name !== 'AbortError') {
             console.error('Error al compartir:', error);
-            // Si falla la API nativa, se recomienda al usuario copiar
-            alert("No se pudo iniciar la función de compartir. Por favor, utiliza el botón 'Copiar Enlace' para enviarlo manualmente.");
+            // Si falla la API nativa, copiamos para que pueda pegarlo
+            copyIzpLink();
         }
     }
 }
@@ -2773,7 +2784,7 @@ function downloadReceipt() {
     doc.setTextColor(150, 150, 150);
     doc.setFont(undefined, 'italic');
     const legalText = doc.splitTextToSize(
-        'Representación impresa de la Boleta de Venta Electrónica. Puede verificar este documento en www.sunat.gob.pe. Este es un documento simulado para fines demostrativos.',
+        'Representación impresa de la Boleta de Venta Electrónica. Puede verificar este documento en la web de SUNAT (Simulación).',
         196 - infoX - 10
     );
     doc.text(legalText, infoX, infoY);
@@ -3123,7 +3134,6 @@ function printModalContent(contentElement) {
         <!DOCTYPE html>
         <html lang="es">
         <head>
-            <meta charset="UTF-8">
             <title>Boleta de Venta - PrestaPro</title>
             <link rel="preconnect" href="https://fonts.googleapis.com">
             <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -3870,7 +3880,6 @@ function imprimirHistorialCierres() {
             <!DOCTYPE html>
             <html lang="es">
             <head>
-                <meta charset="UTF-8">
                 <title>Historial de Cierres de Caja</title>
                 <style>
                     body { font-family: sans-serif; padding: 20px; color: #333; }
