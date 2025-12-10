@@ -1851,54 +1851,48 @@ async function handleQuickPaymentSubmit() {
 
     const totalToCollect = calculatedPaymentData.amount + calculatedPaymentData.mora;
 
-    // Constante local para referencia (S/ 500)
-    const MP_LIMIT_YAPE = 500;
-
     // Validar restricción de monto nuevamente antes del envío
     if (selectedMethod === 'Yape/Plin' && totalToCollect > MP_LIMIT_YAPE) {
         alert(`Operación cancelada: El monto total de S/ ${totalToCollect.toFixed(2)} excede el límite de S/ ${MP_LIMIT_YAPE.toFixed(2)} para Yape/Plin.`);
         return;
     }
 
-    // 🚨 MODIFICACIÓN CRÍTICA: Forzar el redondeo de los montos a 2 decimales para la API de MP
-    const totalToCollectFixed = totalToCollect.toFixed(2);
-    const amountCIFixed = calculatedPaymentData.amount.toFixed(2);
-    const moraFixed = calculatedPaymentData.mora.toFixed(2);
+    // 🚨 MODIFICACIÓN CRÍTICA: Redondear a 2 decimales y convertir a número
+    const totalToCollectRounded = Math.round(totalToCollect * 100) / 100;
+    const amountCIRounded = Math.round(calculatedPaymentData.amount * 100) / 100;
+    const moraRounded = Math.round(calculatedPaymentData.mora * 100) / 100;
 
     const paymentData = {
-        payment_amount: totalToCollect, // Total que se envía (se usará en el flujo de Efectivo)
-        mora_amount: calculatedPaymentData.mora,
+        payment_amount: totalToCollectRounded,
+        mora_amount: moraRounded,
         payment_method: selectedMethod,
-        payment_date: paymentDate // Usamos la fecha ISO para enviar al backend
+        payment_date: paymentDate
     };
 
     const loan = currentLoanForQuickPayment;
 
     // Si es Transferencia o Yape/Plin, se usa Mercado Pago.
     if (selectedMethod === 'Transferencia' || selectedMethod === 'Yape/Plin') {
-        // --- INICIO DE FLUJO DE PAGO CON MERCADO PAGO ---
-        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollectFixed} mediante Mercado Pago para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
+        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollectRounded.toFixed(2)} mediante Mercado Pago para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
             return;
         }
 
-        // Opcional: Ocultar el resumen de pago rápido (aunque el modal de link lo cubrirá)
         getDomElement('quick-payment-summary-section').style.display = 'none';
 
         try {
-            // 🚨 Llamada a la ruta correcta de Mercado Pago
             const response = await fetch(`${API_URL}/api/mp/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    // 🚨 USAR LOS VALORES REDONDEADOS ESTRICTAMENTE PARA MP
-                    amount: totalToCollectFixed,
+                    // 🚨 CRÍTICO: Enviar números redondeados como strings con exactamente 2 decimales
+                    amount: totalToCollectRounded.toFixed(2),
                     loanId: loan.id,
                     clientDni: loan.dni,
                     clientName: loan.nombres,
                     clientLastName: loan.apellidos,
                     payment_date: paymentDate,
-                    amount_ci: amountCIFixed,
-                    amount_mora: moraFixed
+                    amount_ci: amountCIRounded.toFixed(2),
+                    amount_mora: moraRounded.toFixed(2)
                 })
             });
 
@@ -1909,7 +1903,6 @@ async function handleQuickPaymentSubmit() {
                 } catch (e) {
                     errorData = { error: 'Error de formato (Estado: ' + response.status + ' ' + response.statusText + ')', status: response.status };
                 }
-
                 throw new Error(`(${response.status}) Error de Mercado Pago. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
             }
 
@@ -1917,9 +1910,7 @@ async function handleQuickPaymentSubmit() {
             const mpUrl = mpData.url;
 
             if (mpUrl) {
-                // *** CRÍTICO: Muestra el link en un modal en lugar de redirigir ***
-                // 🚨 CAMBIO: Pasar el correlativo de boleta al modal
-                showCheckoutLinkModal(mpUrl, totalToCollect, selectedMethod, `${loan.nombres} ${loan.apellidos}`, mpData.correlativo_boleta || 'N/A');
+                showCheckoutLinkModal(mpUrl, totalToCollectRounded, selectedMethod, `${loan.nombres} ${loan.apellidos}`, mpData.correlativo_boleta || 'N/A');
                 return;
             } else {
                 throw new Error("El backend no proporcionó un URL de pago válido de Mercado Pago.");
@@ -1929,7 +1920,6 @@ async function handleQuickPaymentSubmit() {
             alert(`❌ Error al iniciar el pago con Mercado Pago. Detalles: ${error.message}`);
             return;
         }
-
     }
 
     if (selectedMethod === 'Efectivo') {
@@ -1941,7 +1931,6 @@ async function handleQuickPaymentSubmit() {
             });
 
             if (!response.ok) {
-                // Captura el objeto de error para que sea legible
                 let errorDetail = 'Error desconocido del servidor.';
                 try {
                     const errorData = await response.json();
@@ -1953,9 +1942,8 @@ async function handleQuickPaymentSubmit() {
             }
 
             const loan = currentLoanForQuickPayment;
-            const successData = await response.json(); // <-- CAPTURA LA RESPUESTA
+            const successData = await response.json();
 
-            // 🚨 CRÍTICO: USAR el correlativo y transaction ID del backend
             const paymentWithDetails = {
                 ...paymentData,
                 correlativo_boleta: successData.correlativo_boleta,
@@ -1963,7 +1951,6 @@ async function handleQuickPaymentSubmit() {
             };
 
             showReceipt(paymentWithDetails, loan);
-
             await fetchAndRenderLoans();
             showSuccessAnimation('¡Pago Registrado Exitosamente en Efectivo!');
 
@@ -4125,7 +4112,7 @@ function imprimirHistorialCierres() {
         };
     });
 }
-
+handleQuickPaymentSubmi
 // 🔹 EXPONER FUNCIONES GLOBALMENTE
 window.exportarHistorialCierresPDF = exportarHistorialCierresPDF;
 window.imprimirHistorialCierres = imprimirHistorialCierres;
