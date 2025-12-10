@@ -22,7 +22,7 @@ const TASA_MORA_MENSUAL = 1;
 
 // 🚨 CREDENCIALES DE MERCADO PAGO DE PRODUCCIÓN 🚨
 const MP_ACCESS_TOKEN = 'APP_USR-1246920437893290-120617-768190e0a707195da7806e0964a2f70a-3045510589';
-const MP_PUBLIC_KEY = 'APP_USR-11b6bf25-952a-4b6e-a2e1-f2d387b9c8d8';
+const MP_PUBLIC_KEY = 'APP_USR-9e59f0d2-e486-4d3b-b09b-998efa2e46c4';
 const MP_ENDPOINT_BASE = 'https://api.mercadopago.com/checkout/preferences';
 
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app';
