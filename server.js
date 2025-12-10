@@ -228,15 +228,20 @@ app.post('/api/loans', async (req, res) => {
             meses_solo_interes = 0
         } = req.body;
 
+        // 🚨 CORRECCIÓN CLAVE: Asegurar que 'monto' se parsea a flotante
+        const parsedMonto = parseFloat(monto);
+
         const { dni, nombres, apellidos, is_pep = false } = client;
         // 🚨 MODIFICACIÓN: Calcular tasa mensual a partir de la tasa anual recibida
         const interes = parseFloat(interes_anual) / 12;
 
-        if (monto < 100 || monto > 20000) {
+        // 🚨 USAR el monto parseado para la validación
+        if (parsedMonto < 100 || parsedMonto > 20000 || isNaN(parsedMonto)) {
             await connection.rollback();
             connection.release();
-            return res.status(400).json({ error: 'El monto del préstamo debe estar entre S/ 100 y S/ 20,000.' });
+            return res.status(400).json({ error: 'El monto del préstamo debe ser un número válido entre S/ 100 y S/ 20,000.' });
         }
+
 
         let [activeLoans] = await connection.query(
             `SELECT l.id FROM loans l JOIN clients c ON l.client_id = c.id WHERE c.dni = ? AND l.status = 'Activo' LIMIT 1;`,
@@ -269,7 +274,7 @@ app.post('/api/loans', async (req, res) => {
         await connection.query(
             `INSERT INTO loans (client_id, monto, interes, fecha, plazo, status, declaracion_jurada, tipo_calculo, meses_solo_interes)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-            [clientId, monto, interes, fecha, plazo, status, declaracion_jurada, tipo_calculo, meses_solo_interes]
+            [clientId, parsedMonto, interes, fecha, plazo, status, declaracion_jurada, tipo_calculo, meses_solo_interes]
         );
 
         await connection.commit();
