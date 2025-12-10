@@ -964,7 +964,7 @@ function initLoanFormLogic() {
                 </div>
                 <div class="form-group">
                     <label for="fecha">Fecha de Desembolso</label>
-                    <input type="date" id="fecha" required value="${today}" readonly>
+                    <input type="date" id="fecha" required value="${today}" >
                 </div>
                 <div class="form-group">
                     <label for="plazo">Plazo (meses)</label>
