@@ -927,7 +927,8 @@ function initLoanFormLogic() {
     const loanForm = getDomElement('loanForm');
     if (!loanForm) return;
 
-    const today = new Date().toISOString().split('T')[0];
+    // 🚨 MODIFICACIÓN CLAVE: Obtener la fecha actual en formato ISO YYYY-MM-DD
+    const today = getTodayDateISO();
 
     // INYECCIÓN DE HTML DEL FORMULARIO DE PRÉSTAMO
     loanForm.innerHTML = `
@@ -1995,7 +1996,11 @@ function calculateSchedule(loan) {
 
 
 function getTodayDateISO() {
-    return new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 // --- FETCH Y RENDER ---
