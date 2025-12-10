@@ -18,12 +18,11 @@ app.use((req, res, next) => {
 const pool = mysql.createPool(process.env.DATABASE_URL);
 
 // --- CONSTANTES DE NEGOCIO Y API DE MERCADO PAGO ---
-// 🚨 MODIFICACIÓN: TASA_INTERES_ANUAL ELIMINADA. LA TASA SE RECIBE EN EL POST.
 const TASA_MORA_MENSUAL = 1;
 
 // 🚨 CREDENCIALES DE MERCADO PAGO DE PRODUCCIÓN 🚨
 const MP_ACCESS_TOKEN = 'APP_USR-1246920437893290-120617-768190e0a707195da7806e0964a2f70a-3045510589';
-const MP_PUBLIC_KEY = 'APP_USR-9e59f0d2-e486-4d3b-b09b-998efa2e46c4';
+const MP_PUBLIC_KEY = 'APP_USR-11b6bf25-952a-4b6e-a2e1-f2d387b9c8d8';
 const MP_ENDPOINT_BASE = 'https://api.mercadopago.com/checkout/preferences';
 
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app';
@@ -36,7 +35,6 @@ const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithu
 // 🚨 NUEVA FUNCIÓN: Obtener el siguiente correlativo de boleta
 async function getNextCorrelativo(connection) {
     // Busca el máximo correlativo actual en la tabla de pagos
-    // Si la tabla o la columna es nueva, el resultado será null, por eso usamos || 0
     const [rows] = await connection.query(
         "SELECT MAX(correlativo_boleta) AS max_correlativo FROM payments"
     );
@@ -58,7 +56,13 @@ function calculateSchedule(loan) {
     if (loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
         const interestOnlyPayment = principal * monthlyInterestRate;
         const remainingTerm = loan.plazo - loan.meses_solo_interes;
-        monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -remainingTerm));
+        // Evitar división por cero
+        if (remainingTerm > 0) {
+            monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -remainingTerm));
+        } else {
+            monthlyPayment = 0;
+        }
+
 
         for (let i = 1; i <= loan.plazo; i++) {
             const paymentDate = new Date(startDate);
@@ -70,7 +74,16 @@ function calculateSchedule(loan) {
         }
         totalDue = (interestOnlyPayment * loan.meses_solo_interes) + (monthlyPayment * remainingTerm);
     } else {
-        monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
+        // Evitar división por cero
+        if (monthlyInterestRate > 0 && loan.plazo > 0) {
+            monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
+        } else if (principal > 0 && loan.plazo > 0) {
+            // Caso de Interés Cero
+            monthlyPayment = principal / loan.plazo; 
+        } else {
+             monthlyPayment = 0;
+        }
+        
         for (let i = 1; i <= loan.plazo; i++) {
             const paymentDate = new Date(startDate);
             paymentDate.setUTCMonth(paymentDate.getUTCMonth() + i);
@@ -83,48 +96,54 @@ function calculateSchedule(loan) {
 }
 
 function calculateMora(loan, totalPaid) {
-    const { schedule } = calculateSchedule(loan);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // 🚨 FIX: Añadimos un bloque try-catch interno para capturar errores de cálculo
+    try {
+        const { schedule } = calculateSchedule(loan);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
-    let totalMora = 0;
-    let totalAmountOverdue = 0;
+        let totalMora = 0;
+        let totalAmountOverdue = 0;
 
-    // 🚨 FIX: Inicializar la fecha para evitar desfase de zona horaria (usando "T12:00:00")
-    const startDate = new Date(loan.fecha + 'T12:00:00');
-    let latestDueDate = new Date(startDate);
+        // 🚨 FIX: Inicializar la fecha para evitar desfase de zona horaria (usando "T12:00:00")
+        const startDate = new Date(loan.fecha + 'T12:00:00');
+        let latestDueDate = new Date(startDate);
 
-    for (const item of schedule) {
-        // La fecha en el schedule ya es un objeto Date
-        const dueDate = new Date(item.fecha);
-        dueDate.setHours(0, 0, 0, 0);
+        for (const item of schedule) {
+            // La fecha en el schedule ya es un objeto Date
+            const dueDate = new Date(item.fecha);
+            dueDate.setHours(0, 0, 0, 0);
 
-        if (dueDate <= today) {
-            const cumulativeExpected = schedule.slice(0, item.cuota).reduce((sum, s) => sum + s.monto, 0);
+            if (dueDate <= today) {
+                const cumulativeExpected = schedule.slice(0, item.cuota).reduce((sum, s) => sum + s.monto, 0);
 
-            if (totalPaid < cumulativeExpected) {
-                const monthsLate = (today.getFullYear() - dueDate.getFullYear()) * 12 +
-                    (today.getMonth() - dueDate.getMonth());
-                const monthsToCharge = Math.max(1, monthsLate);
+                if (totalPaid < cumulativeExpected) {
+                    const monthsLate = (today.getFullYear() - dueDate.getFullYear()) * 12 +
+                        (today.getMonth() - dueDate.getMonth());
+                    const monthsToCharge = Math.max(1, monthsLate);
 
-                const outstandingBalanceForMora = loan.total_due - totalPaid;
+                    const outstandingBalanceForMora = loan.total_due - totalPaid;
 
-                totalMora = outstandingBalanceForMora * (TASA_MORA_MENSUAL / 100) * monthsToCharge;
-                totalAmountOverdue = cumulativeExpected - totalPaid;
-                latestDueDate = dueDate;
-                break;
+                    totalMora = outstandingBalanceForMora * (TASA_MORA_MENSUAL / 100) * monthsToCharge;
+                    totalAmountOverdue = cumulativeExpected - totalPaid;
+                    latestDueDate = dueDate;
+                    break;
+                }
             }
         }
-    }
 
-    return parseFloat(totalMora > 0 ? totalMora.toFixed(2) : 0);
+        return parseFloat(totalMora > 0 ? totalMora.toFixed(2) : 0);
+    } catch (e) {
+        console.error(`ERROR CRÍTICO en calculateMora para el préstamo ID ${loan.id}:`, e.message);
+        // Devolver 0 para evitar que el servidor se caiga, pero registrar la falla.
+        return 0;
+    }
 }
 
 async function registerPaymentInternal(loanId, paymentData) {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
-        // 🚨 MODIFICADO: paymentData incluye ahora correlativo_boleta y transaction_id
         const { payment_amount, payment_date, mora_amount, payment_method, correlativo_boleta, transaction_id } = paymentData;
 
         const finalMethod = payment_method || 'Mercado Pago';
@@ -386,7 +405,7 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
 
         await connection.commit();
         // 🚨 CAMBIO CRÍTICO 2: Devolver el correlativo y transaction_id al frontend
-        res.status(201).json({
+        res.status(201).json({ 
             message: 'Pago registrado con éxito',
             correlativo_boleta: correlativo,
             transaction_id: transactionId
@@ -568,7 +587,7 @@ app.post('/api/mp/create-order', async (req, res) => {
         console.error('[MP ERROR] ❌ Error al obtener correlativo:', error);
         return res.status(500).json({ success: false, error: 'Error interno al generar el correlativo de boleta.' });
     }
-
+    
     // 🚨 Usar el transaction_id generado como External Reference
     const externalReference = transaction_id;
     const totalAmount = parseFloat(amount);
