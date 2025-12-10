@@ -968,7 +968,7 @@ function initLoanFormLogic() {
                 </div>
                 <div class="form-group">
                     <label for="plazo">Plazo (meses)</label>
-                    <input type="number" id="plazo" required min="1" max="60" placeholder="12">
+                    <input type="number" id="plazo" required min="1" max="60" step="1" placeholder="12" inputmode="numeric">
                 </div>
             </div>
             <div class="form-group">
@@ -991,7 +991,7 @@ function initLoanFormLogic() {
             </div>
             <div class="form-group" id="hibrido_options" style="display: none;">
                 <label for="meses_solo_interes">Meses de "Solo Interés"</label>
-                <input type="number" id="meses_solo_interes" min="1" placeholder="3">
+                <input type="number" id="meses_solo_interes" min="1" step="1" placeholder="3" inputmode="numeric">
                 <small id="hibrido-info">Cantidad de meses donde solo se paga el interés mensual.</small>
             </div>
             
@@ -1023,6 +1023,14 @@ function initLoanFormLogic() {
     const monthlyPaymentPreview = getDomElement('monthly-payment-preview');
     const estimatedMonthlyPayment = getDomElement('estimated-monthly-payment');
 
+    // Validación para evitar símbolos en campos numéricos de meses
+    plazoInput.addEventListener('input', (e) => {
+        e.target.value = e.target.value.replace(/[^0-9]/g, '');
+    });
+
+    mesesSoloInteresInput.addEventListener('input', (e) => {
+        e.target.value = e.target.value.replace(/[^0-9]/g, '');
+    });
 
     // 🚨 NUEVA FUNCIÓN: Lógica para previsualizar la cuota mensual
     function calculateEstimatedMonthlyPayment() {
