@@ -21,8 +21,8 @@ const pool = mysql.createPool(process.env.DATABASE_URL);
 const TASA_MORA_MENSUAL = 1;
 
 // 🚨 CREDENCIALES DE MERCADO PAGO DE PRODUCCIÓN 🚨
-const MP_ACCESS_TOKEN = 'APP_USR-1246920437893290-120617-768190e0a707195da7806e0964a2f70a-3045510589';
-const MP_PUBLIC_KEY = 'APP_USR-9e59f0d2-e486-4d3b-b09b-998efa2e46c4';
+const MP_ACCESS_TOKEN = 'APP_USR-5951793520478222-121012-8486b4ef2881ae261420dbd85950e5c3-835531878';
+const MP_PUBLIC_KEY = 'APP_USR-24cf61f9-b3ef-4580-9ddc-88fe502ea497';
 const MP_ENDPOINT_BASE = 'https://api.mercadopago.com/checkout/preferences';
 
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app';
