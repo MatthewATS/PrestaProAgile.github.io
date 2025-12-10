@@ -26,15 +26,16 @@ const TASA_MORA_MENSUAL = 1;
 
 // 🚨🚨🚨 MODIFICACIÓN CRÍTICA: Credenciales de PRODUCCIÓN 🚨🚨🚨
 // Merchant ID (user id)
-const IZP_MERCHANT_ID = '68304620';
+const IZP_MERCHANT_ID = '68304620'; 
 // Contraseña de Producción
-const IZP_PASSWORD = 'prodpassword_CEhMhCy3YlZblRGkqVOGZJKlR5ei2a6cUR6KgtAMIdLWG';
+const IZP_PASSWORD = 'prodpassword_CEhMhCy3YlZblRGkqVOGZJKlR5ei2a6cUR6KgtAMIdLWG'; 
 // Clave Pública de Producción (Se mantiene la provista, aunque no se usa en este código)
 const IZP_PUBLIC_KEY = '68304620:publickey_wjo2urlfqtyvbTiMaVZSdF1fSkGenL5fG87WNzb1aEu4V';
 // 🚨 CAMBIO CRÍTICO: Endpoint de PRODUCCIÓN (Usando el tuyo)
 const IZP_ENDPOINT_BASE_API = 'https://api.micuentaweb.pe/api-payment/V4/Charge/CreatePayment';
 const IZP_HMAC_KEY = 'xenUz7o7m1yTrLTqpHJq4QekjbKA4DsyY0lDMwmlpzSj'; // Clave de firma (suele ser fija)
 
+// **Asegúrate de que esta URL sea la correcta y accesible (ej. http://localhost:3000 o la URL de Railway)**
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app';
 
 
