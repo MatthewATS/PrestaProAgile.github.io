@@ -308,7 +308,7 @@ function initializeApp() {
         setTimeout(() => closeModal(changePasswordModal), 2500);
     });
 
-    closeReceiptConfigModalBtn?.addEventListener('click', () => closeModal(receiptConfigModal));
+    closeReceiptConfigModalBtn?.addEventListener('click', () => closeModal(getDomElement('receiptConfigModal')));
 
     menuReceiptConfig?.addEventListener('click', (e) => {
         e.preventDefault();
@@ -467,10 +467,12 @@ async function filterCashRegister() {
     const dateFrom = getDomElement('cashRegisterDateFrom').value;
     const dateTo = dateFrom; // Forzamos la igualdad
 
+    // Usamos el rango estricto de la fecha seleccionada
     const allMovements = getMovementsByDateRange(dateFrom, dateTo, null);
 
-    // 1. Filtrar movimientos del día seleccionado
+    // 1. Filtrar movimientos del día seleccionado (este filtro es estricto por la hora)
     const todayMovements = allMovements.filter(m => {
+        // Aseguramos que la comparación sea solo por fecha (ISO string YYYY-MM-DD)
         const paymentDate = new Date(m.date).toISOString().split('T')[0];
         return paymentDate === dateFrom;
     });
@@ -487,16 +489,16 @@ async function filterCashRegister() {
         <p><strong>Ingreso por Transferencia/Yape:</strong> <span style="font-weight: 700; color: var(--primary-color);">S/ ${totalTransferIngresos.toFixed(2)}</span></p>
         <p><strong>Ingreso por Otros MP:</strong> <span style="font-weight: 700; color: var(--secondary-color);">S/ ${totalMpIngresos.toFixed(2)}</span></p>
     `;
-    getDomElement('cashRegisterSummary').innerHTML = summaryContent;
+    // getDomElement('cashRegisterSummary').innerHTML = summaryContent; // Reubicado abajo
 
-
-    // Control de la sección de cuadre diario (Siempre visible si hay una fecha seleccionada)
+    // Control de la sección de cuadre diario
     const dailySquareSection = getDomElement('dailySquareSection');
     const squareFormContainer = getDomElement('squareFormContainer');
     const squareStatusMessage = getDomElement('squareStatusMessage');
     const declaredAmountInput = getDomElement('declaredAmount');
 
-    // dailySquareSection.style.display = 'block'; // Ya está visible en front.html
+    // Obtener el contenedor de la tabla de movimientos para aplicar estilos
+    const cashRegisterTableContainer = getDomElement('cashRegisterTableBody').closest('.table-container');
 
     // 1. Verificar estado del cierre en DB
     const closureDate = dateFrom;
@@ -506,25 +508,55 @@ async function filterCashRegister() {
     const formattedDateTitle = new Date(closureDate).toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' });
     getDomElement('dailySquareDate').textContent = formattedDateTitle;
 
+    const cashRegisterSummary = getDomElement('cashRegisterSummary');
+
     if (checkData.closed) {
-        // Cierre ya realizado
+        // Cierre ya realizado: Mostrar resumen estático de cierre.
         squareFormContainer.style.display = 'none';
         squareStatusMessage.className = 'alert alert-info';
         squareStatusMessage.innerHTML = `<span>🔒</span> <strong>Cierre de Caja Realizado.</strong> Monto del Sistema: S/ ${checkData.data.system_cash_amount.toFixed(2)}. Diferencia: S/ ${checkData.data.difference.toFixed(2)}. Cerrado el ${new Date(checkData.data.closed_at).toLocaleString('es-PE')}.`;
         squareStatusMessage.style.display = 'flex';
+
+        // 🚨 CAMBIO CRÍTICO: Sobreescribir el resumen con el mensaje de "CUADRE HECHO"
+        cashRegisterSummary.className = 'cash-register-summary alert-success';
+        cashRegisterSummary.style.backgroundColor = 'var(--success-color)';
+        cashRegisterSummary.style.color = 'var(--bg-primary)';
+        cashRegisterSummary.style.border = '1px solid var(--success-color)';
+        cashRegisterSummary.innerHTML = `
+            <p style="text-align: center; font-size: 18px; font-weight: 700; color: var(--bg-primary);">✅ CUADRE DE CAJA HECHO (${formattedDateTitle})</p>
+            <p style="text-align: center; font-size: 14px; color: var(--bg-primary);">Revisa la sección de 'Historial de Cierres Oficiales' para más detalles.</p>
+        `;
+
+        // Aplicar clase para bloquear visualmente la tabla
+        if (cashRegisterTableContainer) {
+            cashRegisterTableContainer.classList.add('locked-cash-register');
+        }
+
     } else {
-        // Cierre pendiente
+        // Cierre pendiente: Mostrar resumen con los totales calculados.
         squareFormContainer.style.display = 'block';
         squareStatusMessage.style.display = 'none';
+
+        // 🚨 CAMBIO CRÍTICO: Volver a los estilos por defecto y mostrar el resumen de totales
+        cashRegisterSummary.className = 'cash-register-summary'; // Volver a la clase normal
+        cashRegisterSummary.style.backgroundColor = 'var(--primary-light)';
+        cashRegisterSummary.style.color = 'var(--text-color)';
+        cashRegisterSummary.style.border = '1px solid var(--primary-color)';
+        cashRegisterSummary.innerHTML = summaryContent; // Reutilizar el contenido de totales
+
 
         declaredAmountInput.value = totalCashIngresos.toFixed(2);
         getDomElement('squareValidationMessage').style.display = 'none';
         getDomElement('saveDailySquareBtn').disabled = false;
+
+        // Remover clase si no está cerrado
+        if (cashRegisterTableContainer) {
+            cashRegisterTableContainer.classList.remove('locked-cash-register');
+        }
     }
 
 
-    // 🚨 MODIFICADO: Renderizar la tabla de movimientos detallada del día seleccionado
-    // *** PASAMOS EL ESTADO DE CIERRE A LA FUNCIÓN DE RENDERIZADO ***
+    // 🚨 CRÍTICO: Renderizar la tabla de movimientos detallada del día seleccionado
     renderCashRegisterTable(todayMovements, checkData.closed);
 
     // 🔹 IMPORTANTE: El historial de cierres se renderiza aparte y sin filtro
@@ -532,13 +564,12 @@ async function filterCashRegister() {
 }
 
 // 🚨 MODIFICADA: Ahora muestra los movimientos detallados del día y gestiona el estado de cierre
-// 🚨 MODIFICADA: Ahora muestra los movimientos detallados del día y gestiona el estado de cierre
-// 🚨 MODIFICADA: Ahora muestra los movimientos detallados del día y gestiona el estado de cierre
 function renderCashRegisterTable(dailyMovements, isClosed) {
     const tbody = getDomElement('cashRegisterTableBody');
     const tableContainer = tbody.closest('.table-container');
 
     if (!tbody || !tableContainer) return;
+
     tbody.innerHTML = '';
 
     // 🚨 CAMBIO: Se ajusta el encabezado para mostrar movimientos (No cambia, pero se deja para referencia)
@@ -552,13 +583,12 @@ function renderCashRegisterTable(dailyMovements, isClosed) {
 
     // Si la caja está cerrada, sobreescribir con el mensaje
     if (isClosed) {
-        // Aplicar estilos para un aspecto de "bloqueado"
-        tableContainer.style.pointerEvents = 'none';
-        tableContainer.style.opacity = '0.6';
+        // Aplicar clase para bloquear visualmente la tabla
+        tableContainer.classList.add('locked-cash-register');
 
         tbody.innerHTML = `
             <tr>
-                <td colspan="5" style="text-align: center; color: var(--danger-color); font-weight: 700; padding: 40px; font-size: 16px;">
+                <td colspan="5" style="text-align: center; color: var(--danger-color); font-weight: 700; padding: 40px; font-size: 16px; background-color: var(--light-gray);">
                     🔒 NO DISPONIBLE - CUADRE DE CAJA HECHO
                 </td>
             </tr>
@@ -567,8 +597,7 @@ function renderCashRegisterTable(dailyMovements, isClosed) {
     }
 
     // Si no está cerrada, asegurar que sea interactuable
-    tableContainer.style.pointerEvents = 'auto';
-    tableContainer.style.opacity = '1';
+    tableContainer.classList.remove('locked-cash-register');
 
     if (dailyMovements.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #9CA3AF;">No se encontraron movimientos para este día.</td></tr>';
@@ -592,23 +621,32 @@ function renderCashRegisterTable(dailyMovements, isClosed) {
 
 
 function getMovementsByDateRange(dateFrom, dateTo, methodFilter = null) {
-    const startDate = dateFrom ? new Date(dateFrom).setHours(0, 0, 0, 0) : 0;
-    const endDate = dateTo ? new Date(dateTo).setHours(23, 59, 59, 999) : Date.now();
+
+    // 🚨 CRÍTICO: Establecer el rango estricto para un solo día (00:00:00.000 a 23:59:59.999)
+    const startDate = new Date(dateFrom);
+    startDate.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(dateTo);
+    endDate.setHours(23, 59, 59, 999);
+
+    const startTime = startDate.getTime();
+    const endTime = endDate.getTime();
+
 
     const filteredMovements = [];
     loans.forEach(loan => {
         if (loan.payments) {
             loan.payments.forEach(p => {
+                // Usamos el constructor Date() para obtener el timestamp del pago.
                 const paymentDate = new Date(p.payment_date).getTime();
                 let method = p.payment_method || 'Efectivo';
-                // Estandarizar métodos que se convierten en Mercado Pago
+
                 if (method === 'Transferencia' || method === 'Yape/Plin') {
-                    // En el frontend, Yape/Plin/Transferencia son métodos que inician flujo MP
-                    // Para los reportes de caja, los mantenemos para agrupar en Transferencia/Yape o Mercado Pago (si fuera por webhook)
-                    // Para este reporte detallado, usamos el método original (Transferencia/Yape/Efectivo)
+                    // Para reportes de caja, se mantiene el método específico
                 }
 
-                if (paymentDate >= startDate && paymentDate <= endDate && (!methodFilter || method === methodFilter)) {
+                // 🚨 CRÍTICO: El filtro ahora usa los timestamps calculados (solo ese día)
+                if (paymentDate >= startTime && paymentDate <= endTime && (!methodFilter || method === methodFilter)) {
                     filteredMovements.push({
                         date: paymentDate,
                         client: `${loan.nombres} ${loan.apellidos}`,
@@ -631,8 +669,6 @@ async function saveDailySquare() {
     const validationMessage = getDomElement('squareValidationMessage');
     validationMessage.style.display = 'block';
 
-    // 🚨 ELIMINADO: Ya no es necesaria la validación de fechas porque la forzamos en el listener.
-    // Solo validamos que el campo no esté vacío (aunque es `required`)
     if (!date) {
         validationMessage.className = 'alert alert-danger';
         validationMessage.innerHTML = '<span>❌</span> Seleccione una fecha para el cierre de caja.';
@@ -707,6 +743,12 @@ function exportarCajaPDF() {
     const dateTo = dateFrom; // Forzado
     const summaryText = getDomElement('cashRegisterSummary').innerText.split('\n').filter(line => line.trim() !== '');
 
+    // 1.1. Verificar si la caja está cerrada revisando el contenido de la tabla
+    const tbody = getDomElement('cashRegisterTableBody');
+    // Si el primer TD contiene el texto de cierre, está cerrado
+    const isClosed = tbody.querySelector('td')?.textContent.includes('CUADRE DE CAJA HECHO');
+
+
     // 2. Encabezado
     doc.setFontSize(18);
     doc.setTextColor(0, 93, 255); // Azul PrestaPro
@@ -732,34 +774,42 @@ function exportarCajaPDF() {
         yResumen += 7;
     });
 
+    let startYTable = 85;
+
     // 4. Tabla de Movimientos
-    doc.autoTable({
-        html: '#cashRegisterTable', // Jala los datos directo de tu tabla HTML
-        startY: 85,
-        theme: 'grid',
-        headStyles: {
-            fillColor: [0, 93, 255],
-            textColor: [255, 255, 255],
-            halign: 'center',
-            fontStyle: 'bold'
-        },
-        bodyStyles: {
-            textColor: [50, 50, 50],
-            fontSize: 10
-        },
-        columnStyles: {
-            0: { halign: 'left' },
-            1: { halign: 'center' },
-            2: { halign: 'right' },
-            3: { halign: 'right', textColor: [200, 0, 0] }, // Mora
-            4: { fontStyle: 'bold', halign: 'right', textColor: [16, 185, 129] } // Total Ingreso
-        },
-        footStyles: {
-            fillColor: [240, 240, 240],
-            textColor: [0, 0, 0],
-            fontStyle: 'bold'
-        }
-    });
+    if (isClosed) {
+        doc.setFontSize(14);
+        doc.setTextColor(200, 0, 0); // Rojo para la advertencia
+        doc.text("🔒 TABLA NO DISPONIBLE - CUADRE DE CAJA REALIZADO", 105, startYTable, { align: 'center' });
+    } else {
+        doc.autoTable({
+            html: '#cashRegisterTable', // Jala los datos directo de tu tabla HTML
+            startY: startYTable,
+            theme: 'grid',
+            headStyles: {
+                fillColor: [0, 93, 255],
+                textColor: [255, 255, 255],
+                halign: 'center',
+                fontStyle: 'bold'
+            },
+            bodyStyles: {
+                textColor: [50, 50, 50],
+                fontSize: 10
+            },
+            columnStyles: {
+                0: { halign: 'left' },
+                1: { halign: 'center' },
+                2: { halign: 'right' },
+                3: { halign: 'right', textColor: [200, 0, 0] }, // Mora
+                4: { fontStyle: 'bold', halign: 'right', textColor: [16, 185, 129] } // Total Ingreso
+            },
+            footStyles: {
+                fillColor: [240, 240, 240],
+                textColor: [0, 0, 0],
+                fontStyle: 'bold'
+            }
+        });
+    }
 
     // 5. Descargar
     const fileName = `Reporte_Movimientos_${dateFrom}.pdf`;
@@ -773,7 +823,24 @@ function imprimirCaja() {
 
     // Clonamos el resumen y la tabla para no afectar la vista actual
     const summaryHTML = getDomElement('cashRegisterSummary').innerHTML;
-    const tableHTML = getDomElement('cashRegisterTable').outerHTML;
+
+    // 1. Verificar si la caja está cerrada revisando el contenido de la tabla
+    const tbody = getDomElement('cashRegisterTableBody');
+    const isClosed = tbody.querySelector('td')?.textContent.includes('CUADRE DE CAJA HECHO');
+
+    let tableContentHTML = '';
+
+    if (isClosed) {
+        tableContentHTML = `
+            <div style="text-align: center; color: #f44336; font-weight: 700; padding: 40px; font-size: 16px; background-color: #f9f9f9; border: 1px solid #f44336; border-radius: 5px;">
+                🔒 NO DISPONIBLE - CUADRE DE CAJA HECHO
+            </div>
+        `;
+    } else {
+        // Si no está cerrado, usamos el HTML de la tabla normal
+        tableContentHTML = getDomElement('cashRegisterTable').outerHTML;
+    }
+
 
     // Crear iframe temporal para imprimir
     const iframe = document.createElement('iframe');
@@ -806,8 +873,6 @@ function imprimirCaja() {
                     background-color: #f9f9f9;
                 }
                 .summary-box p { margin: 5px 0; font-size: 14px; }
-                .summary-box strong { font-weight: 700; color: #000; }
-                .summary-box span { font-weight: 700; }
                 
                 /* Estilos de la Tabla */
                 table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
@@ -835,7 +900,7 @@ function imprimirCaja() {
             </div>
 
             <h2 style="font-size: 16px; margin-bottom: 10px;">Movimientos del Día</h2>
-            ${tableHTML}
+            ${tableContentHTML}
         </body>
         </html>
     `);
@@ -870,7 +935,7 @@ function initLoanFormLogic() {
             <legend>📋 Información del Cliente</legend>
             <div class="form-group">
                 <label for="dni">DNI (8 dígitos)</label>
-                <input type="text" id="dni" placeholder="Ingresa 8 dígitos y presiona Tab" required pattern="\\d{8}" maxlength="8" inputmode="numeric">
+                <input type="text" id="dni" placeholder="Ingresa 8 dígitos y presiona Tab" required pattern="\\d{8}" maxlength="8" inputmode="numeric" oninput="this.value = this.value.replace(/[^0-9]/g, '');">
                 <small id="dni-status" style="margin-top: 5px; display: block;"></small>
             </div>
             <div class="form-row">
@@ -898,7 +963,7 @@ function initLoanFormLogic() {
                 </div>
                 <div class="form-group">
                     <label for="fecha">Fecha de Desembolso</label>
-                    <input type="date" id="fecha" required value="${today}">
+                    <input type="date" id="fecha" required value="${today}" readonly>
                 </div>
                 <div class="form-group">
                     <label for="plazo">Plazo (meses)</label>
@@ -1083,7 +1148,7 @@ function initLoanFormLogic() {
         event.preventDefault();
 
         // 🚨 MODIFICACIÓN: Capturar la tasa anual
-        const interes_anual = parseFloat(interesAnualInput.value);
+        const interes_anual = parseFloat(getDomElement('interes_anual').value);
 
         const newLoanData = {
             client: { dni: dniInput.value, nombres: nombresInput.value, apellidos: apellidosInput.value, is_pep: isPepCheckbox.checked },
@@ -1099,10 +1164,33 @@ function initLoanFormLogic() {
         };
         try {
             const response = await fetch(`${API_URL}/api/loans`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(newLoanData) });
-            if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.error || `Error ${response.status}`); }
+
+            if (!response.ok) {
+                const errorData = await response.json();
+
+                // Si es un error del negocio (ej. 409: ya tiene un préstamo o 400: monto inválido), mostrarlo en el estado del DNI y en el log.
+                if (response.status === 409 || response.status === 400) {
+                    getDomElement('dni-status').textContent = `⚠️ Error: ${errorData.error || response.statusText}`;
+                    getDomElement('dni-status').style.color = 'var(--danger-color)';
+                    console.error("Error de Negocio al crear préstamo:", errorData.error);
+
+                    // Si ocurre un error de negocio, no lanzamos la excepción que dispara el catch.
+                    return;
+                }
+
+                // Para otros errores no esperados del servidor, sí lanzamos la excepción
+                throw new Error(errorData.error || `Error ${response.status}`);
+            }
+
+            // ÉXITO
             await fetchAndRenderLoans();
             showSuccessAnimation('¡Préstamo Registrado!');
-        } catch (error) { alert(`No se pudo guardar el préstamo: ${error.message}`); }
+
+        } catch (error) {
+            // 🚨 CAMBIO CRÍTICO: ELIMINAR EL ALERT() RESTANTE
+            console.error(`Error CRÍTICO al guardar el préstamo:`, error);
+            // Se elimina la línea alert(...) que causaba el cuadro molesto.
+        }
     });
 
     // Ejecutar el cálculo inicial
@@ -1546,9 +1634,8 @@ function populateQuickPaymentSummary(loan) {
 
     // Las cuotas pendientes son aquellas cuya expectativa acumulada es mayor al total pagado
     const pendingInstallments = schedule.filter(item => {
-        // Recalcular el total pagado basado en el totalDue de la simulación
-        const simulatedTotalDue = schedule.slice(0, item.cuota).reduce((sum, s) => sum + parseFloat(s.monto), 0);
-        return loan.total_paid < simulatedTotalDue;
+        const cumulativeExpected = schedule.slice(0, item.cuota).reduce((sum, s) => sum + parseFloat(s.monto), 0);
+        return loan.total_paid < cumulativeExpected;
     });
 
     const moraAlertSummary = getDomElement('mora-alert-summary');
@@ -2360,7 +2447,7 @@ function downloadReceipt() {
 
     if (moraPagada > 0) {
         tableData.push([
-            'MORA / PENALIDAD POR ATRASO\nInterés moratorio aplicado',
+            'Mora / Penalidad por Atraso\nInterés moratorio aplicado',
             'S/ 0.00',
             `S/ ${moraPagada.toFixed(2)}`
         ]);
@@ -2515,7 +2602,7 @@ function downloadReceipt() {
     doc.setTextColor(150, 150, 150);
     doc.setFont(undefined, 'italic');
     const legalText = doc.splitTextToSize(
-        'Representación impresa de la Boleta de Venta Electrónica. Puede verificar la autenticidad de este documento en www.sunat.gob.pe. Este es un documento simulado para fines demostrativos.',
+        'Representación impresa de la Boleta de Venta Electrónica. Puede verificar este documento en www.sunat.gob.pe. Este es un documento simulado para fines demostrativos.',
         196 - infoX - 10
     );
     doc.text(legalText, infoX, infoY);
@@ -2562,9 +2649,10 @@ function populateDetailsModal(loan) {
     modalHeaderH2.textContent = 'Cronograma y Detalles'; // Solo texto, sin imagen
     modalHeaderH2.style = "";
 
-    const summaryInfoDiv = getDomElement('scheduleSummary');
+    const summaryInfoDiv = getDomElement('detailsModal').querySelector('.modal-body .summary-info');
     if(summaryInfoDiv) {
-        summaryInfoDiv.style.border = "2px solid #000000"; // Borde Negro en pantalla
+        // Usar los estilos definidos en el CSS para la pantalla (var(--border-color))
+        summaryInfoDiv.style.border = "1px solid var(--border-color)";
     }
 
     let paymentSummary = '';
@@ -3458,6 +3546,11 @@ function exportarCajaPDF() {
     const dateTo = getDomElement('cashRegisterDateTo').value;
     const summaryText = getDomElement('cashRegisterSummary').innerText.split('\n').filter(line => line.trim() !== '');
 
+    // 1.1. Verificar si la caja está cerrada revisando el contenido de la tabla
+    const tbody = getDomElement('cashRegisterTableBody');
+    const isClosed = tbody.querySelector('td')?.textContent.includes('CUADRE DE CAJA HECHO');
+
+
     // 2. Encabezado
     doc.setFontSize(18);
     doc.setTextColor(0, 93, 255); // Azul PrestaPro
@@ -3484,34 +3577,43 @@ function exportarCajaPDF() {
         yResumen += 7;
     });
 
+    let startYTable = 85;
+
     // 4. Tabla de Movimientos
-    doc.autoTable({
-        html: '#cashRegisterTable', // Jala los datos directo de tu tabla HTML
-        startY: 85,
-        theme: 'grid',
-        headStyles: {
-            fillColor: [0, 93, 255],
-            textColor: [255, 255, 255],
-            halign: 'center',
-            fontStyle: 'bold'
-        },
-        bodyStyles: {
-            textColor: [50, 50, 50],
-            fontSize: 10
-        },
-        columnStyles: {
-            0: { halign: 'left' }, // Cliente
-            1: { halign: 'center' }, // Método
-            2: { halign: 'right' }, // Capital/Interés
-            3: { halign: 'right' }, // Mora
-            4: { fontStyle: 'bold', halign: 'right' } // Total Ingreso
-        },
-        footStyles: {
-            fillColor: [240, 240, 240],
-            textColor: [0, 0, 0],
-            fontStyle: 'bold'
-        }
-    });
+    if (isClosed) {
+        doc.setFontSize(14);
+        doc.setTextColor(200, 0, 0); // Rojo para la advertencia
+        doc.text("🔒 TABLA NO DISPONIBLE - CUADRE DE CAJA REALIZADO", 105, startYTable, { align: 'center' });
+    } else {
+        doc.autoTable({
+            html: '#cashRegisterTable', // Jala los datos directo de tu tabla HTML
+            startY: startYTable,
+            theme: 'grid',
+            headStyles: {
+                fillColor: [0, 93, 255],
+                textColor: [255, 255, 255],
+                halign: 'center',
+                fontStyle: 'bold'
+            },
+            bodyStyles: {
+                textColor: [50, 50, 50],
+                fontSize: 10
+            },
+            columnStyles: {
+                0: { halign: 'left' }, // Cliente
+                1: { halign: 'center' }, // Método
+                2: { halign: 'right' }, // Capital/Interés
+                3: { halign: 'right' }, // Mora
+                4: { fontStyle: 'bold', halign: 'right' } // Total Ingreso
+            },
+            footStyles: {
+                fillColor: [240, 240, 240],
+                textColor: [0, 0, 0],
+                fontStyle: 'bold'
+            }
+        });
+    }
+
 
     // 5. Descargar
     const fileName = `Reporte_Caja_${dateFrom}_${dateTo}.pdf`;
@@ -3521,11 +3623,28 @@ function exportarCajaPDF() {
 // --- FUNCIÓN: IMPRIMIR REPORTE DE CAJA ---
 function imprimirCaja() {
     const dateFrom = getDomElement('cashRegisterDateFrom').value;
-    const dateTo = getDomElement('cashRegisterDateTo').value;
+    const dateTo = dateFrom; // Forzado
 
     // Clonamos el resumen y la tabla para no afectar la vista actual
     const summaryHTML = getDomElement('cashRegisterSummary').innerHTML;
-    const tableHTML = getDomElement('cashRegisterTable').outerHTML;
+
+    // 1. Verificar si la caja está cerrada revisando el contenido de la tabla
+    const tbody = getDomElement('cashRegisterTableBody');
+    const isClosed = tbody.querySelector('td')?.textContent.includes('CUADRE DE CAJA HECHO');
+
+    let tableContentHTML = '';
+
+    if (isClosed) {
+        tableContentHTML = `
+            <div style="text-align: center; color: #f44336; font-weight: 700; padding: 40px; font-size: 16px; background-color: #f9f9f9; border: 1px solid #f44336; border-radius: 5px;">
+                🔒 NO DISPONIBLE - CUADRE DE CAJA HECHO
+            </div>
+        `;
+    } else {
+        // Si no está cerrado, usamos el HTML de la tabla normal
+        tableContentHTML = getDomElement('cashRegisterTable').outerHTML;
+    }
+
 
     // Crear iframe temporal para imprimir
     const iframe = document.createElement('iframe');
@@ -3563,7 +3682,8 @@ function imprimirCaja() {
                 table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
                 th { background-color: #eee; border: 1px solid #999; padding: 8px; text-transform: uppercase; }
                 td { border: 1px solid #999; padding: 8px; text-align: right; }
-                td:first-child { text-align: center; } /* Fecha centrada */
+                td:first-child { text-align: left; } /* Cliente a la izquierda */
+                td:nth-child(2) { text-align: center; } /* Método centrado */
                 
                 /* Utilidades de impresión */
                 @media print {
@@ -3575,7 +3695,7 @@ function imprimirCaja() {
         <body>
             <h1>REPORTE DE MOVIMIENTOS DE CAJA</h1>
             <p class="subtitle">
-                Rango: Del ${dateFrom} al ${dateTo} <br>
+                Día: ${dateFrom} <br>
                 Impreso el: ${new Date().toLocaleString('es-PE')}
             </p>
 
@@ -3583,7 +3703,8 @@ function imprimirCaja() {
                 ${summaryHTML}
             </div>
 
-            ${tableHTML}
+            <h2 style="font-size: 16px; margin-bottom: 10px;">Movimientos del Día</h2>
+            ${tableContentHTML}
         </body>
         </html>
     `);
@@ -3598,6 +3719,7 @@ function imprimirCaja() {
         }, 500);
     };
 }
+
 
 // ==========================================
 // IMPLEMENTACIÓN DE CUADRE DE CAJA CON HISTORIAL
