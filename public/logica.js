@@ -2106,7 +2106,7 @@ function getTodayDateISO() {
 // --- FETCH Y RENDER ---
 async function fetchAndRenderLoans() {
     try {
-        const response = await fetch(`${API_URL}`); // <--- Fallo potencial
+        const response = await fetch(`${API_URL}/api/loans`); // <--- Fallo potencial
         if (!response.ok) throw new Error('Error al cargar los préstamos');
         loans = await response.json();
         renderHistoryTable();
