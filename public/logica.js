@@ -1028,8 +1028,17 @@ function initLoanFormLogic() {
         e.target.value = e.target.value.replace(/[^0-9]/g, '');
     });
 
+    plazoInput.addEventListener('input', (e) => {
+        e.target.value = e.target.value.replace(/[^0-9]/g, '');
+    });
+
     mesesSoloInteresInput.addEventListener('input', (e) => {
         e.target.value = e.target.value.replace(/[^0-9]/g, '');
+
+        // 🚨 NUEVA RESTRICCIÓN: Limitar a 2 dígitos
+        if (e.target.value.length > 2) {
+            e.target.value = e.target.value.slice(0, 2);
+        }
     });
 
     // 🚨 NUEVA FUNCIÓN: Lógica para previsualizar la cuota mensual
