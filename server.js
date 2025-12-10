@@ -37,7 +37,9 @@ function calculateSchedule(loan) {
     const monthlyInterestRate = parseFloat(loan.interes) / 100;
     const principal = parseFloat(loan.monto);
     const schedule = [];
-    const startDate = new Date(loan.fecha);
+
+    // 🚨 FIX: Inicializar la fecha para evitar desfase de zona horaria (usando "T12:00:00")
+    const startDate = new Date(loan.fecha + 'T12:00:00');
 
     let monthlyPayment;
     let totalDue;
@@ -49,6 +51,7 @@ function calculateSchedule(loan) {
 
         for (let i = 1; i <= loan.plazo; i++) {
             const paymentDate = new Date(startDate);
+            // Usamos setUTCMonth para manipular los meses sin cambiar la hora local.
             paymentDate.setUTCMonth(paymentDate.getUTCMonth() + i);
 
             const monto = (i <= loan.meses_solo_interes) ? interestOnlyPayment : monthlyPayment;
@@ -75,9 +78,13 @@ function calculateMora(loan, totalPaid) {
 
     let totalMora = 0;
     let totalAmountOverdue = 0;
-    let latestDueDate = new Date(loan.fecha);
+
+    // 🚨 FIX: Inicializar la fecha para evitar desfase de zona horaria (usando "T12:00:00")
+    const startDate = new Date(loan.fecha + 'T12:00:00');
+    let latestDueDate = new Date(startDate);
 
     for (const item of schedule) {
+        // La fecha en el schedule ya es un objeto Date
         const dueDate = new Date(item.fecha);
         dueDate.setHours(0, 0, 0, 0);
 
