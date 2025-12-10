@@ -2106,7 +2106,7 @@ function getTodayDateISO() {
 // --- FETCH Y RENDER ---
 async function fetchAndRenderLoans() {
     try {
-        const response = await fetch(`${API_URL}/api/loans`); // <--- Fallo potencial
+        const response = await fetch(`${API_URL}`); // <--- Fallo potencial
         if (!response.ok) throw new Error('Error al cargar los préstamos');
         loans = await response.json();
         renderHistoryTable();
@@ -2208,7 +2208,7 @@ function updateDashboard() {
             .filter(p => p.payment_date.split('T')[0] === today)
             .reduce((pSum, p) => pSum + parseFloat(p.payment_amount), 0);
     }, 0);
-    
+
 
     getDomElement('totalLoaned').textContent = `S/ ${totalLoaned.toFixed(2)}`;
     getDomElement('activeLoans').textContent = activeLoans;
