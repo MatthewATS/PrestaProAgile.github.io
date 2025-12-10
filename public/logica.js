@@ -995,7 +995,7 @@ function initLoanFormLogic() {
                 <small id="hibrido-info">Cantidad de meses donde solo se paga el interés mensual.</small>
             </div>
             
-            <div id="declaracion-container" class="form-group" style="display: none; background-color: var(--primary-light); padding: 15px; border-radius: 8px; margin-top: 10px;">
+            <div id="declaracion-container" class="form-grou p" style="display: none; background-color: var(--primary-light); padding: 15px; border-radius: 8px; margin-top: 10px;">
                 <div style="display: -webkit-box; display: -ms-flexbox; display: -webkit-flex; display: flex; -webkit-box-align: center; -ms-flex-align: center; -webkit-align-items: center; align-items: center;">
                     <input type="checkbox" id="declaracion_jurada" style="width: 20px; height: 20px; margin-right: 12px;">
                     <label for="declaracion_jurada" style="margin-bottom: 0;">Declaro bajo juramento el origen lícito del dinero.</label>
@@ -1236,11 +1236,19 @@ function initPaymentListeners() {
             if (target) {
                 const loanId = target.getAttribute('data-loan-id');
                 const paymentIndex = parseInt(target.getAttribute('data-payment-index'));
+                // 🚨 CAMBIO: Obtener correlativo y transaction_id del botón
+                const correlativo = target.getAttribute('data-correlativo');
+                const transactionId = target.getAttribute('data-transaction');
+
 
                 const loan = loans.find(l => l.id == loanId);
                 // El payment index en la tabla HTML es el índice del array loan.payments
                 if (loan && loan.payments && loan.payments.length > paymentIndex) {
                     const payment = loan.payments[paymentIndex];
+                    // 🚨 CAMBIO: Añadir correlativo y transaction ID a la data de pago
+                    payment.correlativo_boleta = correlativo;
+                    payment.transaction_id = transactionId;
+
                     showReceipt(payment, loan);
                 }
             }
@@ -1311,12 +1319,17 @@ function openPaymentModal(loan) {
 }
 
 // NUEVA FUNCIÓN: Muestra el modal del enlace de pago
-function showCheckoutLinkModal(mpUrl, totalAmount, paymentMethod, clientName) {
+function showCheckoutLinkModal(mpUrl, totalAmount, paymentMethod, clientName, correlativo) {
     currentMpUrl = mpUrl;
     currentClientName = clientName;
     getDomElement('checkoutLinkAmount').textContent = `S/ ${totalAmount.toFixed(2)}`;
     getDomElement('checkoutLinkMethod').textContent = paymentMethod;
     getDomElement('mpLinkOutput').value = mpUrl;
+
+    // 🚨 CAMBIO: Mostrar el correlativo en el modal
+    const titleEl = getDomElement('checkoutLinkTitle');
+    titleEl.textContent = `🔗 Enlace de Pago Generado (Boleta N° ${correlativo.toString().padStart(8, '0')})`;
+
 
     // Asegurarse de que el input esté enfocado para copiar si es posible
     const linkInput = getDomElement('mpLinkOutput');
@@ -1384,9 +1397,8 @@ async function handlePaymentSubmit(e) {
     const paymentDate = getDomElement('payment_date').value;
     const totalToCollect = paymentAmount + moraAmount; // Monto total que se enviará
 
-    // Data completa, incluyendo la mora y el método
+    // Data básica para el registro interno (será enriquecida por el backend)
     const paymentData = {
-        // 🚨 CRÍTICO: payment_amount debe ser el total (CI + MORA) para el backend
         payment_amount: totalToCollect,
         mora_amount: moraAmount,
         payment_method: selectedMethod,
@@ -1444,7 +1456,8 @@ async function handlePaymentSubmit(e) {
 
             if (mpUrl) {
                 // *** CRÍTICO: Muestra el link en un modal en lugar de redirigir ***
-                showCheckoutLinkModal(mpUrl, totalToCollect, selectedMethod, `${loan.nombres} ${loan.apellidos}`);
+                // 🚨 CAMBIO: Pasar el correlativo de boleta al modal
+                showCheckoutLinkModal(mpUrl, totalToCollect, selectedMethod, `${loan.nombres} ${loan.apellidos}`, mpData.correlativo_boleta || 'N/A');
                 return;
             } else {
                 throw new Error("El backend no proporcionó un URL de pago válido de Mercado Pago.");
@@ -1480,8 +1493,17 @@ async function handlePaymentSubmit(e) {
             }
 
             const loan = loans.find(l => l.id == loanId);
+            const successData = await response.json(); // <-- CAPTURA LA RESPUESTA
+
+            // 🚨 CRÍTICO: USAR el correlativo y transaction ID del backend
+            const paymentWithDetails = {
+                ...paymentData,
+                correlativo_boleta: successData.correlativo_boleta,
+                transaction_id: successData.transaction_id
+            };
+
             // Mostrar recibo con la data de pago que SÍ se registró
-            showReceipt(paymentData, loan);
+            showReceipt(paymentWithDetails, loan);
 
             await fetchAndRenderLoans();
             showSuccessAnimation('¡Pago Registrado!');
@@ -1836,7 +1858,8 @@ async function handleQuickPaymentSubmit() {
 
             if (mpUrl) {
                 // *** CRÍTICO: Muestra el link en un modal en lugar de redirigir ***
-                showCheckoutLinkModal(mpUrl, totalToCollect, selectedMethod, `${loan.nombres} ${loan.apellidos}`);
+                // 🚨 CAMBIO: Pasar el correlativo de boleta al modal
+                showCheckoutLinkModal(mpUrl, totalToCollect, selectedMethod, `${loan.nombres} ${loan.apellidos}`, mpData.correlativo_boleta || 'N/A');
                 return;
             } else {
                 throw new Error("El backend no proporcionó un URL de pago válido de Mercado Pago.");
@@ -1870,7 +1893,16 @@ async function handleQuickPaymentSubmit() {
             }
 
             const loan = currentLoanForQuickPayment;
-            showReceipt(paymentData, loan);
+            const successData = await response.json(); // <-- CAPTURA LA RESPUESTA
+
+            // 🚨 CRÍTICO: USAR el correlativo y transaction ID del backend
+            const paymentWithDetails = {
+                ...paymentData,
+                correlativo_boleta: successData.correlativo_boleta,
+                transaction_id: successData.transaction_id
+            };
+
+            showReceipt(paymentWithDetails, loan);
 
             await fetchAndRenderLoans();
             showSuccessAnimation('¡Pago Registrado Exitosamente en Efectivo!');
@@ -2014,7 +2046,7 @@ function getTodayDateISO() {
 // --- FETCH Y RENDER ---
 async function fetchAndRenderLoans() {
     try {
-        const response = await fetch(`${API_URL}/api/loans`);
+        const response = await fetch(`${API_URL}/api/loans`); // <--- Fallo potencial
         if (!response.ok) throw new Error('Error al cargar los préstamos');
         loans = await response.json();
         renderHistoryTable();
@@ -2172,8 +2204,11 @@ function showReceipt(payment, loan) {
     const moraPagada = parseFloat(payment.mora_amount || 0);
     const capitalInteresPagado = totalPagado - moraPagada;
     const paymentMethod = payment.payment_method || 'Efectivo';
-    const transactionId = payment.transaction_id || `TRX-${Math.floor(Math.random() * 90000000) + 10000000}`; // ID de Transacción aleatorio
-    const correlativo = Math.floor(Math.random() * 999999) + 1;
+
+    // 🚨 CRÍTICO: Usar el correlativo y transaction ID real (vienen del backend)
+    const transactionId = payment.transaction_id || `TRX-${Math.floor(Math.random() * 90000000) + 10000000}`;
+    const correlativo = payment.correlativo_boleta || (Math.floor(Math.random() * 999999) + 1);
+
     const paymentDate = new Date(payment.payment_date).toLocaleDateString('es-PE', { timeZone: 'UTC' });
 
     // Cálculo simple de Impuestos (simulación)
@@ -2336,6 +2371,7 @@ function downloadReceipt() {
         subtotal
     } = currentReceiptData;
 
+    // 🚨 USO del correlativo real
     const qrText = `|${RUC_EMPRESA}|03|B001|${correlativo.toString().padStart(8, '0')}|${totalPagado.toFixed(2)}|${IGV.toFixed(2)}|${paymentDate}|1|${loan.dni}|`;
     const qrDataUrl = generateQrDataURL(qrText, 100);
 
@@ -2376,6 +2412,7 @@ function downloadReceipt() {
     doc.setFontSize(11);
     doc.setTextColor(...darkColor);
     doc.setFont(undefined, 'bold');
+    // 🚨 USO del correlativo real
     doc.text(`B001-${correlativo.toString().padStart(8, '0')}`, 162.5, yPos + 28, { align: 'center' });
 
     yPos += 2;
@@ -2633,6 +2670,7 @@ function downloadReceipt() {
     });
 
     // Guardar el PDF
+    // 🚨 USO del correlativo real para el nombre del archivo
     const fileName = `Boleta_B001-${correlativo.toString().padStart(8, '0')}_${loan.apellidos}.pdf`;
     doc.save(fileName);
 }
@@ -2743,6 +2781,10 @@ function populateDetailsModal(loan) {
         paymentHistoryBody.innerHTML = loan.payments.map((p, index) => {
             const moraPagada = parseFloat(p.mora_amount || 0).toFixed(2);
             const capitalInteresPagado = (parseFloat(p.payment_amount) - moraPagada).toFixed(2);
+            // 🚨 CAMBIO: Incluir el correlativo y transaction_id en el botón
+            const correlativo = p.correlativo_boleta || '';
+            const transactionId = p.transaction_id || '';
+
             return `
                 <tr>
                     <td>${index + 1}</td>
@@ -2750,7 +2792,11 @@ function populateDetailsModal(loan) {
                     <td>S/ ${capitalInteresPagado}</td>
                     <td>S/ ${moraPagada}</td>
                     <td>${p.payment_method || 'Efectivo'}</td>
-                    <td><button class="button button-secondary button-sm view-receipt-btn" data-loan-id="${loan.id}" data-payment-index="${index}">Ver 🧾</button></td>
+                    <td><button class="button button-secondary button-sm view-receipt-btn" 
+                        data-loan-id="${loan.id}" 
+                        data-payment-index="${index}"
+                        data-correlativo="${correlativo}"
+                        data-transaction="${transactionId}">Ver 🧾</button></td>
                 </tr>`
         }).join('');
 
@@ -2882,7 +2928,7 @@ function compartirPDF() {
             finalY += 10;
             doc.setFontSize(14); doc.setTextColor(52, 64, 84); doc.text("Declaración Jurada de Origen de Fondos", 105, finalY, { align: 'center' });
             finalY += 8;
-            const textoDeclaracion = `Yo, ${loan.nombres} ${loan.apellidos}, identificado(a) con DNI N° ${loan.dni}, declaro bajo juramento que los fondos y/o bienes utilizados en la operación de préstamo de S/ ${parseFloat(loan.monto).toFixed(2)} provienen de actividades lícitas y no están vinculados con el lavado de activos ni cualquier otra actividad ilegal.`;
+            const textoDeclaracion = `Yo, ${loan.nombres} ${loan.apellidos}, identificado(a) con DNI N° ${loan.dni}, declaro bajo juramento que los fondos y/o bienes utilizados en la operación de préstamo de S/ ${parseFloat(loan.monto).toFixed(2)} provienen de actividades lícitas y no están vinculados con el lavado de activos, financiamiento del terrorismo ni cualquier otra actividad ilegal.`;
             doc.setFontSize(10); doc.setTextColor(100, 100, 100);
             const splitText = doc.splitTextToSize(textoDeclaracion, 180);
             doc.text(splitText, 14, finalY);
