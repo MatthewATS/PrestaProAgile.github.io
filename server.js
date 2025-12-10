@@ -18,7 +18,6 @@ app.use((req, res, next) => {
 const pool = mysql.createPool(process.env.DATABASE_URL);
 
 // --- CONSTANTES DE NEGOCIO Y API DE MERCADO PAGO ---
-// 🚨 MODIFICACIÓN: TASA_INTERES_ANUAL ELIMINADA. LA TASA SE RECIBE EN EL POST.
 const TASA_MORA_MENSUAL = 1;
 
 // 🚨 CREDENCIALES DE MERCADO PAGO DE PRODUCCIÓN 🚨
@@ -32,6 +31,16 @@ const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithu
 // ==========================================================
 // 1. UTILIDADES DE CÁLCULO Y DB
 // ==========================================================
+
+// 🚨 NUEVA FUNCIÓN: Obtener el siguiente correlativo de boleta
+async function getNextCorrelativo(connection) {
+    // Busca el máximo correlativo actual en la tabla de pagos
+    const [rows] = await connection.query(
+        "SELECT MAX(correlativo_boleta) AS max_correlativo FROM payments"
+    );
+    const maxCorrelativo = rows[0].max_correlativo || 0;
+    return maxCorrelativo + 1;
+}
 
 function calculateSchedule(loan) {
     const monthlyInterestRate = parseFloat(loan.interes) / 100;
@@ -47,7 +56,13 @@ function calculateSchedule(loan) {
     if (loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
         const interestOnlyPayment = principal * monthlyInterestRate;
         const remainingTerm = loan.plazo - loan.meses_solo_interes;
-        monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -remainingTerm));
+        // Evitar división por cero
+        if (remainingTerm > 0) {
+            monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -remainingTerm));
+        } else {
+            monthlyPayment = 0;
+        }
+
 
         for (let i = 1; i <= loan.plazo; i++) {
             const paymentDate = new Date(startDate);
@@ -59,7 +74,16 @@ function calculateSchedule(loan) {
         }
         totalDue = (interestOnlyPayment * loan.meses_solo_interes) + (monthlyPayment * remainingTerm);
     } else {
-        monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
+        // Evitar división por cero
+        if (monthlyInterestRate > 0 && loan.plazo > 0) {
+            monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
+        } else if (principal > 0 && loan.plazo > 0) {
+            // Caso de Interés Cero
+            monthlyPayment = principal / loan.plazo;
+        } else {
+            monthlyPayment = 0;
+        }
+
         for (let i = 1; i <= loan.plazo; i++) {
             const paymentDate = new Date(startDate);
             paymentDate.setUTCMonth(paymentDate.getUTCMonth() + i);
@@ -72,48 +96,55 @@ function calculateSchedule(loan) {
 }
 
 function calculateMora(loan, totalPaid) {
-    const { schedule } = calculateSchedule(loan);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // 🚨 FIX: Añadimos un bloque try-catch interno para capturar errores de cálculo
+    try {
+        const { schedule } = calculateSchedule(loan);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
-    let totalMora = 0;
-    let totalAmountOverdue = 0;
+        let totalMora = 0;
+        let totalAmountOverdue = 0;
 
-    // 🚨 FIX: Inicializar la fecha para evitar desfase de zona horaria (usando "T12:00:00")
-    const startDate = new Date(loan.fecha + 'T12:00:00');
-    let latestDueDate = new Date(startDate);
+        // 🚨 FIX: Inicializar la fecha para evitar desfase de zona horaria (usando "T12:00:00")
+        const startDate = new Date(loan.fecha + 'T12:00:00');
+        let latestDueDate = new Date(startDate);
 
-    for (const item of schedule) {
-        // La fecha en el schedule ya es un objeto Date
-        const dueDate = new Date(item.fecha);
-        dueDate.setHours(0, 0, 0, 0);
+        for (const item of schedule) {
+            // La fecha en el schedule ya es un objeto Date
+            const dueDate = new Date(item.fecha);
+            dueDate.setHours(0, 0, 0, 0);
 
-        if (dueDate <= today) {
-            const cumulativeExpected = schedule.slice(0, item.cuota).reduce((sum, s) => sum + s.monto, 0);
+            if (dueDate <= today) {
+                const cumulativeExpected = schedule.slice(0, item.cuota).reduce((sum, s) => sum + s.monto, 0);
 
-            if (totalPaid < cumulativeExpected) {
-                const monthsLate = (today.getFullYear() - dueDate.getFullYear()) * 12 +
-                    (today.getMonth() - dueDate.getMonth());
-                const monthsToCharge = Math.max(1, monthsLate);
+                if (totalPaid < cumulativeExpected) {
+                    const monthsLate = (today.getFullYear() - dueDate.getFullYear()) * 12 +
+                        (today.getMonth() - dueDate.getMonth());
+                    const monthsToCharge = Math.max(1, monthsLate);
 
-                const outstandingBalanceForMora = loan.total_due - totalPaid;
+                    const outstandingBalanceForMora = loan.total_due - totalPaid;
 
-                totalMora = outstandingBalanceForMora * (TASA_MORA_MENSUAL / 100) * monthsToCharge;
-                totalAmountOverdue = cumulativeExpected - totalPaid;
-                latestDueDate = dueDate;
-                break;
+                    totalMora = outstandingBalanceForMora * (TASA_MORA_MENSUAL / 100) * monthsToCharge;
+                    totalAmountOverdue = cumulativeExpected - totalPaid;
+                    latestDueDate = dueDate;
+                    break;
+                }
             }
         }
-    }
 
-    return parseFloat(totalMora > 0 ? totalMora.toFixed(2) : 0);
+        return parseFloat(totalMora > 0 ? totalMora.toFixed(2) : 0);
+    } catch (e) {
+        console.error(`ERROR CRÍTICO en calculateMora para el préstamo ID ${loan.id}:`, e.message);
+        // Devolver 0 para evitar que el servidor se caiga, pero registrar la falla.
+        return 0;
+    }
 }
 
 async function registerPaymentInternal(loanId, paymentData) {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
-        const { payment_amount, payment_date, mora_amount, payment_method } = paymentData;
+        const { payment_amount, payment_date, mora_amount, payment_method, correlativo_boleta, transaction_id } = paymentData;
 
         const finalMethod = payment_method || 'Mercado Pago';
 
@@ -125,9 +156,10 @@ async function registerPaymentInternal(loanId, paymentData) {
         });
 
         // 🚨 CRÍTICO: El payment_amount enviado aquí es el MONTO TOTAL (CI + MORA)
+        // 🚨 CAMBIO 1: Incluir los nuevos campos en el INSERT
         await connection.query(
-            'INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method) VALUES (?, ?, ?, ?, ?)',
-            [loanId, payment_amount, payment_date, mora_amount, finalMethod]
+            'INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method, correlativo_boleta, transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [loanId, payment_amount, payment_date, mora_amount, finalMethod, correlativo_boleta, transaction_id]
         );
 
         // Verificar si el préstamo está totalmente pagado
@@ -179,11 +211,19 @@ app.get('/api/loans', async (req, res) => {
         `;
         const [loans] = await pool.query(loanQuery);
 
+        // 🚨 CAMBIO: Incluir correlativo_boleta y transaction_id en la consulta de pagos
         const [payments] = await pool.query(
-            'SELECT loan_id, payment_amount, payment_date, mora_amount, payment_method FROM payments ORDER BY payment_date ASC'
+            'SELECT loan_id, payment_amount, payment_date, mora_amount, payment_method, correlativo_boleta, transaction_id FROM payments ORDER BY payment_date ASC'
         );
 
+        // 🚨 DEBUG: CONSULTAS A DB EXITOSAS
+        console.log(`DEBUG: Consultas a DB exitosas. Procesando ${loans.length} préstamos.`);
+
+
         const loansWithPayments = loans.map(loan => {
+            // 🚨 DEBUG: INICIO DE CÁLCULO POR PRÉSTAMO
+            console.log(`DEBUG: Calculando préstamo ID: ${loan.id}, Cliente: ${loan.apellidos}`);
+
             const { totalDue } = calculateSchedule(loan);
             loan.total_due = totalDue;
 
@@ -193,6 +233,7 @@ app.get('/api/loans', async (req, res) => {
             const totalPaidCI = associatedPayments.reduce((sum, p) => sum + (parseFloat(p.payment_amount) - (parseFloat(p.mora_amount) || 0)), 0);
             loan.total_paid = parseFloat(totalPaidCI.toFixed(2));
 
+            // 🚨 PUNTO CRÍTICO: CÁLCULO DE MORA
             loan.mora_pendiente = calculateMora(loan, loan.total_paid);
 
             if (loan.total_paid >= loan.total_due) {
@@ -203,12 +244,18 @@ app.get('/api/loans', async (req, res) => {
                 loan.status = 'Activo';
             }
 
+            // 🚨 DEBUG: FIN DE CÁLCULO POR PRÉSTAMO
+            console.log(`DEBUG: Cálculo ID: ${loan.id} FINALIZADO. Estado: ${loan.status}`);
+
+
             return {
                 ...loan,
                 payments: associatedPayments,
             };
         });
 
+        // 🚨 DEBUG: CÁLCULOS COMPLETADOS Y ENVIANDO RESPUESTA
+        console.log("DEBUG: Todos los cálculos finalizados. Enviando respuesta 200 OK.");
         res.json(loansWithPayments);
     } catch (err) {
         console.error("ERROR en GET /api/loans:", err);
@@ -340,10 +387,14 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
             });
         }
 
-        // 🚨 CRÍTICO: Registrar el monto total (CI + MORA)
+        // 🚨 CAMBIO CRÍTICO 1: Generar Correlativo de Boleta y Transaction ID
+        const correlativo = await getNextCorrelativo(connection);
+        const transactionId = `TRX-${crypto.randomBytes(8).toString('hex')}`;
+
+        // 🚨 CRÍTICO: Registrar el monto total (CI + MORA) con los nuevos campos
         await connection.query(
-            'INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method) VALUES (?, ?, ?, ?, ?)',
-            [loanId, totalPayment, payment_date, moraToRegister, payment_method]
+            'INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method, correlativo_boleta, transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [loanId, totalPayment, payment_date, moraToRegister, payment_method, correlativo, transactionId]
         );
 
         const newTotalPaidCI = totalPaidCI + CiPayment;
@@ -353,7 +404,12 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
         }
 
         await connection.commit();
-        res.status(201).json({ message: 'Pago registrado con éxito' });
+        // 🚨 CAMBIO CRÍTICO 2: Devolver el correlativo y transaction_id al frontend
+        res.status(201).json({
+            message: 'Pago registrado con éxito',
+            correlativo_boleta: correlativo,
+            transaction_id: transactionId
+        });
 
     } catch (err) {
         await connection.rollback();
@@ -519,7 +575,21 @@ app.post('/api/mp/create-order', async (req, res) => {
         });
     }
 
-    const externalReference = `PRESTAPRO-${loanId}-${Date.now()}`;
+    // 🚨 Obtener el correlativo de boleta antes de crear la orden
+    let correlativo_boleta = null;
+    let transaction_id = null;
+    try {
+        const connection = await pool.getConnection();
+        correlativo_boleta = await getNextCorrelativo(connection);
+        transaction_id = `TRX-${crypto.randomBytes(8).toString('hex')}`;
+        connection.release();
+    } catch (error) {
+        console.error('[MP ERROR] ❌ Error al obtener correlativo:', error);
+        return res.status(500).json({ success: false, error: 'Error interno al generar el correlativo de boleta.' });
+    }
+
+    // 🚨 Usar el transaction_id generado como External Reference
+    const externalReference = transaction_id;
     const totalAmount = parseFloat(amount);
 
     // Verificar que el monto sea válido
@@ -564,7 +634,9 @@ app.post('/api/mp/create-order', async (req, res) => {
             loanId: loanId.toString(),
             payment_date: payment_date,
             amount_ci: amount_ci || '0',
-            amount_mora: amount_mora || '0'
+            amount_mora: amount_mora || '0',
+            // 🚨 CAMBIO CRÍTICO: Añadir correlativo_boleta a los metadata
+            correlativo_boleta: correlativo_boleta.toString()
         }
     };
 
@@ -592,7 +664,9 @@ app.post('/api/mp/create-order', async (req, res) => {
                     success: true,
                     url: checkoutUrl,
                     preferenceId: mpData.id,
-                    externalReference: externalReference
+                    externalReference: externalReference,
+                    // 🚨 CAMBIO: Devolver el correlativo generado para mostrar en el modal
+                    correlativo_boleta: correlativo_boleta
                 });
             } else {
                 // Esto podría ocurrir si hay problemas de configuración de URLs en MP Dashboard
@@ -654,24 +728,30 @@ app.post('/api/mp/webhook', async (req, res) => {
             if (paymentData.status === 'approved') {
                 console.log('[MP WEBHOOK] ✅ Pago APROBADO');
 
-                // Extraer loanId del external_reference (formato: PRESTAPRO-123-1234567890)
-                const externalRef = paymentData.external_reference;
+                // Extraer loanId y Transaction ID
+                const externalRef = paymentData.external_reference; // Es nuestro transaction_id
                 const loanId = externalRef ? externalRef.split('-')[1] : null;
 
                 const paymentAmount = paymentData.transaction_amount; // Monto total
                 const paymentDate = paymentData.date_approved?.split('T')[0] || new Date().toISOString().split('T')[0];
                 const amountMora = paymentData.metadata?.amount_mora || '0';
+                // 🚨 CAMBIO CRÍTICO: Obtener el correlativo de los metadata
+                const correlativo_boleta = paymentData.metadata?.correlativo_boleta || null;
 
-                if (loanId && paymentAmount) {
+
+                if (loanId && paymentAmount && externalRef && correlativo_boleta) {
                     const paymentDataToRegister = {
                         payment_amount: parseFloat(paymentAmount), // Total
                         mora_amount: parseFloat(amountMora),
                         payment_date: paymentDate,
-                        payment_method: 'Mercado Pago'
+                        payment_method: 'Mercado Pago',
+                        // 🚨 CRÍTICO: Usar los datos de MP para registrar
+                        correlativo_boleta: parseInt(correlativo_boleta),
+                        transaction_id: externalRef
                     };
 
                     await registerPaymentInternal(loanId, paymentDataToRegister);
-                    console.log(`[MP WEBHOOK] ✅ Pago registrado exitosamente para Préstamo ID: ${loanId}`);
+                    console.log(`[MP WEBHOOK] ✅ Pago registrado exitosamente para Préstamo ID: ${loanId} con Boleta N° ${correlativo_boleta}`);
                 }
             } else {
                 console.log(`[MP WEBHOOK] ℹ️ Pago no aprobado. Estado: ${paymentData.status}`);
@@ -682,6 +762,7 @@ app.post('/api/mp/webhook', async (req, res) => {
         }
     }
 });
+
 
 // ==========================================================
 // 5. CONFIGURACIÓN FINAL DEL SERVIDOR
