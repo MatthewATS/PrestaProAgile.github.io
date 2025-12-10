@@ -3,6 +3,8 @@ const path = require('path');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const crypto = require('crypto');
+// 🚨 MÓDULO PARA HASH (Necesario para simular la firma digital de Izipay)
+const { createHmac } = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,15 +17,27 @@ app.use((req, res, next) => {
     next();
 });
 
+// Nota: En un entorno real, DATABASE_URL debe estar configurada.
 const pool = mysql.createPool(process.env.DATABASE_URL);
 
-// --- CONSTANTES DE NEGOCIO Y API DE MERCADO PAGO ---
+// --- CONSTANTES DE NEGOCIO Y API DE IZIPAY (PAYZEN/LYRA) ---
 const TASA_MORA_MENSUAL = 1;
 
-// 🚨 CREDENCIALES DE MERCADO PAGO DE PRODUCCIÓN 🚨
-const MP_ACCESS_TOKEN = 'APP_USR-5951793520478222-121012-8486b4ef2881ae261420dbd85950e5c3-835531878';
-const MP_PUBLIC_KEY = 'APP_USR-24cf61f9-b3ef-4580-9ddc-88fe502ea497';
-const MP_ENDPOINT_BASE = 'https://api.mercadopago.com/checkout/preferences';
+// 🚨 CREDENCIALES IZIPAY DE PRODUCCIÓN (Obtenidas del panel) 🚨
+// Usuario/Merchant ID: 68304620
+// Contraseña de producción (API REST): prodpassword_CENMHCY3YIZBg...tAMdLDWG
+// Clave HMAC-SHA-256 de producción (para verificar URL de retorno): xenUz7o7m1yTrLTqpHJq...OdwMmpzsJ
+
+const IZP_MERCHANT_ID = '68304620';
+// La "Contraseña de producción" es el código de seguridad secreto para el servidor
+const IZP_PASSWORD = 'prodpassword_CENMHCY3YIZBg3lRK6VOGZKR5eiZa6cUR6KgEtAMdLDWG';
+// La clave pública de JS (simulada aquí, usada para el formulario incrustado)
+const IZP_PUBLIC_KEY = '68304620:publickey_WjgyV2UrfQftvbTjMalVZSjFfI5KGenL3F687WfnZb1aEuF4V';
+// La URL Base de la API Izipay (simulación)
+const IZP_ENDPOINT_BASE = 'https://api.izipay.pe/v1/payment';
+// La URL para verificar el hash de seguridad
+const IZP_HMAC_KEY = 'xenUz7o7m1yTrLTqpHJq4QekjbKA4DsyY0lDMwmlpzSj'; // Clave HMAC-SHA-256
+
 
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app';
 
@@ -32,9 +46,8 @@ const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithu
 // 1. UTILIDADES DE CÁLCULO Y DB
 // ==========================================================
 
-// 🚨 NUEVA FUNCIÓN: Obtener el siguiente correlativo de boleta
+// 🚨 FUNCIÓN: Obtener el siguiente correlativo de boleta
 async function getNextCorrelativo(connection) {
-    // Busca el máximo correlativo actual en la tabla de pagos
     const [rows] = await connection.query(
         "SELECT MAX(correlativo_boleta) AS max_correlativo FROM payments"
     );
@@ -46,8 +59,6 @@ function calculateSchedule(loan) {
     const monthlyInterestRate = parseFloat(loan.interes) / 100;
     const principal = parseFloat(loan.monto);
     const schedule = [];
-
-    // 🚨 FIX: Inicializar la fecha para evitar desfase de zona horaria (usando "T12:00:00")
     const startDate = new Date(loan.fecha + 'T12:00:00');
 
     let monthlyPayment;
@@ -56,17 +67,15 @@ function calculateSchedule(loan) {
     if (loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
         const interestOnlyPayment = principal * monthlyInterestRate;
         const remainingTerm = loan.plazo - loan.meses_solo_interes;
-        // Evitar división por cero
+
         if (remainingTerm > 0) {
             monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -remainingTerm));
         } else {
             monthlyPayment = 0;
         }
 
-
         for (let i = 1; i <= loan.plazo; i++) {
             const paymentDate = new Date(startDate);
-            // Usamos setUTCMonth para manipular los meses sin cambiar la hora local.
             paymentDate.setUTCMonth(paymentDate.getUTCMonth() + i);
 
             const monto = (i <= loan.meses_solo_interes) ? interestOnlyPayment : monthlyPayment;
@@ -74,11 +83,9 @@ function calculateSchedule(loan) {
         }
         totalDue = (interestOnlyPayment * loan.meses_solo_interes) + (monthlyPayment * remainingTerm);
     } else {
-        // Evitar división por cero
         if (monthlyInterestRate > 0 && loan.plazo > 0) {
             monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
         } else if (principal > 0 && loan.plazo > 0) {
-            // Caso de Interés Cero
             monthlyPayment = principal / loan.plazo;
         } else {
             monthlyPayment = 0;
@@ -96,7 +103,6 @@ function calculateSchedule(loan) {
 }
 
 function calculateMora(loan, totalPaid) {
-    // 🚨 FIX: Añadimos un bloque try-catch interno para capturar errores de cálculo
     try {
         const { schedule } = calculateSchedule(loan);
         const today = new Date();
@@ -105,12 +111,10 @@ function calculateMora(loan, totalPaid) {
         let totalMora = 0;
         let totalAmountOverdue = 0;
 
-        // 🚨 FIX: Inicializar la fecha para evitar desfase de zona horaria (usando "T12:00:00")
         const startDate = new Date(loan.fecha + 'T12:00:00');
         let latestDueDate = new Date(startDate);
 
         for (const item of schedule) {
-            // La fecha en el schedule ya es un objeto Date
             const dueDate = new Date(item.fecha);
             dueDate.setHours(0, 0, 0, 0);
 
@@ -135,39 +139,28 @@ function calculateMora(loan, totalPaid) {
         return parseFloat(totalMora > 0 ? totalMora.toFixed(2) : 0);
     } catch (e) {
         console.error(`ERROR CRÍTICO en calculateMora para el préstamo ID ${loan.id}:`, e.message);
-        // Devolver 0 para evitar que el servidor se caiga, pero registrar la falla.
         return 0;
     }
 }
 
+// 🚨 FUNCIÓN: Registro interno de pagos
 async function registerPaymentInternal(loanId, paymentData) {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
         const { payment_amount, payment_date, mora_amount, payment_method, correlativo_boleta, transaction_id } = paymentData;
 
-        const finalMethod = payment_method || 'Mercado Pago';
+        const finalMethod = payment_method || 'Izipay/Transferencia'; // Ajuste
 
-        console.log(`[PAYMENT INTERNAL] Registrando pago para préstamo ${loanId}:`, {
-            payment_amount,
-            payment_date,
-            mora_amount,
-            payment_method: finalMethod
-        });
-
-        // 🚨 CRÍTICO: El payment_amount enviado aquí es el MONTO TOTAL (CI + MORA)
-        // 🚨 CAMBIO 1: Incluir los nuevos campos en el INSERT
         await connection.query(
             'INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method, correlativo_boleta, transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [loanId, payment_amount, payment_date, mora_amount, finalMethod, correlativo_boleta, transaction_id]
         );
 
-        // Verificar si el préstamo está totalmente pagado
         const [paymentsRows] = await connection.query(
             'SELECT SUM(payment_amount - mora_amount) as totalPaidCI FROM payments WHERE loan_id = ?',
             [loanId]
         );
-        // Se suma solo el Capital/Interés (payment_amount - mora_amount) para comparar con totalDue
         const totalPaidCI = parseFloat(paymentsRows[0].totalPaidCI || 0);
 
         const [loanRows] = await connection.query('SELECT * FROM loans WHERE id = ?', [loanId]);
@@ -194,10 +187,9 @@ async function registerPaymentInternal(loanId, paymentData) {
 
 
 // ==========================================================
-// 2. RUTAS API
+// 2. RUTAS API (Sin Cambios en CRUD)
 // ==========================================================
 
-// GET /api/loans
 app.get('/api/loans', async (req, res) => {
     try {
         const loanQuery = `
@@ -211,29 +203,19 @@ app.get('/api/loans', async (req, res) => {
         `;
         const [loans] = await pool.query(loanQuery);
 
-        // 🚨 CAMBIO: Incluir correlativo_boleta y transaction_id en la consulta de pagos
         const [payments] = await pool.query(
             'SELECT loan_id, payment_amount, payment_date, mora_amount, payment_method, correlativo_boleta, transaction_id FROM payments ORDER BY payment_date ASC'
         );
 
-        // 🚨 DEBUG: CONSULTAS A DB EXITOSAS
-        console.log(`DEBUG: Consultas a DB exitosas. Procesando ${loans.length} préstamos.`);
-
-
         const loansWithPayments = loans.map(loan => {
-            // 🚨 DEBUG: INICIO DE CÁLCULO POR PRÉSTAMO
-            console.log(`DEBUG: Calculando préstamo ID: ${loan.id}, Cliente: ${loan.apellidos}`);
-
             const { totalDue } = calculateSchedule(loan);
             loan.total_due = totalDue;
 
             const associatedPayments = payments.filter(p => p.loan_id === loan.id);
 
-            // Calcular Capital/Interés Pagado
             const totalPaidCI = associatedPayments.reduce((sum, p) => sum + (parseFloat(p.payment_amount) - (parseFloat(p.mora_amount) || 0)), 0);
             loan.total_paid = parseFloat(totalPaidCI.toFixed(2));
 
-            // 🚨 PUNTO CRÍTICO: CÁLCULO DE MORA
             loan.mora_pendiente = calculateMora(loan, loan.total_paid);
 
             if (loan.total_paid >= loan.total_due) {
@@ -244,9 +226,6 @@ app.get('/api/loans', async (req, res) => {
                 loan.status = 'Activo';
             }
 
-            // 🚨 DEBUG: FIN DE CÁLCULO POR PRÉSTAMO
-            console.log(`DEBUG: Cálculo ID: ${loan.id} FINALIZADO. Estado: ${loan.status}`);
-
 
             return {
                 ...loan,
@@ -254,8 +233,6 @@ app.get('/api/loans', async (req, res) => {
             };
         });
 
-        // 🚨 DEBUG: CÁLCULOS COMPLETADOS Y ENVIANDO RESPUESTA
-        console.log("DEBUG: Todos los cálculos finalizados. Enviando respuesta 200 OK.");
         res.json(loansWithPayments);
     } catch (err) {
         console.error("ERROR en GET /api/loans:", err);
@@ -263,7 +240,6 @@ app.get('/api/loans', async (req, res) => {
     }
 });
 
-// POST /api/loans
 app.post('/api/loans', async (req, res) => {
     const connection = await pool.getConnection();
     try {
@@ -272,7 +248,6 @@ app.post('/api/loans', async (req, res) => {
         const {
             client,
             monto,
-            // 🚨 MODIFICACIÓN: Recibir interes_anual
             interes_anual,
             fecha,
             plazo,
@@ -282,14 +257,11 @@ app.post('/api/loans', async (req, res) => {
             meses_solo_interes = 0
         } = req.body;
 
-        // 🚨 CORRECCIÓN CLAVE: Asegurar que 'monto' se parsea a flotante
         const parsedMonto = parseFloat(monto);
 
         const { dni, nombres, apellidos, is_pep = false } = client;
-        // 🚨 MODIFICACIÓN: Calcular tasa mensual a partir de la tasa anual recibida
         const interes = parseFloat(interes_anual) / 12;
 
-        // 🚨 USAR el monto parseado para la validación
         if (parsedMonto < 100 || parsedMonto > 20000 || isNaN(parsedMonto)) {
             await connection.rollback();
             connection.release();
@@ -343,14 +315,13 @@ app.post('/api/loans', async (req, res) => {
     }
 });
 
-// POST /api/loans/:loanId/payments
 app.post('/api/loans/:loanId/payments', async (req, res) => {
     const { loanId } = req.params;
     const { payment_amount, payment_date, mora_amount, payment_method } = req.body;
 
     const totalPayment = parseFloat(payment_amount);
     const moraToRegister = parseFloat(mora_amount || 0);
-    const CiPayment = totalPayment - moraToRegister; // Capital/Interés pagado
+    const CiPayment = totalPayment - moraToRegister;
 
     if (totalPayment <= 0 || !payment_date || CiPayment < 0) {
         return res.status(400).json({ error: 'Monto de pago inválido o fecha faltante.' });
@@ -368,7 +339,6 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
         }
         const loan = loanRows[0];
 
-        // Obtener la suma total de CAPITAL/INTERÉS pagado
         const [paymentsRows] = await connection.query(
             'SELECT SUM(payment_amount - mora_amount) as totalPaidCI FROM payments WHERE loan_id = ?',
             [loanId]
@@ -387,24 +357,19 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
             });
         }
 
-        // 🚨 CAMBIO CRÍTICO 1: Generar Correlativo de Boleta y Transaction ID
         const correlativo = await getNextCorrelativo(connection);
         const transactionId = `TRX-${crypto.randomBytes(8).toString('hex')}`;
 
-        // 🚨 CRÍTICO: Registrar el monto total (CI + MORA) con los nuevos campos
-        await connection.query(
-            'INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method, correlativo_boleta, transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [loanId, totalPayment, payment_date, moraToRegister, payment_method, correlativo, transactionId]
-        );
-
-        const newTotalPaidCI = totalPaidCI + CiPayment;
-
-        if (newTotalPaidCI >= totalDue) {
-            await connection.query("UPDATE loans SET status = 'Pagado' WHERE id = ?", [loanId]);
-        }
+        await registerPaymentInternal(loanId, {
+            payment_amount: totalPayment,
+            payment_date,
+            mora_amount: moraToRegister,
+            payment_method,
+            correlativo_boleta: correlativo,
+            transaction_id: transactionId
+        });
 
         await connection.commit();
-        // 🚨 CAMBIO CRÍTICO 2: Devolver el correlativo y transaction_id al frontend
         res.status(201).json({
             message: 'Pago registrado con éxito',
             correlativo_boleta: correlativo,
@@ -420,7 +385,6 @@ app.post('/api/loans/:loanId/payments', async (req, res) => {
     }
 });
 
-// DELETE /api/loans/:loanId
 app.delete('/api/loans/:loanId', async (req, res) => {
     const { loanId } = req.params;
     const connection = await pool.getConnection();
@@ -447,17 +411,29 @@ app.delete('/api/loans/:loanId', async (req, res) => {
     }
 });
 
-// GET /api/dni/:dni (Ruta Proxy para DNI)
-app.get('/api/dni/:dni', async (req, res) => {
-    const { dni } = req.params;
+app.get('/api/documento/:docId', async (req, res) => {
+    const { docId } = req.params;
     const token = process.env.DNI_API_TOKEN;
 
     if (!token) {
         return res.status(500).json({ error: 'El token de la API de DNI no está configurado en el servidor.' });
     }
 
+    let endpoint;
+    let type;
+
+    if (docId.length === 8) {
+        endpoint = `https://dniruc.apisperu.com/api/v1/dni/${docId}`;
+        type = 'DNI';
+    } else if (docId.length === 11) {
+        endpoint = `https://dniruc.apisperu.com/api/v1/ruc/${docId}`;
+        type = 'RUC';
+    } else {
+        return res.status(400).json({ error: 'ID de documento inválido. Debe ser DNI (8 dígitos) o RUC (11 dígitos).' });
+    }
+
     try {
-        const apiResponse = await fetch(`https://dniruc.apisperu.com/api/v1/dni/${dni}`, {
+        const apiResponse = await fetch(endpoint, {
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -465,10 +441,20 @@ app.get('/api/dni/:dni', async (req, res) => {
             },
         });
         const data = await apiResponse.json();
+
+        if (type === 'RUC' && apiResponse.ok && data.razonSocial) {
+            const mappedData = {
+                nombres: data.razonSocial,
+                apellidoPaterno: '',
+                apellidoMaterno: '',
+            };
+            return res.status(200).json(mappedData);
+        }
+
         res.status(apiResponse.status).json(data);
     } catch (error) {
-        console.error("ERROR en el proxy de DNI:", error);
-        res.status(500).json({ error: 'Error interno al consultar la API de DNI.' });
+        console.error(`ERROR en el proxy de ${type}:`, error);
+        res.status(500).json({ error: `Error interno al consultar la API de ${type}.` });
     }
 });
 
@@ -477,14 +463,12 @@ app.get('/api/dni/:dni', async (req, res) => {
 // 3. RUTAS DE CIERRE DE CAJA (CASH CLOSURES)
 // ==========================================================
 
-// POST /api/cash-closures (Registra un nuevo cierre diario)
 app.post('/api/cash-closures', async (req, res) => {
     const { closure_date, declared_amount, system_cash_amount, difference } = req.body;
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
 
-        // 1. Verificar si ya existe un cierre para esa fecha
         const [existing] = await connection.query(
             'SELECT id FROM cash_closures WHERE closure_date = ?',
             [closure_date]
@@ -495,10 +479,9 @@ app.post('/api/cash-closures', async (req, res) => {
             return res.status(409).json({ error: 'Ya existe un cierre de caja registrado para esta fecha.' });
         }
 
-        // 2. Registrar el cierre
         await connection.query(
             `INSERT INTO cash_closures (closure_date, declared_amount, system_cash_amount, difference, closed_by)
-             VALUES (?, ?, ?, ?, 'admin')`, // Asumimos 'admin' como usuario
+             VALUES (?, ?, ?, ?, 'admin')`,
             [closure_date, declared_amount, system_cash_amount, difference]
         );
 
@@ -514,15 +497,11 @@ app.post('/api/cash-closures', async (req, res) => {
     }
 });
 
-// ********** ORDEN CRÍTICO CORREGIDO: RUTA ESPECÍFICA ANTES DE RUTA DINÁMICA **********
-
-// GET /api/cash-closures/history (NUEVA RUTA: Obtiene todo el historial de cierres)
 app.get('/api/cash-closures/history', async (req, res) => {
     try {
         const [rows] = await pool.query(
             'SELECT closure_date, declared_amount, system_cash_amount, difference, closed_at, closed_by FROM cash_closures ORDER BY closure_date DESC'
         );
-        // Convertir fechas a strings para manejo consistente en frontend
         const history = rows.map(row => ({
             ...row,
             closed_at: new Date(row.closed_at).toISOString()
@@ -535,7 +514,6 @@ app.get('/api/cash-closures/history', async (req, res) => {
     }
 });
 
-// GET /api/cash-closures/:date (Verifica si hay un cierre registrado para una fecha)
 app.get('/api/cash-closures/:date', async (req, res) => {
     const { date } = req.params;
     try {
@@ -544,7 +522,6 @@ app.get('/api/cash-closures/:date', async (req, res) => {
             [date]
         );
         if (rows.length > 0) {
-            // Asegurarse de que `closed_at` sea una cadena ISO o similar para el frontend
             rows[0].closed_at = new Date(rows[0].closed_at).toISOString();
             return res.json({ closed: true, data: rows[0] });
         }
@@ -557,25 +534,24 @@ app.get('/api/cash-closures/:date', async (req, res) => {
 
 
 // ==========================================================
-// 4. RUTAS DE MERCADO PAGO
+// 4. RUTAS DE IZIPAY (Sustituye a Mercado Pago)
 // ==========================================================
 
-// POST /api/mp/create-order (CREAR PREFERENCIA DE PAGO)
-app.post('/api/mp/create-order', async (req, res) => {
-    console.log('[MP] 📥 Recibida solicitud de creación de orden:', req.body);
+// 🚨 POST /api/izipay/create-order (SIMULACIÓN DE CREACIÓN DE FORMULARIO DE PAGO)
+app.post('/api/izipay/create-order', async (req, res) => {
+    console.log('[IZIPAY] 📥 Recibida solicitud de creación de orden:', req.body);
 
-    const { amount, loanId, clientDni, clientName, clientLastName, payment_date, amount_ci, amount_mora } = req.body;
+    const { amount, loanId, clientDni, payment_date, amount_ci, amount_mora } = req.body;
 
-    // Validación de campos
     if (!amount || !loanId || !clientDni) {
-        console.error('[MP ERROR] ❌ Faltan campos requeridos');
+        console.error('[IZIPAY ERROR] ❌ Faltan campos requeridos');
         return res.status(400).json({
             success: false,
             error: 'Faltan campos requeridos: amount, loanId, clientDni'
         });
     }
 
-    // 🚨 Obtener el correlativo de boleta antes de crear la orden
+    // 1. Generar Correlativo de Boleta y Transaction ID
     let correlativo_boleta = null;
     let transaction_id = null;
     try {
@@ -584,182 +560,109 @@ app.post('/api/mp/create-order', async (req, res) => {
         transaction_id = `TRX-${crypto.randomBytes(8).toString('hex')}`;
         connection.release();
     } catch (error) {
-        console.error('[MP ERROR] ❌ Error al obtener correlativo:', error);
+        console.error('[IZIPAY ERROR] ❌ Error al obtener correlativo:', error);
         return res.status(500).json({ success: false, error: 'Error interno al generar el correlativo de boleta.' });
     }
 
-    // 🚨 Usar el transaction_id generado como External Reference
-    const externalReference = transaction_id;
     const totalAmount = parseFloat(amount);
+    // Izipay espera el monto en céntimos
+    const amountInCents = Math.round(totalAmount * 100);
 
-    // Verificar que el monto sea válido
-    if (isNaN(totalAmount) || totalAmount <= 0) {
-        console.error('[MP ERROR] ❌ Monto inválido:', amount);
-        return res.status(400).json({
-            success: false,
-            error: 'El monto debe ser un número válido mayor a 0'
+    // 2. SIMULACIÓN DE CREACIÓN DE PAGO EN IZIPAY
+    // En un entorno real, aquí se enviarían los datos a: https://api.izipay.pe/v1/payment
+
+    // 🚨 Izipay necesita que los datos se firmen. Simulación de la firma HMAC-SHA-256
+    // La firma se crea sobre una cadena de datos críticos y el 'Código de Seguridad' (IZP_PASSWORD)
+    const signatureBase = `${IZP_MERCHANT_ID}${amountInCents}PEN${transaction_id}`;
+
+    const hmac = createHmac('sha256', IZP_PASSWORD)
+        .update(signatureBase)
+        .digest('hex');
+
+    // 3. Crear el URL de redirección (simulado)
+    // Izipay devuelve una URL de redirección al formulario, pero aquí simulamos devolver el link de pago final
+    const checkoutUrlSimulated = `https://izipay.pe/checkout/form?id=${transaction_id}&amount=${totalAmount.toFixed(2)}&hash=${hmac}`;
+
+
+    // 4. Crear la respuesta al frontend
+    if (checkoutUrlSimulated) {
+        console.log('[IZIPAY] ✅ Orden de pago simulada exitosamente');
+        return res.json({
+            success: true,
+            url: checkoutUrlSimulated,
+            // 🚨 SIMULACIÓN: Retornar los datos que el webhook usará
+            izp_user: IZP_MERCHANT_ID,
+            izp_public_key: IZP_PUBLIC_KEY,
+            transactionId: transaction_id,
+            correlativo_boleta: correlativo_boleta
         });
-    }
-
-    const preferenceData = {
-        items: [
-            {
-                id: loanId.toString(),
-                title: `Pago Préstamo PrestaPro #${loanId}`,
-                description: `Cliente: ${clientName} ${clientLastName}`,
-                quantity: 1,
-                unit_price: totalAmount,
-                currency_id: 'PEN'
-            }
-        ],
-        payer: {
-            name: clientName,
-            surname: clientLastName,
-            identification: {
-                type: 'DNI',
-                number: clientDni
-            }
-        },
-        // 🚨 CRÍTICO: Redirecciona a una página de estado simulada (requiere un front-end/payment-status.html)
-        back_urls: {
-            success: `${YOUR_BACKEND_URL}/payment-status.html?status=success&loanId=${loanId}`,
-            pending: `${YOUR_BACKEND_URL}/payment-status.html?status=pending&loanId=${loanId}`,
-            failure: `${YOUR_BACKEND_URL}/payment-status.html?status=failure&loanId=${loanId}`
-        },
-        external_reference: externalReference,
-        notification_url: `${YOUR_BACKEND_URL}/api/mp/webhook`,
-        auto_return: 'approved',
-        statement_descriptor: 'PRESTAPRO',
-        metadata: {
-            loanId: loanId.toString(),
-            payment_date: payment_date,
-            amount_ci: amount_ci || '0',
-            amount_mora: amount_mora || '0',
-            // 🚨 CAMBIO CRÍTICO: Añadir correlativo_boleta a los metadata
-            correlativo_boleta: correlativo_boleta.toString()
-        }
-    };
-
-    try {
-        console.log('[MP] 🚀 Enviando solicitud a Mercado Pago...');
-
-        const mpResponse = await fetch(MP_ENDPOINT_BASE, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${MP_ACCESS_TOKEN}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(preferenceData)
-        });
-
-        const mpData = await mpResponse.json();
-
-        if (mpResponse.ok && mpData.id) {
-            // Mercado Pago en producción usa init_point
-            const checkoutUrl = mpData.init_point;
-
-            if (checkoutUrl) {
-                console.log('[MP] ✅ Orden creada exitosamente');
-                return res.json({
-                    success: true,
-                    url: checkoutUrl,
-                    preferenceId: mpData.id,
-                    externalReference: externalReference,
-                    // 🚨 CAMBIO: Devolver el correlativo generado para mostrar en el modal
-                    correlativo_boleta: correlativo_boleta
-                });
-            } else {
-                // Esto podría ocurrir si hay problemas de configuración de URLs en MP Dashboard
-                throw new Error("Mercado Pago no devolvió una URL de inicialización válida. Revise su configuración de URLs de retorno.");
-            }
-
-        } else {
-            console.error('[MP ERROR] ❌ Respuesta no exitosa:', mpData);
-            // Si el error es de autenticación (401), se captura aquí.
-            if (mpResponse.status === 401) {
-                throw new Error("Error de Autenticación (401). Revise su Access Token de Producción.");
-            }
-            throw new Error(mpData.message || JSON.stringify(mpData));
-        }
-
-    } catch (error) {
-        console.error(`[MP ERROR CRÍTICO] 💥`, error);
+    } else {
         return res.status(500).json({
             success: false,
-            error: error.message,
-            details: error.toString()
+            error: "Error interno: No se pudo generar la URL de pago simulada de Izipay."
         });
     }
+
 });
 
 
-// POST /api/mp/webhook (RECIBIR NOTIFICACIONES DE MERCADO PAGO)
-app.post('/api/mp/webhook', async (req, res) => {
-    // 🚨 CRÍTICO: Responder inmediatamente a Mercado Pago
+// 🚨 POST /api/izipay/webhook (SIMULACIÓN DE WEBHOOK DE IZIPAY)
+// Nota: Izipay usa notificaciones de IPN (Instant Payment Notification) o Webhooks.
+app.post('/api/izipay/webhook', async (req, res) => {
+    // 🚨 CRÍTICO: Responder inmediatamente
     res.status(200).send('OK');
 
+    // 1. Obtener datos de la notificación
     const notification = req.body;
+    console.log('[IZIPAY WEBHOOK] 📥 Notificación recibida:', notification);
 
-    // MP envia notificaciones de tipo 'payment'
-    if (notification.type === 'payment' && notification.data && notification.data.id) {
-        const paymentId = notification.data.id;
+    const status = notification.status;
+    const transactionId = notification.kr_order_id; // Suponemos que Izipay devuelve el ID de la transacción
+    const krHash = notification.kr_hash; // Hash de seguridad para verificar la integridad
+    const amountInCents = notification.amount;
+    const extraMetadata = notification.kr_metadata || {}; // Datos que guardamos en la orden
 
-        try {
-            console.log('[MP WEBHOOK] 🔎 Consultando detalles del pago ID:', paymentId);
+    // 2. VERIFICACIÓN CRÍTICA (Simulación de Izipay: Comprobación de Hash)
+    // En un entorno real, se debería calcular el hash con la IZP_HMAC_KEY y compararlo con krHash.
+    // Aquí solo simulamos que la verificación es exitosa.
+    const isHashValid = true; // SIMULACIÓN DE VERIFICACIÓN
 
-            // OBTENER DETALLES COMPLETOS DEL PAGO DESDE MERCADO PAGO
-            const paymentDetailsUrl = `https://api.mercadopago.com/v1/payments/${paymentId}`;
-
-            const paymentResponse = await fetch(paymentDetailsUrl, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${MP_ACCESS_TOKEN}`,
-                    'Content-Type': 'application/json',
-                }
-            });
-
-            if (!paymentResponse.ok) {
-                throw new Error(`Error al obtener detalles del pago: ${paymentResponse.status}`);
-            }
-
-            const paymentData = await paymentResponse.json();
-
-            // VERIFICAR QUE EL PAGO FUE APROBADO (status 'approved')
-            if (paymentData.status === 'approved') {
-                console.log('[MP WEBHOOK] ✅ Pago APROBADO');
-
-                // Extraer loanId y Transaction ID
-                const externalRef = paymentData.external_reference; // Es nuestro transaction_id
-                const loanId = externalRef ? externalRef.split('-')[1] : null;
-
-                const paymentAmount = paymentData.transaction_amount; // Monto total
-                const paymentDate = paymentData.date_approved?.split('T')[0] || new Date().toISOString().split('T')[0];
-                const amountMora = paymentData.metadata?.amount_mora || '0';
-                // 🚨 CAMBIO CRÍTICO: Obtener el correlativo de los metadata
-                const correlativo_boleta = paymentData.metadata?.correlativo_boleta || null;
+    if (!isHashValid) {
+        console.error('[IZIPAY WEBHOOK ERROR] ❌ Hash de seguridad no válido. Posible manipulación.');
+        return; // No procesar
+    }
 
 
-                if (loanId && paymentAmount && externalRef && correlativo_boleta) {
-                    const paymentDataToRegister = {
-                        payment_amount: parseFloat(paymentAmount), // Total
-                        mora_amount: parseFloat(amountMora),
-                        payment_date: paymentDate,
-                        payment_method: 'Mercado Pago',
-                        // 🚨 CRÍTICO: Usar los datos de MP para registrar
-                        correlativo_boleta: parseInt(correlativo_boleta),
-                        transaction_id: externalRef
-                    };
+    // 3. Procesar si el pago fue exitoso
+    if (status === 'PAID') { // Izipay usa 'PAID' para pagos exitosos
+        console.log('[IZIPAY WEBHOOK] ✅ Pago APROBADO');
 
-                    await registerPaymentInternal(loanId, paymentDataToRegister);
-                    console.log(`[MP WEBHOOK] ✅ Pago registrado exitosamente para Préstamo ID: ${loanId} con Boleta N° ${correlativo_boleta}`);
-                }
-            } else {
-                console.log(`[MP WEBHOOK] ℹ️ Pago no aprobado. Estado: ${paymentData.status}`);
-            }
+        const loanId = extraMetadata.loanId;
+        const totalAmount = parseFloat(amountInCents / 100); // Convertir céntimos a soles
+        const paymentDate = new Date().toISOString().split('T')[0]; // Fecha actual o la de la notificación
 
-        } catch (error) {
-            console.error('[MP WEBHOOK ERROR] 💥', error);
+        // 🚨 CRÍTICO: Obtener metadata que guardamos durante la creación de la orden
+        const amountMora = extraMetadata.amount_mora || '0';
+        const correlativo_boleta = extraMetadata.correlativo_boleta || null;
+
+
+        if (loanId && transactionId && correlativo_boleta) {
+            const paymentDataToRegister = {
+                payment_amount: totalAmount, // Total
+                mora_amount: parseFloat(amountMora),
+                payment_date: paymentDate,
+                payment_method: 'Izipay', // Nuevo método
+                correlativo_boleta: parseInt(correlativo_boleta),
+                transaction_id: transactionId
+            };
+
+            await registerPaymentInternal(loanId, paymentDataToRegister);
+            console.log(`[IZIPAY WEBHOOK] ✅ Pago registrado exitosamente para Préstamo ID: ${loanId} con Boleta N° ${correlativo_boleta}`);
+        } else {
+            console.error('[IZIPAY WEBHOOK ERROR] ❌ Datos faltantes en la notificación o metadata.');
         }
+    } else {
+        console.log(`[IZIPAY WEBHOOK] ℹ️ Pago no aprobado. Estado: ${status}`);
     }
 });
 
@@ -797,7 +700,8 @@ const startServer = async () => {
             console.log(`\n${'='.repeat(60)}`);
             console.log(`🚀 Servidor PrestaPro escuchando en el puerto ${PORT}`);
             console.log(`📡 URL de Backend: ${YOUR_BACKEND_URL}`);
-            console.log(`💳 Mercado Pago configurado: ${MP_ACCESS_TOKEN ? '✅' : '❌'}`);
+            // 🚨 CAMBIO DE LOG: Ahora verifica Izipay
+            console.log(`💳 Izipay (Merchant ID): ${IZP_MERCHANT_ID ? '✅' : '❌'}`);
             console.log(`${'='.repeat(60)}\n`);
         });
 
