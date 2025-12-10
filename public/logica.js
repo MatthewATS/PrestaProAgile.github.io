@@ -17,8 +17,7 @@ let clients = new Set();
 let currentLoanForDetails = null;
 let currentLoanForQuickPayment = null;
 let calculatedPaymentData = { amount: 0, mora: 0 }; // Guarda el último cálculo flexible
-let currentReceiptData = null;
-let currentMpUrl = null; // Almacena el URL de Mercado Pago generado
+let currentIzpUrl = null; // 🚨 CAMBIO: Almacena el URL de Izipay generado (antes currentMpUrl)
 let currentClientName = null; // Almacena el nombre del cliente para el mensaje compartido
 
 // --- CREDENCIALES (SIMULACIÓN) ---
@@ -46,7 +45,8 @@ function closeModal(modal) {
     }
     if (modal.id === 'deleteConfirmationModal') getDomElement('delete-error-message').style.display = 'none';
     if (modal.id === 'checkoutLinkModal') {
-        currentMpUrl = null;
+        // 🚨 CAMBIO: Limpiar la URL de Izipay
+        currentIzpUrl = null;
         currentClientName = null;
         // Reiniciar la vista del módulo de pagos después de cerrar el link de checkout
         if (getDomElement('module-pagos')?.classList.contains('active')) {
@@ -57,6 +57,9 @@ function closeModal(modal) {
             getDomElement('quickPaymentTableBody').innerHTML = '<tr><td colspan="4" style="text-align: center; color: #9CA3AF;">Busca un DNI para encontrar préstamos.</td></tr>';
             currentLoanForQuickPayment = null;
         }
+    }
+    if (modal.id === 'shareOptionsModal') {
+        currentShareType = null;
     }
 }
 
@@ -115,7 +118,7 @@ function initializeApp() {
     // Nuevo Modal Link
     getDomElement('closeCheckoutLinkModalBtn')?.addEventListener('click', () => closeModal(getDomElement('checkoutLinkModal')));
     getDomElement('copyLinkBtn')?.addEventListener('click', copyMpLink);
-    // CRÍTICO: Cambio de listener de 'openLinkInNewTabBtn' a 'shareMpLinkBtn'
+    // 🚨 CAMBIO: Usa la función shareMpLink
     getDomElement('shareMpLinkBtn')?.addEventListener('click', shareMpLink);
 
 
@@ -136,7 +139,7 @@ function initializeApp() {
         if (menuChangePass) {
             // Usamos clonación para limpiar listeners viejos si se recarga la app
             const newBtn = menuChangePass.cloneNode(true);
-            menuChangePass.parentNode.replaceChild(newBtn, menuChangePass);
+            menuChangePassword.parentNode.replaceChild(newBtn, menuChangePassword);
 
             newBtn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -237,7 +240,7 @@ function initializeApp() {
     getDomElement('closeShareOptionsModalBtn')?.addEventListener('click', () => closeModal(getDomElement('shareOptionsModal')));
     getDomElement('printScheduleBtn')?.addEventListener('click', printSchedule);
     getDomElement('shareBtn')?.addEventListener('click', () => { currentShareType = 'details';openModal(getDomElement('shareOptionsModal')); });
-    getDomElement('printReceiptBtn')?.addEventListener('click', () => printModalContent(getDomElement('receiptContent')));
+    getDomElement('printReceiptBtn')?.addEventListener('click', () => printModalContent(getDomElement('receiptModal')));
     getDomElement('downloadReceiptBtn')?.addEventListener('click', downloadReceipt);
 
 
@@ -347,23 +350,6 @@ function initializeApp() {
     initReceiptButtonListeners();
 }
 
-
-function goBackModule() {
-    // Si el historial está vacío o solo tiene 1 elemento (el actual), ir al menú principal
-    if (appModuleHistory.length <= 1) {
-        showModule('module-menu', true);
-        return;
-    }
-
-    // 1. Sacar el módulo actual (el que vamos a cerrar)
-    appModuleHistory.pop();
-
-    // 2. Obtener el módulo anterior
-    const previousModuleId = appModuleHistory[appModuleHistory.length - 1];
-
-    // 3. Mostrarlo, indicando que es una acción de retroceso
-    showModule(previousModuleId || 'module-menu', true);
-}
 
 function openReceiptConfigModal() {
     const rucInput = getDomElement('configRuc');
@@ -479,15 +465,18 @@ async function filterCashRegister() {
 
     const totalAllIngresos = todayMovements.reduce((sum, m) => sum + m.total, 0);
     const totalCashIngresos = todayMovements.filter(m => m.method === 'Efectivo').reduce((sum, m) => sum + m.total, 0);
-    const totalTransferIngresos = todayMovements.filter(m => m.method === 'Transferencia' || m.method === 'Yape/Plin').reduce((sum, m) => sum + m.total, 0);
-    const totalMpIngresos = todayMovements.filter(m => m.method === 'Mercado Pago').reduce((sum, m) => sum + m.total, 0);
+    // 🚨 CAMBIO: Incluir "Izipay" junto a "Transferencia" y "Yape/Plin" en el cálculo de transferencias/MP
+    const totalTransferIngresos = todayMovements.filter(m => m.method === 'Transferencia' || m.method === 'Yape/Plin' || m.method === 'Izipay').reduce((sum, m) => sum + m.total, 0);
+    // 🚨 CAMBIO: Total de ingresos por tarjeta/Izipay
+    const totalIzpIngresos = todayMovements.filter(m => m.method === 'Izipay').reduce((sum, m) => sum + m.total, 0);
+
 
     // Mostrar el resumen del día seleccionado
     const summaryContent = `
-        <p><strong>Total de Ingresos (Caja + Transferencias + MP):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalAllIngresos.toFixed(2)}</span></p>
+        <p><strong>Total de Ingresos (Caja + Transferencias + Izipay):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalAllIngresos.toFixed(2)}</span></p>
         <p><strong>Ingreso Neto en Efectivo (Cuadre):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalCashIngresos.toFixed(2)}</span></p>
         <p><strong>Ingreso por Transferencia/Yape:</strong> <span style="font-weight: 700; color: var(--primary-color);">S/ ${totalTransferIngresos.toFixed(2)}</span></p>
-        <p><strong>Ingreso por Otros MP:</strong> <span style="font-weight: 700; color: var(--secondary-color);">S/ ${totalMpIngresos.toFixed(2)}</span></p>
+        <p><strong>Ingreso por Tarjeta/Izipay:</strong> <span style="font-weight: 700; color: var(--secondary-color);">S/ ${totalIzpIngresos.toFixed(2)}</span></p>
     `;
     // getDomElement('cashRegisterSummary').innerHTML = summaryContent; // Reubicado abajo
 
@@ -641,8 +630,9 @@ function getMovementsByDateRange(dateFrom, dateTo, methodFilter = null) {
                 const paymentDate = new Date(p.payment_date).getTime();
                 let method = p.payment_method || 'Efectivo';
 
-                if (method === 'Transferencia' || method === 'Yape/Plin') {
-                    // Para reportes de caja, se mantiene el método específico
+                // 🚨 CAMBIO CRÍTICO: Reemplazar Mercado Pago por Izipay en la visualización
+                if (method === 'Mercado Pago') {
+                    method = 'Izipay';
                 }
 
                 // 🚨 CRÍTICO: El filtro ahora usa los timestamps calculados (solo ese día)
@@ -930,26 +920,35 @@ function initLoanFormLogic() {
     // 🚨 MODIFICACIÓN CLAVE: Obtener la fecha actual en formato ISO YYYY-MM-DD
     const today = getTodayDateISO();
 
-    // INYECCIÓN DE HTML DEL FORMULARIO DE PRÉSTAMO
+    // INYECCIÓN DE HTML DEL FORMULARIO DE PRÉSTAMO (MODIFICADA PARA DOCUMENTO)
     loanForm.innerHTML = `
         <fieldset>
             <legend>📋 Información del Cliente</legend>
-            <div class="form-group">
-                <label for="dni">DNI (8 dígitos)</label>
-                <input type="text" id="dni" placeholder="Ingresa 8 dígitos y presiona Tab" required pattern="\\d{8}" maxlength="8" inputmode="numeric" oninput="this.value = this.value.replace(/[^0-9]/g, '');">
-                <small id="dni-status" style="margin-top: 5px; display: block;"></small>
+            <div class="form-row">
+                <div class="form-group" style="max-width: 120px;">
+                    <label for="doc_type">Tipo Doc.</label>
+                    <select id="doc_type" required>
+                        <option value="DNI">DNI</option>
+                        <option value="RUC">RUC</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex-grow: 1;">
+                    <label for="doc_id">N° de Documento</label>
+                    <input type="text" id="doc_id" placeholder="Ingresa 8 o 11 dígitos y presiona Tab" required maxlength="11" inputmode="numeric" oninput="this.value = this.value.replace(/[^0-9]/g, '');">
+                    <small id="doc-id-status" style="margin-top: 5px; display: block;"></small>
+                </div>
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label for="nombres">Nombres</label>
-                    <input type="text" id="nombres" placeholder="Autocompletado con DNI" required readonly>
+                    <label for="nombres">Nombres / Razón Social</label>
+                    <input type="text" id="nombres" placeholder="Autocompletado con DNI/RUC" required readonly>
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="apellidos-group">
                     <label for="apellidos">Apellidos</label>
                     <input type="text" id="apellidos" placeholder="Autocompletado con DNI" required readonly>
                 </div>
             </div>
-            <div class="checkbox-container">
+            <div class="checkbox-container" id="is_pep_container">
                 <input type="checkbox" id="is_pep">
                 <label for="is_pep">¿Es Persona Expuesta Políticamente (PEP)?</label>
             </div>
@@ -995,8 +994,8 @@ function initLoanFormLogic() {
                 <small id="hibrido-info">Cantidad de meses donde solo se paga el interés mensual.</small>
             </div>
             
-            <div id="declaracion-container" class="form-grou p" style="display: none; background-color: var(--primary-light); padding: 15px; border-radius: 8px; margin-top: 10px;">
-                <div style="display: -webkit-box; display: -ms-flexbox; display: -webkit-flex; display: flex; -webkit-box-align: center; -ms-flex-align: center; -webkit-align-items: center; align-items: center;">
+            <div id="declaracion-container" class="form-group" style="display: none; background-color: var(--primary-light); padding: 15px; border-radius: 8px; margin-top: 10px;">
+                <div style="display: flex; align-items: center;">
                     <input type="checkbox" id="declaracion_jurada" style="width: 20px; height: 20px; margin-right: 12px;">
                     <label for="declaracion_jurada" style="margin-bottom: 0;">Declaro bajo juramento el origen lícito del dinero.</label>
                 </div>
@@ -1007,10 +1006,16 @@ function initLoanFormLogic() {
     `;
 
     // Re-declaración de elementos después de inyectar HTML
-    const dniInput = getDomElement('dni');
+    const docTypeSelect = getDomElement('doc_type');
+    const docIdInput = getDomElement('doc_id');
     const nombresInput = getDomElement('nombres');
     const apellidosInput = getDomElement('apellidos');
-    const dniStatus = getDomElement('dni-status');
+    const docIdStatus = getDomElement('doc-id-status');
+    const apellidosGroup = getDomElement('apellidos-group');
+    const isPepContainer = getDomElement('is_pep_container');
+
+    // ... (rest of form elements declaration: montoInput, plazoInput, etc. - MANTENER)
+
     const montoInput = getDomElement('monto');
     const plazoInput = getDomElement('plazo');
     const interesAnualInput = getDomElement('interes_anual');
@@ -1023,6 +1028,98 @@ function initLoanFormLogic() {
     const monthlyPaymentPreview = getDomElement('monthly-payment-preview');
     const estimatedMonthlyPayment = getDomElement('estimated-monthly-payment');
 
+
+    // 🚨 NUEVA FUNCIÓN: Lógica para manejar DNI/RUC
+    function handleDocumentTypeChange() {
+        const type = docTypeSelect.value;
+        // Reiniciar campos
+        docIdInput.value = '';
+        nombresInput.value = '';
+        apellidosInput.value = '';
+        docIdStatus.textContent = '';
+
+        // Ajustar maxlength y visibilidad
+        if (type === 'DNI') {
+            docIdInput.maxLength = 8;
+            apellidosGroup.style.display = 'block';
+            isPepContainer.style.display = 'flex';
+            docIdInput.placeholder = 'Ingresa 8 dígitos y presiona Tab';
+        } else { // RUC
+            docIdInput.maxLength = 11;
+            apellidosInput.value = 'N/A';
+            apellidosGroup.style.display = 'none';
+            isPepContainer.style.display = 'none';
+            isPepCheckbox.checked = false; // Desmarcar PEP para RUC
+            docIdInput.placeholder = 'Ingresa 11 dígitos y presiona Tab';
+        }
+    }
+
+    // Listener de cambio de tipo
+    docTypeSelect.addEventListener('change', handleDocumentTypeChange);
+
+    // Listener de búsqueda (on blur o tab out)
+    docIdInput.addEventListener('blur', async () => {
+        handleDocumentInput(docTypeSelect.value, docIdInput.value);
+    });
+
+    // Función que maneja la búsqueda real (separada para claridad)
+    async function handleDocumentInput(type, id) {
+        toggleFormLock(false);
+        nombresInput.value = '';
+        apellidosInput.value = '';
+
+        if ((type === 'DNI' && id.length !== 8) || (type === 'RUC' && id.length !== 11)) {
+            docIdStatus.textContent = '';
+            return;
+        }
+
+        const hasActiveLoan = loans.some(loan =>
+            // 🚨 CRÍTICO: Buscar si existe un préstamo activo asociado a ese DNI/RUC
+            loan.dni === id && loan.status === 'Activo'
+        );
+
+        if (hasActiveLoan) {
+            docIdStatus.textContent = '⚠️ Este cliente ya tiene un préstamo activo. Formulario bloqueado.';
+            docIdStatus.style.color = 'var(--warning-color)';
+            toggleFormLock(true);
+            return;
+        }
+
+        docIdStatus.textContent = 'Buscando...'; docIdStatus.style.color = '#667085';
+
+        try {
+            // 🚨 CAMBIO CRÍTICO: Usar la nueva ruta /api/documento/:docId (maneja DNI y RUC)
+            const response = await fetch(`${API_URL}/api/documento/${id}`);
+            const data = await response.json();
+
+            if (response.ok && data.nombres) {
+                nombresInput.value = data.nombres;
+                if (type === 'DNI') {
+                    apellidosInput.value = `${data.apellidoPaterno} ${data.apellidoMaterno}`;
+                } else { // RUC: usa la razón social como nombre, y apellidos queda N/A
+                    apellidosInput.value = 'N/A';
+                }
+                docIdStatus.textContent = `✅ ${type} encontrado y sin préstamos activos.`;
+                docIdStatus.style.color = 'var(--success-color)';
+            } else {
+                // Si el RUC no tiene razón social, o el DNI falla
+                throw new Error(data.error || data.message || `No se encontraron resultados para ${type}.`);
+            }
+        } catch (error) {
+            // 🚨 CORRECCIÓN DE DEBUG: Si la URL del API_URL no está funcionando correctamente,
+            // el error se mostrará aquí como "Ruta de API no encontrado" o similar.
+            if (error.message.includes('Failed to fetch') || error.message.includes('404')) {
+                docIdStatus.textContent = `❌ Error de conexión: ${error.message}. Verifique la URL del backend (${API_URL}) y su estado.`
+            } else {
+                docIdStatus.textContent = `❌ ${error.message}`;
+            }
+
+            docIdStatus.style.color = 'var(--danger-color)';
+        }
+    }
+
+
+    // 🚨 RESTO DE LISTENERS (Mantener la lógica de cálculo y PEP)
     interesAnualInput.addEventListener('input', (e) => {
         let value = e.target.value;
         const parts = value.split('.');
@@ -1056,10 +1153,6 @@ function initLoanFormLogic() {
         e.target.value = e.target.value.replace(/[^0-9]/g, '');
     });
 
-    plazoInput.addEventListener('input', (e) => {
-        e.target.value = e.target.value.replace(/[^0-9]/g, '');
-    });
-
     mesesSoloInteresInput.addEventListener('input', (e) => {
         // 1. Quitar caracteres no numéricos
         let value = e.target.value.replace(/[^0-9]/g, '');
@@ -1083,7 +1176,7 @@ function initLoanFormLogic() {
         updateHibridoInfo();
     });
 
-    // 🚨 NUEVA FUNCIÓN: Lógica para previsualizar la cuota mensual
+    // 🚨 NUEVA FUNCIÓN: Lógica para previsualizar la cuota mensual (MANTENER)
     function calculateEstimatedMonthlyPayment() {
         const monto = parseFloat(montoInput.value) || 0;
         const interesAnual = parseFloat(interesAnualInput.value) || 0;
@@ -1126,18 +1219,21 @@ function initLoanFormLogic() {
     interesAnualInput.addEventListener('input', calculateEstimatedMonthlyPayment);
 
 
-    // Lógica de validación PEP/UIT
+    // Lógica de validación PEP/UIT (MANTENER)
     function updateDeclaracionVisibility() {
         const monto = parseFloat(montoInput.value) || 0;
         const esPEP = isPepCheckbox.checked;
         const motivo = getDomElement('declaracion-motivo');
         const VALOR_UIT_LOCAL = 5150;
 
-        if (monto > VALOR_UIT_LOCAL || esPEP) {
+        // Solo se requiere PEP si el tipo de documento es DNI (visible)
+        const isDniType = docTypeSelect.value === 'DNI';
+
+        if ((monto > VALOR_UIT_LOCAL || (esPEP && isDniType))) {
             declaracionContainer.style.display = 'block';
             declaracionCheckbox.required = true;
-            if (esPEP && monto <= VALOR_UIT_LOCAL) motivo.textContent = 'Requerido por ser Persona Expuesta Políticamente (PEP).';
-            else if (esPEP && monto > VALOR_UIT_LOCAL) motivo.textContent = 'Requerido por monto mayor a 1 UIT y por ser PEP.';
+            if (esPEP && isDniType && monto <= VALOR_UIT_LOCAL) motivo.textContent = 'Requerido por ser Persona Expuesta Políticamente (PEP).';
+            else if (esPEP && isDniType && monto > VALOR_UIT_LOCAL) motivo.textContent = 'Requerido por monto mayor a 1 UIT y por ser PEP.';
             else motivo.textContent = `Requerido para montos mayores a 1 UIT (S/ ${VALOR_UIT_LOCAL.toFixed(2)}).`;
         } else {
             declaracionContainer.style.display = 'none';
@@ -1165,55 +1261,32 @@ function initLoanFormLogic() {
     isPepCheckbox.addEventListener('change', updateDeclaracionVisibility);
     mesesSoloInteresInput.addEventListener('input', updateHibridoInfo);
 
-    dniInput.addEventListener('blur', async () => {
-        toggleFormLock(false);
-        nombresInput.value = '';
-        apellidosInput.value = '';
-
-        const dni = dniInput.value;
-
-        if (dni.length !== 8) { dniStatus.textContent = ''; return; }
-
-        const hasActiveLoan = loans.some(loan => loan.dni === dni && loan.status === 'Activo');
-
-        if (hasActiveLoan) {
-            dniStatus.textContent = '⚠️ Este cliente ya tiene un préstamo activo. Formulario bloqueado.';
-            dniStatus.style.color = 'orange';
-            toggleFormLock(true);
-            return;
-        }
-
-        dniStatus.textContent = 'Buscando...'; dniStatus.style.color = '#667085';
-
-        try {
-            const response = await fetch(`${API_URL}/api/dni/${dni}`);
-            const data = await response.json();
-
-            if (response.ok && data.nombres) {
-                nombresInput.value = data.nombres;
-                apellidosInput.value = `${data.apellidoPaterno} ${data.apellidoMaterno}`;
-                dniStatus.textContent = '✅ Cliente encontrado y sin préstamos activos.';
-                dniStatus.style.color = 'var(--success-color)';
-            } else {
-                throw new Error(data.message || 'No se encontraron resultados.');
-            }
-        } catch (error) {
-            dniStatus.textContent = `❌ ${error.message}`;
-            dniStatus.style.color = 'var(--danger-color)';
-        }
-    });
-
     // Event Listener del formulario de Préstamos (submit)
     getDomElement('loanForm').addEventListener('submit', async function(event) {
         event.preventDefault();
 
-        // 🚨 MODIFICACIÓN: Capturar la tasa anual
+        // 🚨 MODIFICACIÓN: Capturar el ID del documento, no solo el DNI
+        const documentId = docIdInput.value;
+
+        // Validar campos obligatorios que podrían quedar vacíos si la búsqueda falla
+        if (!nombresInput.value || !apellidosInput.value) {
+            docIdStatus.textContent = '❌ Por favor, complete o valide los datos del cliente.';
+            docIdStatus.style.color = 'var(--danger-color)';
+            return;
+        }
+
+
         const interes_anual = parseFloat(getDomElement('interes_anual').value);
 
+        // 🚨 CAMBIO CRÍTICO: Usar el ID del documento en lugar de 'dni'
         const newLoanData = {
-            client: { dni: dniInput.value, nombres: nombresInput.value, apellidos: apellidosInput.value, is_pep: isPepCheckbox.checked },
+            client: {
+                dni: documentId, // Se utiliza el campo 'dni' en la DB para guardar el DNI o RUC
+                nombres: nombresInput.value,
+                apellidos: apellidosInput.value,
+                is_pep: isPepCheckbox.checked
+            },
             monto: parseFloat(montoInput.value),
-            // 🚨 MODIFICACIÓN: Enviar la tasa ANUAL
             interes_anual: interes_anual,
             fecha: getDomElement('fecha').value,
             plazo: parseInt(getDomElement('plazo').value),
@@ -1228,17 +1301,13 @@ function initLoanFormLogic() {
             if (!response.ok) {
                 const errorData = await response.json();
 
-                // Si es un error del negocio (ej. 409: ya tiene un préstamo o 400: monto inválido), mostrarlo en el estado del DNI y en el log.
                 if (response.status === 409 || response.status === 400) {
-                    getDomElement('dni-status').textContent = `⚠️ Error: ${errorData.error || response.statusText}`;
-                    getDomElement('dni-status').style.color = 'var(--danger-color)';
+                    getDomElement('doc-id-status').textContent = `⚠️ Error: ${errorData.error || response.statusText}`;
+                    getDomElement('doc-id-status').style.color = 'var(--danger-color)';
                     console.error("Error de Negocio al crear préstamo:", errorData.error);
-
-                    // Si ocurre un error de negocio, no lanzamos la excepción que dispara el catch.
                     return;
                 }
 
-                // Para otros errores no esperados del servidor, sí lanzamos la excepción
                 throw new Error(errorData.error || `Error ${response.status}`);
             }
 
@@ -1247,13 +1316,12 @@ function initLoanFormLogic() {
             showSuccessAnimation('¡Préstamo Registrado!');
 
         } catch (error) {
-            // 🚨 CAMBIO CRÍTICO: ELIMINAR EL ALERT() RESTANTE
             console.error(`Error CRÍTICO al guardar el préstamo:`, error);
-            // Se elimina la línea alert(...) que causaba el cuadro molesto.
         }
     });
 
-    // Ejecutar el cálculo inicial
+    // Ejecutar el manejo de tipo de documento inicial
+    handleDocumentTypeChange();
     calculateEstimatedMonthlyPayment();
 }
 
@@ -1370,16 +1438,17 @@ function openPaymentModal(loan) {
 }
 
 // NUEVA FUNCIÓN: Muestra el modal del enlace de pago
-function showCheckoutLinkModal(mpUrl, totalAmount, paymentMethod, clientName, correlativo) {
-    currentMpUrl = mpUrl;
+function showCheckoutLinkModal(izpUrl, totalAmount, paymentMethod, clientName, correlativo) {
+    currentIzpUrl = izpUrl; // 🚨 CAMBIO: Usar variable Izipay
     currentClientName = clientName;
     getDomElement('checkoutLinkAmount').textContent = `S/ ${totalAmount.toFixed(2)}`;
     getDomElement('checkoutLinkMethod').textContent = paymentMethod;
-    getDomElement('mpLinkOutput').value = mpUrl;
+    getDomElement('mpLinkOutput').value = izpUrl; // El ID del input HTML sigue siendo 'mpLinkOutput'
 
-    // 🚨 CAMBIO: Mostrar el correlativo en el modal
+    // 🚨 CAMBIO: Mostrar el correlativo en el modal y cambiar la etiqueta
     const titleEl = getDomElement('checkoutLinkTitle');
     titleEl.textContent = `🔗 Enlace de Pago Generado (Boleta N° ${correlativo.toString().padStart(8, '0')})`;
+    getDomElement('mpLinkOutput').previousElementSibling.textContent = 'Enlace de Pago (Izipay)';
 
 
     // Asegurarse de que el input esté enfocado para copiar si es posible
@@ -1404,13 +1473,15 @@ function copyMpLink() {
     const linkInput = getDomElement('mpLinkOutput');
     linkInput.select();
     linkInput.setSelectionRange(0, 99999);
-    navigator.clipboard.writeText(linkInput.value);
+    // 🚨 CAMBIO: Usar currentIzpUrl si está definido, aunque el nombre del input sea 'mpLinkOutput'
+    navigator.clipboard.writeText(currentIzpUrl || linkInput.value);
     showSuccessAnimation('✅ Enlace copiado al portapapeles.');
 }
 
 // NUEVA FUNCIÓN: Utiliza la API nativa de compartir
 async function shareMpLink() {
-    if (!navigator.share || !currentMpUrl) {
+    // 🚨 CAMBIO: Usar currentIzpUrl
+    if (!navigator.share || !currentIzpUrl) {
         alert('La función de compartir no está disponible en este dispositivo o navegador.');
         return;
     }
@@ -1418,8 +1489,8 @@ async function shareMpLink() {
     try {
         await navigator.share({
             title: `Pago Préstamo PrestaPro (S/ ${getDomElement('checkoutLinkAmount').textContent})`,
-            text: `¡Hola ${currentClientName || 'cliente'}! Tu enlace de pago para PrestaPro ha sido generado. Paga S/ ${getDomElement('checkoutLinkAmount').textContent} usando este link:`,
-            url: currentMpUrl,
+            text: `¡Hola ${currentClientName || 'cliente'}! Tu enlace de pago para PrestaPro (vía Izipay) ha sido generado. Paga S/ ${getDomElement('checkoutLinkAmount').textContent} usando este link:`,
+            url: currentIzpUrl, // 🚨 CAMBIO: Usar currentIzpUrl
         });
         // Opcional: Mostrar una animación de éxito aquí si la compartición fue exitosa (aunque la API de Share no lo garantiza)
     } catch (error) {
@@ -1456,19 +1527,19 @@ async function handlePaymentSubmit(e) {
         payment_date: paymentDate
     };
 
-    // Identificamos el préstamo y cliente para obtener datos necesarios para MP
+    // Identificamos el préstamo y cliente para obtener datos necesarios para Izipay
     const loan = loans.find(l => l.id == loanId);
 
-    // Si es Transferencia o Yape/Plin, ahora lo mapeamos a Mercado Pago
+    // Si es Transferencia o Yape/Plin, ahora lo mapeamos a Izipay
     if (selectedMethod === 'Transferencia' || selectedMethod === 'Yape/Plin') {
-        // --- INICIO DE FLUJO DE PAGO CON MERCADO PAGO ---
+        // --- INICIO DE FLUJO DE PAGO CON IZIPAY ---
 
         if (!loan) {
             alert("Error: No se encontró la información del cliente para iniciar el pago.");
             return;
         }
 
-        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollect.toFixed(2)} mediante Mercado Pago para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
+        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollect.toFixed(2)} mediante Izipay para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
             return;
         }
 
@@ -1476,8 +1547,8 @@ async function handlePaymentSubmit(e) {
         closeModal(getDomElement('paymentModal'));
 
         try {
-            // 🚨 Llamada a la ruta correcta de Mercado Pago
-            const response = await fetch(`${API_URL}/api/mp/create-order`, {
+            // 🚨 CAMBIO CRÍTICO: Llamada a la nueva ruta de IZIPAY
+            const response = await fetch(`${API_URL}/api/izipay/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1499,24 +1570,23 @@ async function handlePaymentSubmit(e) {
                 } catch (e) {
                     errorData = { error: 'Error de formato (Estado: ' + response.status + ' ' + response.statusText + ')', status: response.status };
                 }
-                throw new Error(`(${response.status}) Error de Mercado Pago. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
+                throw new Error(`(${response.status}) Error de Izipay. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
             }
 
-            const mpData = await response.json();
-            const mpUrl = mpData.url;
+            const izpData = await response.json();
+            const izpUrl = izpData.url;
 
-            if (mpUrl) {
+            if (izpUrl) {
                 // *** CRÍTICO: Muestra el link en un modal en lugar de redirigir ***
-                // 🚨 CAMBIO: Pasar el correlativo de boleta al modal
-                showCheckoutLinkModal(mpUrl, totalToCollect, selectedMethod, `${loan.nombres} ${loan.apellidos}`, mpData.correlativo_boleta || 'N/A');
+                // 🚨 CAMBIO: Pasar el correlativo de boleta y URL de Izipay
+                showCheckoutLinkModal(izpUrl, totalToCollect, selectedMethod, `${loan.nombres} ${loan.apellidos}`, izpData.correlativo_boleta || 'N/A');
                 return;
             } else {
-                throw new Error("El backend no proporcionó un URL de pago válido de Mercado Pago.");
+                throw new Error("El backend no proporcionó un URL de pago válido de Izipay.");
             }
 
         } catch (error) {
-            alert(`❌ Error al iniciar el pago con Mercado Pago. Detalles: ${error.message}`);
-            // openModal(getDomElement('paymentModal')); // Opcional: Reabrir si quieres que el usuario intente de nuevo
+            alert(`❌ Error al iniciar el pago con Izipay. Detalles: ${error.message}`);
             return;
         }
 
@@ -1640,6 +1710,8 @@ async function searchLoansByDni(dni) {
     const quickPaymentResultSection = getDomElement('quick-payment-result-section');
     quickPaymentTableBody.innerHTML = '';
 
+    // 🚨 NOTA: Esta función sigue siendo solo por DNI (8 dígitos) para el módulo de pagos,
+    // ya que el campo de entrada en el HTML de pagos está diseñado solo para 8 dígitos.
     if (dni.length !== 8) {
         statusEl.textContent = 'Ingresa 8 dígitos de DNI.';
         statusEl.style.color = 'var(--danger-color)';
@@ -1871,16 +1943,17 @@ async function handleQuickPaymentSubmit() {
 
     const loan = currentLoanForQuickPayment;
 
-    // Si es Transferencia o Yape/Plin, se usa Mercado Pago.
+    // Si es Transferencia o Yape/Plin, se usa Izipay.
     if (selectedMethod === 'Transferencia' || selectedMethod === 'Yape/Plin') {
-        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollectRounded.toFixed(2)} mediante Mercado Pago para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
+        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollectRounded.toFixed(2)} mediante Izipay para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
             return;
         }
 
         getDomElement('quick-payment-summary-section').style.display = 'none';
 
         try {
-            const response = await fetch(`${API_URL}/api/mp/create-order`, {
+            // 🚨 CAMBIO CRÍTICO: Llamada a la nueva ruta de IZIPAY
+            const response = await fetch(`${API_URL}/api/izipay/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1903,21 +1976,22 @@ async function handleQuickPaymentSubmit() {
                 } catch (e) {
                     errorData = { error: 'Error de formato (Estado: ' + response.status + ' ' + response.statusText + ')', status: response.status };
                 }
-                throw new Error(`(${response.status}) Error de Mercado Pago. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
+                throw new Error(`(${response.status}) Error de Izipay. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
             }
 
-            const mpData = await response.json();
-            const mpUrl = mpData.url;
+            const izpData = await response.json();
+            const izpUrl = izpData.url;
 
-            if (mpUrl) {
-                showCheckoutLinkModal(mpUrl, totalToCollectRounded, selectedMethod, `${loan.nombres} ${loan.apellidos}`, mpData.correlativo_boleta || 'N/A');
+            if (izpUrl) {
+                // 🚨 CAMBIO: Pasar la URL y datos de Izipay
+                showCheckoutLinkModal(izpUrl, totalToCollectRounded, selectedMethod, `${loan.nombres} ${loan.apellidos}`, izpData.correlativo_boleta || 'N/A');
                 return;
             } else {
-                throw new Error("El backend no proporcionó un URL de pago válido de Mercado Pago.");
+                throw new Error("El backend no proporcionó un URL de pago válido de Izipay.");
             }
 
         } catch (error) {
-            alert(`❌ Error al iniciar el pago con Mercado Pago. Detalles: ${error.message}`);
+            alert(`❌ Error al iniciar el pago con Izipay. Detalles: ${error.message}`);
             return;
         }
     }
@@ -2727,7 +2801,8 @@ function toggleFormLock(locked) {
     const formElements = loanForm.querySelectorAll('input, button, select');
     const fieldsets = loanForm.querySelectorAll('fieldset');
     formElements.forEach(element => {
-        if (element.id !== 'dni') {
+        // 🚨 CAMBIO CRÍTICO: No bloquear la selección de tipo de documento
+        if (element.id !== 'doc_id' && element.id !== 'doc_type') {
             element.disabled = locked;
         }
     });
@@ -3174,7 +3249,6 @@ function printModalContent(contentElement) {
                     font-size: 13px;
                     font-weight: 700;
                     text-transform: uppercase;
-                    letter-spacing: 0.5px;
                     padding-bottom: 8px;
                     border-bottom: 2px solid #ccc;
                 }
@@ -3503,15 +3577,6 @@ function handleSmartShare(platform) {
 }
 
 // --- FUNCIÓN AUXILIAR: SOLO DESCARGAR PDF DETALLES (SIN MENÚ WINDOWS) ---
-// En public/logica.js (Reemplazar la función descargarPDFDetalles)
-// En public/logica.js (Reemplazar la función descargarPDFDetalles)
-
-// En public/logica.js (Reemplazar la función descargarPDFDetalles)
-
-// En public/logica.js (Reemplazar la función descargarPDFDetalles)
-
-// En public/logica.js (Reemplazar la función descargarPDFDetalles)
-
 function descargarPDFDetalles(loan) {
     if (typeof window.jspdf === 'undefined') return;
 
@@ -3635,272 +3700,6 @@ function descargarPDFDetalles(loan) {
     } catch (error) {
         console.error("Error generando PDF", error);
     }
-}
-
-// --- FUNCIÓN: EXPORTAR REPORTE DE CAJA A PDF ---
-function exportarCajaPDF() {
-    if (typeof window.jspdf === 'undefined') {
-        alert("Error: Librería jsPDF no cargada.");
-        return;
-    }
-
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-
-    // 1. Obtener datos de la interfaz
-    const dateFrom = getDomElement('cashRegisterDateFrom').value;
-    const dateTo = getDomElement('cashRegisterDateTo').value;
-    const summaryText = getDomElement('cashRegisterSummary').innerText.split('\n').filter(line => line.trim() !== '');
-
-    // 1.1. Verificar si la caja está cerrada revisando el contenido de la tabla
-    const tbody = getDomElement('cashRegisterTableBody');
-    const isClosed = tbody.querySelector('td')?.textContent.includes('CUADRE DE CAJA HECHO');
-
-
-    // 2. Encabezado
-    doc.setFontSize(18);
-    doc.setTextColor(0, 93, 255); // Azul PrestaPro
-    doc.text("REPORTE DE MOVIMIENTOS DE CAJA", 105, 20, { align: 'center' });
-
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Generado el: ${new Date().toLocaleString('es-PE')}`, 105, 28, { align: 'center' });
-    doc.text(`Rango: Del ${dateFrom} al ${dateTo}`, 105, 33, { align: 'center' });
-
-    // 3. Resumen (Caja de totales)
-    doc.setDrawColor(0, 93, 255);
-    doc.setFillColor(240, 245, 255);
-    doc.rect(14, 40, 182, 35, 'FD'); // Caja de fondo (Aumentada altura para 4 líneas)
-
-    doc.setFontSize(11);
-    doc.setTextColor(0, 0, 0);
-
-    let yResumen = 48;
-    summaryText.forEach((line) => {
-        // Limpiamos un poco el texto para que se vea bien
-        if(line.includes('Diferencia')) return; // Omitir línea de diferencia si no es cierre
-        doc.text(line, 20, yResumen);
-        yResumen += 7;
-    });
-
-    let startYTable = 85;
-
-    // 4. Tabla de Movimientos
-    if (isClosed) {
-        doc.setFontSize(14);
-        doc.setTextColor(200, 0, 0); // Rojo para la advertencia
-        doc.text("🔒 TABLA NO DISPONIBLE - CUADRE DE CAJA REALIZADO", 105, startYTable, { align: 'center' });
-    } else {
-        doc.autoTable({
-            html: '#cashRegisterTable', // Jala los datos directo de tu tabla HTML
-            startY: startYTable,
-            theme: 'grid',
-            headStyles: {
-                fillColor: [0, 93, 255],
-                textColor: [255, 255, 255],
-                halign: 'center',
-                fontStyle: 'bold'
-            },
-            bodyStyles: {
-                textColor: [50, 50, 50],
-                fontSize: 10
-            },
-            columnStyles: {
-                0: { halign: 'left' }, // Cliente
-                1: { halign: 'center' }, // Método
-                2: { halign: 'right' }, // Capital/Interés
-                3: { halign: 'right' }, // Mora
-                4: { fontStyle: 'bold', halign: 'right' } // Total Ingreso
-            },
-            footStyles: {
-                fillColor: [240, 240, 240],
-                textColor: [0, 0, 0],
-                fontStyle: 'bold'
-            }
-        });
-    }
-
-
-    // 5. Descargar
-    const fileName = `Reporte_Caja_${dateFrom}_${dateTo}.pdf`;
-    doc.save(fileName);
-}
-
-// --- FUNCIÓN: IMPRIMIR REPORTE DE CAJA ---
-function imprimirCaja() {
-    const dateFrom = getDomElement('cashRegisterDateFrom').value;
-    const dateTo = dateFrom; // Forzado
-
-    // Clonamos el resumen y la tabla para no afectar la vista actual
-    const summaryHTML = getDomElement('cashRegisterSummary').innerHTML;
-
-    // 1. Verificar si la caja está cerrada revisando el contenido de la tabla
-    const tbody = getDomElement('cashRegisterTableBody');
-    const isClosed = tbody.querySelector('td')?.textContent.includes('CUADRE DE CAJA HECHO');
-
-    let tableContentHTML = '';
-
-    if (isClosed) {
-        tableContentHTML = `
-            <div style="text-align: center; color: #f44336; font-weight: 700; padding: 40px; font-size: 16px; background-color: #f9f9f9; border: 1px solid #f44336; border-radius: 5px;">
-                🔒 NO DISPONIBLE - CUADRE DE CAJA HECHO
-            </div>
-        `;
-    } else {
-        // Si no está cerrado, usamos el HTML de la tabla normal
-        tableContentHTML = getDomElement('cashRegisterTable').outerHTML;
-    }
-
-
-    // Crear iframe temporal para imprimir
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'absolute';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = 'none';
-    document.body.appendChild(iframe);
-
-    const iframeDoc = iframe.contentWindow.document;
-    iframeDoc.open();
-
-    iframeDoc.write(`
-        <!DOCTYPE html>
-        <html lang="es">
-        <head>
-            <meta charset="UTF-8">
-            <title>Reporte de Caja</title>
-            <style>
-                body { font-family: sans-serif; padding: 20px; color: #333; }
-                h1 { text-align: center; color: #000; margin-bottom: 5px; }
-                .subtitle { text-align: center; font-size: 12px; color: #666; margin-bottom: 20px; }
-                
-                /* Estilos del Resumen */
-                .summary-box { 
-                    border: 2px solid #333; 
-                    padding: 15px; 
-                    margin-bottom: 20px; 
-                    border-radius: 5px;
-                    background-color: #f9f9f9;
-                }
-                .summary-box p { margin: 5px 0; font-size: 14px; }
-                
-                /* Estilos de la Tabla */
-                table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
-                th { background-color: #eee; border: 1px solid #999; padding: 8px; text-transform: uppercase; }
-                td { border: 1px solid #999; padding: 8px; text-align: right; }
-                td:first-child { text-align: left; } /* Cliente a la izquierda */
-                td:nth-child(2) { text-align: center; } /* Método centrado */
-                
-                /* Utilidades de impresión */
-                @media print {
-                    @page { margin: 10mm; }
-                    body { -webkit-print-color-adjust: exact; }
-                }
-            </style>
-        </head>
-        <body>
-            <h1>REPORTE DE MOVIMIENTOS DE CAJA</h1>
-            <p class="subtitle">
-                Día: ${dateFrom} <br>
-                Impreso el: ${new Date().toLocaleString('es-PE')}
-            </p>
-
-            <div class="summary-box">
-                ${summaryHTML}
-            </div>
-
-            <h2 style="font-size: 16px; margin-bottom: 10px;">Movimientos del Día</h2>
-            ${tableContentHTML}
-        </body>
-        </html>
-    `);
-
-    iframeDoc.close();
-
-    iframe.onload = function() {
-        setTimeout(function() {
-            iframe.contentWindow.focus();
-            iframe.contentWindow.print();
-            setTimeout(() => { document.body.removeChild(iframe); }, 1000);
-        }, 500);
-    };
-}
-
-
-// ==========================================
-// IMPLEMENTACIÓN DE CUADRE DE CAJA CON HISTORIAL
-// ==========================================
-
-// 🔹 NUEVA FUNCIÓN: Cargar historial de cierres desde el backend
-async function loadClosureHistory() {
-    try {
-        const response = await fetch(`${API_URL}/api/cash-closures/history`);
-        if (!response.ok) throw new Error('Error al cargar historial de cierres');
-
-        const closures = await response.json();
-        return closures;
-    } catch (error) {
-        console.error('Error cargando historial:', error);
-        return [];
-    }
-}
-
-// 🔹 NUEVA FUNCIÓN: Renderizar tabla de historial de cierres
-async function renderClosureHistory() {
-    const historyTableBody = getDomElement('closureHistoryTableBody');
-    if (!historyTableBody) return;
-
-    historyTableBody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Cargando historial...</td></tr>';
-
-    const closures = await loadClosureHistory();
-
-    if (closures.length === 0) {
-        historyTableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #9CA3AF;">No hay cierres registrados aún.</td></tr>';
-        return;
-    }
-
-    // Ordenar por fecha descendente (más reciente primero)
-    closures.sort((a, b) => new Date(b.closure_date) - new Date(a.closure_date));
-
-    historyTableBody.innerHTML = closures.map(closure => {
-        const fecha = new Date(closure.closure_date).toLocaleDateString('es-PE', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-            timeZone: 'UTC'
-        });
-
-        const horaCierre = new Date(closure.closed_at).toLocaleString('es-PE', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-        });
-
-        const systemAmount = parseFloat(closure.system_cash_amount);
-        const declaredAmount = parseFloat(closure.declared_amount);
-        const difference = parseFloat(closure.difference);
-
-        // Determinar el color de la diferencia
-        let diffColor = 'var(--success-color)';
-        let diffIcon = '✅';
-        if (Math.abs(difference) > 0.01) {
-            diffColor = 'var(--danger-color)';
-            diffIcon = '⚠️';
-        }
-
-        return `
-            <tr>
-                <td>${fecha}</td>
-                <td>${horaCierre}</td>
-                <td style="font-weight: 600;">S/ ${systemAmount.toFixed(2)}</td>
-                <td style="font-weight: 600;">S/ ${declaredAmount.toFixed(2)}</td>
-                <td style="color: ${diffColor}; font-weight: 700;">
-                    ${diffIcon} S/ ${Math.abs(difference).toFixed(2)}
-                </td>
-                <td>${closure.closed_by || 'Admin'}</td>
-            </tr>
-        `;
-    }).join('');
 }
 
 // 🔹 EXPORTAR E IMPRIMIR HISTORIAL DE CIERRES
@@ -4112,7 +3911,7 @@ function imprimirHistorialCierres() {
         };
     });
 }
-handleQuickPaymentSubmi
+
 // 🔹 EXPONER FUNCIONES GLOBALMENTE
 window.exportarHistorialCierresPDF = exportarHistorialCierresPDF;
 window.imprimirHistorialCierres = imprimirHistorialCierres;
