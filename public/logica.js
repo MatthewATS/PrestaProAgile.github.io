@@ -1022,7 +1022,7 @@ function initLoanFormLogic() {
     const mesesSoloInteresInput = getDomElement('meses_solo_interes');
     const monthlyPaymentPreview = getDomElement('monthly-payment-preview');
     const estimatedMonthlyPayment = getDomElement('estimated-monthly-payment');
-    
+
     interesAnualInput.addEventListener('input', (e) => {
         let value = e.target.value;
         const parts = value.split('.');
@@ -1851,14 +1851,22 @@ async function handleQuickPaymentSubmit() {
 
     const totalToCollect = calculatedPaymentData.amount + calculatedPaymentData.mora;
 
+    // Constante local para referencia (S/ 500)
+    const MP_LIMIT_YAPE = 500;
+
     // Validar restricción de monto nuevamente antes del envío
     if (selectedMethod === 'Yape/Plin' && totalToCollect > MP_LIMIT_YAPE) {
         alert(`Operación cancelada: El monto total de S/ ${totalToCollect.toFixed(2)} excede el límite de S/ ${MP_LIMIT_YAPE.toFixed(2)} para Yape/Plin.`);
         return;
     }
 
+    // 🚨 MODIFICACIÓN CRÍTICA: Forzar el redondeo de los montos a 2 decimales para la API de MP
+    const totalToCollectFixed = totalToCollect.toFixed(2);
+    const amountCIFixed = calculatedPaymentData.amount.toFixed(2);
+    const moraFixed = calculatedPaymentData.mora.toFixed(2);
+
     const paymentData = {
-        payment_amount: totalToCollect, // Total que se envía
+        payment_amount: totalToCollect, // Total que se envía (se usará en el flujo de Efectivo)
         mora_amount: calculatedPaymentData.mora,
         payment_method: selectedMethod,
         payment_date: paymentDate // Usamos la fecha ISO para enviar al backend
@@ -1869,7 +1877,7 @@ async function handleQuickPaymentSubmit() {
     // Si es Transferencia o Yape/Plin, se usa Mercado Pago.
     if (selectedMethod === 'Transferencia' || selectedMethod === 'Yape/Plin') {
         // --- INICIO DE FLUJO DE PAGO CON MERCADO PAGO ---
-        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollect.toFixed(2)} mediante Mercado Pago para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
+        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollectFixed} mediante Mercado Pago para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
             return;
         }
 
@@ -1882,14 +1890,15 @@ async function handleQuickPaymentSubmit() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    amount: totalToCollect.toFixed(2),
+                    // 🚨 USAR LOS VALORES REDONDEADOS ESTRICTAMENTE PARA MP
+                    amount: totalToCollectFixed,
                     loanId: loan.id,
                     clientDni: loan.dni,
                     clientName: loan.nombres,
                     clientLastName: loan.apellidos,
                     payment_date: paymentDate,
-                    amount_ci: calculatedPaymentData.amount.toFixed(2),
-                    amount_mora: calculatedPaymentData.mora.toFixed(2)
+                    amount_ci: amountCIFixed,
+                    amount_mora: moraFixed
                 })
             });
 
@@ -2199,7 +2208,7 @@ function updateDashboard() {
             .filter(p => p.payment_date.split('T')[0] === today)
             .reduce((pSum, p) => pSum + parseFloat(p.payment_amount), 0);
     }, 0);
-
+    
 
     getDomElement('totalLoaned').textContent = `S/ ${totalLoaned.toFixed(2)}`;
     getDomElement('activeLoans').textContent = activeLoans;
