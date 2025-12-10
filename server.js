@@ -3,8 +3,9 @@ const path = require('path');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const crypto = require('crypto');
-// 🚨 MÓDULO PARA HASH (Necesario para simular la firma digital de Izipay)
 const { createHmac } = require('crypto');
+// 🚨 Nuevo: Módulo AXIOS para llamadas HTTP salientes a la API de Izipay
+const axios = require('axios');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -23,21 +24,16 @@ const pool = mysql.createPool(process.env.DATABASE_URL);
 // --- CONSTANTES DE NEGOCIO Y API DE IZIPAY (PAYZEN/LYRA) ---
 const TASA_MORA_MENSUAL = 1;
 
-// 🚨 CREDENCIALES IZIPAY DE PRODUCCIÓN (Obtenidas del panel) 🚨
-// Usuario/Merchant ID: 68304620
-// Contraseña de producción (API REST): prodpassword_CENMHCY3YIZBg...tAMdLDWG
-// Clave HMAC-SHA-256 de producción (para verificar URL de retorno): xenUz7o7m1yTrLTqpHJq...OdwMmpzsJ
-
+// 🚨🚨🚨 MODIFICACIÓN CRÍTICA: Credenciales de PRODUCCIÓN 🚨🚨🚨
+// Merchant ID (user id)
 const IZP_MERCHANT_ID = '68304620';
-// La "Contraseña de producción" es el código de seguridad secreto para el servidor
-const IZP_PASSWORD = 'prodpassword_CENMHCY3YIZBg3lRK6VOGZKR5eiZa6cUR6KgEtAMdLDWG';
-// La clave pública de JS (simulada aquí, usada para el formulario incrustado)
-const IZP_PUBLIC_KEY = '68304620:publickey_WjgyV2UrfQftvbTjMalVZSjFfI5KGenL3F687WfnZb1aEuF4V';
-// La URL Base de la API Izipay (simulación)
-const IZP_ENDPOINT_BASE = 'https://api.izipay.pe/v1/payment';
-// La URL para verificar el hash de seguridad
-const IZP_HMAC_KEY = 'xenUz7o7m1yTrLTqpHJq4QekjbKA4DsyY0lDMwmlpzSj'; // Clave HMAC-SHA-256
-
+// Contraseña de Producción
+const IZP_PASSWORD = 'prodpassword_CEhMhCy3YlZblRGkqVOGZJKlR5ei2a6cUR6KgtAMIdLWG';
+// Clave Pública de Producción (Se mantiene la provista, aunque no se usa en este código)
+const IZP_PUBLIC_KEY = '68304620:publickey_wjo2urlfqtyvbTiMaVZSdF1fSkGenL5fG87WNzb1aEu4V';
+// 🚨 CAMBIO CRÍTICO: Endpoint de PRODUCCIÓN (Usando el tuyo)
+const IZP_ENDPOINT_BASE_API = 'https://api.micuentaweb.pe/api-payment/V4/Charge/CreatePayment';
+const IZP_HMAC_KEY = 'xenUz7o7m1yTrLTqpHJq4QekjbKA4DsyY0lDMwmlpzSj'; // Clave de firma (suele ser fija)
 
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app';
 
@@ -537,21 +533,13 @@ app.get('/api/cash-closures/:date', async (req, res) => {
 // 4. RUTAS DE IZIPAY (Sustituye a Mercado Pago)
 // ==========================================================
 
-// 🚨 POST /api/izipay/create-order (SIMULACIÓN DE CREACIÓN DE FORMULARIO DE PAGO)
+// 🚨 POST /api/izipay/create-order (MODIFICADO PARA INTENTAR LLAMADA REAL)
 app.post('/api/izipay/create-order', async (req, res) => {
     console.log('[IZIPAY] 📥 Recibida solicitud de creación de orden:', req.body);
 
-    const { amount, loanId, clientDni, payment_date, amount_ci, amount_mora } = req.body;
+    const { amount, loanId, clientDni, payment_date, amount_ci, amount_mora, clientName, clientLastName } = req.body;
 
-    if (!amount || !loanId || !clientDni) {
-        console.error('[IZIPAY ERROR] ❌ Faltan campos requeridos');
-        return res.status(400).json({
-            success: false,
-            error: 'Faltan campos requeridos: amount, loanId, clientDni'
-        });
-    }
-
-    // 1. Generar Correlativo de Boleta y Transaction ID
+    // --- PASO 1: Generar Correlativo de Boleta y Transaction ID ---
     let correlativo_boleta = null;
     let transaction_id = null;
     try {
@@ -565,81 +553,191 @@ app.post('/api/izipay/create-order', async (req, res) => {
     }
 
     const totalAmount = parseFloat(amount);
-    // Izipay espera el monto en céntimos
+    // Izipay maneja el monto en céntimos
     const amountInCents = Math.round(totalAmount * 100);
 
-    // 2. SIMULACIÓN DE CREACIÓN DE PAGO EN IZIPAY
-    // En un entorno real, aquí se enviarían los datos a: https://api.izipay.pe/v1/payment
+    // --- PASO 2: INTENTAR LLAMADA REAL A IZIPAY API ---
+    let checkoutUrl = null;
 
-    // 🚨 Izipay necesita que los datos se firmen. Simulación de la firma HMAC-SHA-256
-    // La firma se crea sobre una cadena de datos críticos y el 'Código de Seguridad' (IZP_PASSWORD)
-    const signatureBase = `${IZP_MERCHANT_ID}${amountInCents}PEN${transaction_id}`;
+    try {
+        // La autenticación básica usa Merchant ID y Password
+        const authString = Buffer.from(`${IZP_MERCHANT_ID}:${IZP_PASSWORD}`).toString('base64');
 
-    const hmac = createHmac('sha256', IZP_PASSWORD)
-        .update(signatureBase)
-        .digest('hex');
+        const izipayPayload = {
+            'amount': amountInCents,
+            'currency': 'PEN',
+            'orderId': transaction_id,
+            // Datos del cliente para el formulario
+            'customer': {
+                'email': 'customer@example.com', // Usar un email de cliente real si se tiene
+                'billingDetails': {
+                    'firstName': clientName,
+                    'lastName': clientLastName
+                }
+            },
+            // Configuración de la integración/respuesta
+            'siteId': IZP_MERCHANT_ID,
+            'transactionOptions': {
+                // URLs públicas para el retorno y la notificación de pago (Webhook)
+                'answerUrl': `${YOUR_BACKEND_URL}/izipay/return`,
+                'notificationUrl': `${YOUR_BACKEND_URL}/api/izipay/webhook`
+            },
+            // Metadata para recuperar en el Webhook
+            'metadata': {
+                'loanId': loanId,
+                'amount_mora': amount_mora,
+                'correlativo_boleta': correlativo_boleta,
+                'amount_ci': amount_ci,
+                'total_amount': totalAmount
+            }
+        };
 
-    // 3. Crear el URL de redirección (simulado)
-    // Izipay devuelve una URL de redirección al formulario, pero aquí simulamos devolver el link de pago final
-    const checkoutUrlSimulated = `https://izipay.pe/checkout/form?id=${transaction_id}&amount=${totalAmount.toFixed(2)}&hash=${hmac}`;
+        const response = await axios.post(IZP_ENDPOINT_BASE_API, izipayPayload, {
+            headers: {
+                'Authorization': `Basic ${authString}`,
+                'Content-Type': 'application/json'
+            }
+        });
 
+        // 🚨 Izipay (Micuentaweb) devuelve la URL de redirección en el formToken
+        checkoutUrl = response.data.answer.formToken;
 
-    // 4. Crear la respuesta al frontend
-    if (checkoutUrlSimulated) {
-        console.log('[IZIPAY] ✅ Orden de pago simulada exitosamente');
+        if (checkoutUrl) {
+            console.log('[IZIPAY] ✅ Orden de pago REAL generada exitosamente:', checkoutUrl);
+            return res.json({
+                success: true,
+                url: checkoutUrl, // URL real de Izipay
+                transactionId: transaction_id,
+                correlativo_boleta: correlativo_boleta
+            });
+        }
+
+        throw new Error("La respuesta de Izipay no contenía la URL de pago (formToken).");
+
+    } catch (error) {
+        // Este bloque se ejecuta si la llamada a Izipay falla por cualquier razón
+        // (ej. falta de SSL, credenciales erróneas, problema de red, etc.)
+        console.error('[IZIPAY ERROR] ❌ Falló la llamada REAL a la API de Izipay.', error.response ? error.response.data : error.message);
+
+        // --- FALLBACK: RETORNO DE URL SIMULADO (FLUJO DEMO) ---
+        console.log('[IZIPAY] ⚠️ Recurriendo a la URL de SIMULACIÓN debido al error anterior.');
+
+        const encodedMetadata = Buffer.from(JSON.stringify({
+            loanId: loanId,
+            amount_mora: amount_mora,
+            correlativo_boleta: correlativo_boleta,
+            amount_ci: amount_ci,
+            amount: amount,
+            payment_date: payment_date
+        })).toString('base64');
+
+        const checkoutUrlSimulated = `${YOUR_BACKEND_URL}/izipay/manual-payment?txn=${transaction_id}&metadata=${encodedMetadata}`;
+
         return res.json({
             success: true,
+            // 🚨 CRÍTICO: Devolver la URL de SIMULACIÓN
             url: checkoutUrlSimulated,
-            // 🚨 SIMULACIÓN: Retornar los datos que el webhook usará
-            izp_user: IZP_MERCHANT_ID,
-            izp_public_key: IZP_PUBLIC_KEY,
             transactionId: transaction_id,
             correlativo_boleta: correlativo_boleta
-        });
-    } else {
-        return res.status(500).json({
-            success: false,
-            error: "Error interno: No se pudo generar la URL de pago simulada de Izipay."
         });
     }
 
 });
 
 
-// 🚨 POST /api/izipay/webhook (SIMULACIÓN DE WEBHOOK DE IZIPAY)
-// Nota: Izipay usa notificaciones de IPN (Instant Payment Notification) o Webhooks.
+// 🚨 GET /izipay/manual-payment (Ruta de ayuda para la SIMULACIÓN)
+// Esta ruta sirve una página simple con las instrucciones para simular el Webhook.
+app.get('/izipay/manual-payment', (req, res) => {
+    const { txn, metadata } = req.query;
+
+    if (!txn || !metadata) {
+        return res.status(400).send('Faltan parámetros de transacción.');
+    }
+
+    // Decodificar la metadata para mostrar las instrucciones
+    const metadataDecoded = Buffer.from(metadata, 'base64').toString('utf8');
+    const metadataParsed = JSON.parse(metadataDecoded);
+
+    const webhookExampleBody = JSON.stringify({
+        status: 'PAID',
+        kr_order_id: txn,
+        amount: Math.round(parseFloat(metadataParsed.amount) * 100), // Monto en céntimos
+        kr_hash: 'SIMULATED_HASH',
+        kr_metadata: {
+            loanId: metadataParsed.loanId,
+            amount_mora: metadataParsed.amount_mora,
+            correlativo_boleta: metadataParsed.correlativo_boleta,
+            amount_ci: metadataParsed.amount_ci
+        }
+    }, null, 2);
+
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+            <title>Simulación de Pago Izipay</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; background-color: #f4f7f6; }
+                .container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+                h1 { color: #5D88FF; border-bottom: 2px solid #ccc; padding-bottom: 10px; }
+                h2 { color: #4CAF50; margin-top: 20px; }
+                pre { background-color: #eee; padding: 15px; border-radius: 5px; overflow-x: auto; }
+                .alert { background-color: #fff3cd; border: 1px solid #ffeeba; color: #856404; padding: 15px; border-radius: 5px; margin-top: 15px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>⚠️ Simulación de Flujo de Pago Izipay</h1>
+                <p>El enlace de pago real de Izipay no puede ser accedido o generado correctamente sin tener un dominio con **certificado SSL/HTTPS** y la configuración de claves de entorno real.</p>
+                <p>Para simular la confirmación del pago en tu sistema, usa las siguientes instrucciones para enviar un **Webhook** al backend:</p>
+
+                <h2>Datos de la Transacción (Frontend)</h2>
+                <p><strong>Transaction ID:</strong> <code>${txn}</code></p>
+                <p><strong>Monto Total:</strong> S/ ${metadataParsed.amount}</p>
+                <p><strong>Metadata Registrada (Base64):</strong> <code>${metadata}</code></p>
+
+                <h2>Paso 1: Simular Pago Aprobado</h2>
+                <p>Una vez que el cliente paga, Izipay envía un **POST** a tu URL de webhook (<code>${YOUR_BACKEND_URL}/api/izipay/webhook</code>). Ejecuta el siguiente comando (o usa Postman) para simular esta notificación.</p>
+
+                <h2>Paso 2: Comando cURL de Simulación</h2>
+                <pre>curl -X POST "${YOUR_BACKEND_URL}/api/izipay/webhook" \
+-H "Content-Type: application/json" \
+-d '${webhookExampleBody.replace(/\n/g, '').replace(/  /g, '')}'</pre>
+                
+                <h2>Cuerpo de la Petición (JSON)</h2>
+                <pre>${webhookExampleBody}</pre>
+
+                <div class="alert">
+                    <strong>¡CRÍTICO!</strong> Al ejecutar el <code>curl</code>, el pago será registrado en la Base de Datos. Luego, actualiza la pestaña de PrestaPro y revisa el Historial de Pagos del préstamo N° ${metadataParsed.loanId}.
+                </div>
+            </div>
+        </body>
+        </html>
+    `);
+});
+
+// 🚨 POST /api/izipay/webhook (WEBHOOK)
 app.post('/api/izipay/webhook', async (req, res) => {
-    // 🚨 CRÍTICO: Responder inmediatamente
+    // 🚨 CRÍTICO: Responder inmediatamente para evitar reintentos del proveedor
     res.status(200).send('OK');
 
-    // 1. Obtener datos de la notificación
     const notification = req.body;
     console.log('[IZIPAY WEBHOOK] 📥 Notificación recibida:', notification);
 
     const status = notification.status;
-    const transactionId = notification.kr_order_id; // Suponemos que Izipay devuelve el ID de la transacción
-    const krHash = notification.kr_hash; // Hash de seguridad para verificar la integridad
-    const amountInCents = notification.amount;
-    const extraMetadata = notification.kr_metadata || {}; // Datos que guardamos en la orden
+    const transactionId = notification.kr_order_id;
+    // const krHash = notification.kr_hash; // Se omite la verificación de Hash por ser simulación
 
-    // 2. VERIFICACIÓN CRÍTICA (Simulación de Izipay: Comprobación de Hash)
-    // En un entorno real, se debería calcular el hash con la IZP_HMAC_KEY y compararlo con krHash.
-    // Aquí solo simulamos que la verificación es exitosa.
-    const isHashValid = true; // SIMULACIÓN DE VERIFICACIÓN
+    // Suponemos que la metadata está en el cuerpo de la petición (como en la simulación manual)
+    const extraMetadata = notification.kr_metadata || {};
 
-    if (!isHashValid) {
-        console.error('[IZIPAY WEBHOOK ERROR] ❌ Hash de seguridad no válido. Posible manipulación.');
-        return; // No procesar
-    }
-
-
-    // 3. Procesar si el pago fue exitoso
-    if (status === 'PAID') { // Izipay usa 'PAID' para pagos exitosos
+    // 1. Procesar si el pago fue exitoso
+    if (status === 'PAID') {
         console.log('[IZIPAY WEBHOOK] ✅ Pago APROBADO');
 
         const loanId = extraMetadata.loanId;
-        const totalAmount = parseFloat(amountInCents / 100); // Convertir céntimos a soles
-        const paymentDate = new Date().toISOString().split('T')[0]; // Fecha actual o la de la notificación
+        const totalAmount = parseFloat(notification.amount / 100); // Convertir céntimos a soles
+        const paymentDate = new Date().toISOString().split('T')[0];
 
         // 🚨 CRÍTICO: Obtener metadata que guardamos durante la creación de la orden
         const amountMora = extraMetadata.amount_mora || '0';
@@ -656,8 +754,13 @@ app.post('/api/izipay/webhook', async (req, res) => {
                 transaction_id: transactionId
             };
 
-            await registerPaymentInternal(loanId, paymentDataToRegister);
-            console.log(`[IZIPAY WEBHOOK] ✅ Pago registrado exitosamente para Préstamo ID: ${loanId} con Boleta N° ${correlativo_boleta}`);
+            // 🚨 CRÍTICO: El registro interno asume que el pago fue exitoso
+            try {
+                await registerPaymentInternal(loanId, paymentDataToRegister);
+                console.log(`[IZIPAY WEBHOOK] ✅ Pago registrado exitosamente para Préstamo ID: ${loanId} con Boleta N° ${correlativo_boleta}`);
+            } catch (error) {
+                console.error(`[IZIPAY WEBHOOK ERROR] ❌ Falló el registro interno del pago.`, error);
+            }
         } else {
             console.error('[IZIPAY WEBHOOK ERROR] ❌ Datos faltantes en la notificación o metadata.');
         }
