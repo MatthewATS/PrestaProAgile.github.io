@@ -270,7 +270,7 @@
                 <div class="modal-body">
                     <div class="cash-register-controls">
                         <div class="form-group">
-                            <label for="cashRegisterDateFrom">Fecha de Operación</label>
+                            <label for="cashRegisterDateFrom">Fecha del Cuadre</label>
                             <input type="date" id="cashRegisterDateFrom">
                         </div>
                         <div class="form-group" style="display: none;">
@@ -278,77 +278,48 @@
                             <input type="date" id="cashRegisterDateTo" readonly>
                         </div>
                         <div class="form-group" style="display: flex; align-items: flex-end;">
-                            <button class="button button-primary" id="filterCashRegisterBtn" style="width: 100%;">🔍 Gestionar Día</button>
+                            <button class="button button-primary" id="filterCashRegisterBtn" style="width: 100%;">🔍 Ver Cuadre</button>
                         </div>
                     </div>
 
-                    <!-- 🔴 SECCIÓN APERTURA (Visible si NO hay caja abierta) -->
-                    <div id="cashOpeningSection" style="display: none; padding: 30px; text-align: center; background-color: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px; margin-top: 20px;">
-                        <div style="font-size: 40px; margin-bottom: 10px;">🔓</div>
-                        <h3 style="color: var(--secondary-color); margin-bottom: 10px;">Caja Cerrada / No Iniciada</h3>
-                        <p style="color: #64748b; margin-bottom: 20px;">Para registrar pagos o ver movimientos, primero debes abrir la caja del día.</p>
-                        
-                        <div style="max-width: 300px; margin: 0 auto; text-align: left;">
-                            <div class="form-group">
-                                <label for="openingAmount" style="font-weight: 600;">💰 Monto Inicial en Efectivo (S/)</label>
-                                <input type="number" id="openingAmount" value="0.00" step="0.01" min="0" style="text-align: center; font-size: 18px; font-weight: bold;">
-                            </div>
-                            <button class="button button-success" id="btnOpenRegister" style="width: 100%; margin-top: 10px; padding: 12px;">✅ Abrir Caja Ahora</button>
-                        </div>
+                    <div id="cashRegisterSummary" class="cash-register-summary">
+                        <p><strong>Total de Ingresos del Día:</strong> S/ 0.00</p>
+                        <p><strong>Ingreso Neto en Efectivo (Cuadre):</strong> S/ 0.00</p>
+                        <p><strong>Ingreso por Transferencia/Yape:</strong> S/ 0.00</p>
+                        <p><strong>Ingreso por Otros MP:</strong> S/ 0.00</p>
                     </div>
 
-                    <!-- 🟢 ÁREA DE TRABAJO (Visible si está ABIERTA o CERRADA) -->
-                    <div id="cashWorkingArea" style="display: none;">
-                        
-                        <!-- Alerta de Estado -->
-                        <div id="cashStatusAlert" class="alert" style="margin-top: 15px; display: none;"></div>
-
-                        <div id="cashRegisterSummary" class="cash-register-summary">
-                            <p><strong>Saldo Inicial:</strong> <span id="summaryInitialAmount">S/ 0.00</span></p>
-                            <p><strong>+ Ingresos Efectivo:</strong> <span id="summaryCashIncome">S/ 0.00</span></p>
-                            <p><strong>+ Ingresos Bancos/Virtual:</strong> <span id="summaryBankIncome">S/ 0.00</span></p>
-                            <div style="border-top: 1px solid rgba(255,255,255,0.2); margin-top: 5px; padding-top: 5px;">
-                                <p style="font-size: 1.1em;"><strong>= Total en Caja (Teórico):</strong> <span id="summaryFinalCalculated">S/ 0.00</span></p>
-                            </div>
-                        </div>
-
-                        <div id="dailySquareSection">
-                            <h3 style="margin-bottom: 15px; color: var(--secondary-color);">🔒 Cierre de Caja (<span id="dailySquareDate">Fecha</span>)</h3>
-                            <div id="squareStatusMessage" class="alert" style="display: none;"></div>
-                            
-                            <div id="squareFormContainer">
-                                <p style="font-size: 14px; margin-bottom: 15px; color: #64748b;">
-                                    Al finalizar el día, cuenta el dinero físico y regístralo aquí para cuadrar.
-                                </p>
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label for="declaredAmount">Dinero Físico Contado (S/)</label>
-                                        <input type="number" id="declaredAmount" step="0.01" min="0" placeholder="0.00" required style="font-weight: bold; font-size: 16px;">
-                                    </div>
-                                    <div class="form-group" style="display: flex; align-items: flex-end;">
-                                        <button class="button button-secondary" id="saveDailySquareBtn" style="width: 100%;">🛡️ Cerrar y Cuadrar Caja</button>
-                                    </div>
+                    <div id="dailySquareSection">
+                        <h3 style="margin-bottom: 15px; color: var(--secondary-color);">Cierre de Caja Diario (<span id="dailySquareDate">Fecha</span>)</h3>
+                        <div id="squareStatusMessage" class="alert" style="display: none;"></div>
+                        <div id="squareFormContainer">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="declaredAmount">Monto Total Contado (Efectivo)</label>
+                                    <input type="number" id="declaredAmount" step="0.01" min="0" placeholder="Monto total contado en efectivo hoy" required>
                                 </div>
-                                <div id="squareValidationMessage" class="alert" style="display: none;"></div>
+                                <div class="form-group" style="display: flex; align-items: flex-end;">
+                                    <button class="button button-success" id="saveDailySquareBtn" style="width: 100%;">✅ Realizar Cierre de Caja</button>
+                                </div>
                             </div>
+                            <div id="squareValidationMessage" class="alert" style="display: none;"></div>
                         </div>
+                    </div>
 
-                        <h3 style="margin-top: 30px; margin-bottom: 15px; color: var(--secondary-color);">💰 Movimientos del Día</h3>
-                        <div class="table-container">
-                            <table id="cashRegisterTable" class="main-table">
-                                <thead>
-                                <tr>
-                                    <th>C</th>
-                                    <th>Cliente</th>
-                                    <th>Método</th>
-                                    <th>Monto</th>
-                                    <th>Mora</th>
-                                    <th>Total</th>
-                                </tr>
-                                </thead>
-                                <tbody id="cashRegisterTableBody"></tbody>
-                            </table>
-                        </div>
+                    <h3 style="margin-top: 30px; margin-bottom: 15px; color: var(--secondary-color);">💰 Resumen de Movimientos del Día</h3>
+                    <div class="table-container">
+                        <table id="cashRegisterTable" class="main-table">
+                            <thead>
+                            <tr>
+                                <th>Cliente</th>
+                                <th>Método</th>
+                                <th>Capital/Interés</th>
+                                <th>Mora</th>
+                                <th>Total Ingreso</th>
+                            </tr>
+                            </thead>
+                            <tbody id="cashRegisterTableBody"></tbody>
+                        </table>
                     </div>
 
                     <h3 style="margin-top: 30px; margin-bottom: 15px; color: var(--secondary-color);">📜 Historial de Cierres Oficiales</h3>
@@ -356,12 +327,12 @@
                         <table id="closureHistoryTable" class="main-table">
                             <thead>
                             <tr>
-                                <th>Fecha</th>
-                                <th>Hora</th>
-                                <th>Sist. (Efec)</th>
-                                <th>Decl. (Efec)</th>
+                                <th>Fecha Cierre</th>
+                                <th>Hora Cierre</th>
+                                <th>Sistema (Efectivo)</th>
+                                <th>Declarado (Efectivo)</th>
                                 <th>Diferencia</th>
-                                <th>Usuario</th>
+                                <th>Cerrado Por</th>
                             </tr>
                             </thead>
                             <tbody id="closureHistoryTableBody">
