@@ -52,6 +52,12 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'front.html'));
 });
 
+// Serve payment success page
+app.get('/payment-success', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'payment-success.html'));
+});
+
+
 // ==========================================================
 // ERROR HANDLING
 // ==========================================================
