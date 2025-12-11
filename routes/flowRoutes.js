@@ -73,10 +73,10 @@ router.post('/create-order', async (req, res) => {
  * Flow webhook for payment notifications
  */
 router.post('/webhook', async (req, res) => {
+    console.log('[FLOW WEBHOOK] 📥 Notificación recibida:', JSON.stringify(req.body, null, 2));
+
     // Respond immediately to Flow
     res.status(200).send('OK');
-
-    console.log('[FLOW WEBHOOK] 📥 Notificación recibida:', req.body);
 
     try {
         // Verify signature
@@ -87,30 +87,68 @@ router.post('/webhook', async (req, res) => {
             return;
         }
 
+        console.log('[FLOW WEBHOOK] ✅ Firma válida');
+
         const { token } = req.body;
 
+        if (!token) {
+            console.error('[FLOW WEBHOOK ERROR] ❌ Token no proporcionado');
+            return;
+        }
+
         // Get payment status from Flow
+        console.log('[FLOW WEBHOOK] 🔍 Consultando estado del pago con token:', token);
         const paymentStatus = await getFlowPaymentStatus(token);
 
-        console.log('[FLOW WEBHOOK] Estado del pago:', paymentStatus);
+        console.log('[FLOW WEBHOOK] 📊 Estado del pago completo:', JSON.stringify(paymentStatus, null, 2));
 
         // Process if payment was successful
         if (paymentStatus.status === 2) { // Status 2 = Paid in Flow
             console.log('[FLOW WEBHOOK] ✅ Pago APROBADO');
 
-            // Parse optional data
-            let metadata = {};
-            try {
-                metadata = JSON.parse(paymentStatus.optional || '{}');
-            } catch (e) {
-                console.error('[FLOW WEBHOOK] Error al parsear metadata:', e);
+            // Extraer loanId y correlativo del commerceOrder
+            // Formato: LOAN-{loanId}-{correlativo}
+            const commerceOrder = paymentStatus.commerceOrder || '';
+            const match = commerceOrder.match(/LOAN-(\d+)-(\d+)/);
+
+            let loanId, correlativo_boleta;
+
+            if (match) {
+                loanId = parseInt(match[1]);
+                correlativo_boleta = parseInt(match[2]);
+                console.log('[FLOW WEBHOOK] 📝 Datos extraídos del commerceOrder:', { loanId, correlativo_boleta });
             }
 
-            const loanId = metadata.loanId;
-            const correlativo_boleta = metadata.correlativo_boleta;
+            // También intentar obtener de metadata opcional
+            let metadata = {};
+            try {
+                if (paymentStatus.optional) {
+                    metadata = JSON.parse(paymentStatus.optional);
+                    console.log('[FLOW WEBHOOK] 📦 Metadata opcional:', metadata);
+
+                    // Usar metadata si no se pudo extraer del commerceOrder
+                    if (!loanId && metadata.loanId) {
+                        loanId = parseInt(metadata.loanId);
+                    }
+                    if (!correlativo_boleta && metadata.correlativo_boleta) {
+                        correlativo_boleta = parseInt(metadata.correlativo_boleta);
+                    }
+                }
+            } catch (e) {
+                console.error('[FLOW WEBHOOK] ⚠️ Error al parsear metadata:', e);
+            }
+
             const amountMora = parseFloat(metadata.amount_mora || 0);
             const paymentDate = metadata.payment_date || new Date().toISOString().split('T')[0];
             const totalAmount = parseFloat(paymentStatus.amount);
+
+            console.log('[FLOW WEBHOOK] 💰 Datos del pago:', {
+                loanId,
+                correlativo_boleta,
+                totalAmount,
+                amountMora,
+                paymentDate
+            });
 
             if (loanId && correlativo_boleta) {
                 const paymentDataToRegister = {
@@ -118,20 +156,30 @@ router.post('/webhook', async (req, res) => {
                     mora_amount: amountMora,
                     payment_date: paymentDate,
                     payment_method: 'Flow',
-                    correlativo_boleta: parseInt(correlativo_boleta),
+                    correlativo_boleta: correlativo_boleta,
                     transaction_id: paymentStatus.flowOrder || token
                 };
 
+                console.log('[FLOW WEBHOOK] 💾 Registrando pago:', paymentDataToRegister);
+
                 await registerPaymentInternal(loanId, paymentDataToRegister);
-                console.log(`[FLOW WEBHOOK] ✅ Pago registrado exitosamente para Préstamo ID: ${loanId} con Boleta N° ${correlativo_boleta}`);
+
+                console.log(`[FLOW WEBHOOK] ✅✅✅ PAGO REGISTRADO EXITOSAMENTE`);
+                console.log(`[FLOW WEBHOOK] 📋 Préstamo ID: ${loanId}`);
+                console.log(`[FLOW WEBHOOK] 🧾 Boleta N°: ${String(correlativo_boleta).padStart(8, '0')}`);
+                console.log(`[FLOW WEBHOOK] 💵 Monto: S/ ${totalAmount.toFixed(2)}`);
             } else {
-                console.error('[FLOW WEBHOOK ERROR] ❌ Datos faltantes en la notificación o metadata.');
+                console.error('[FLOW WEBHOOK ERROR] ❌ No se pudo extraer loanId o correlativo_boleta');
+                console.error('[FLOW WEBHOOK ERROR] commerceOrder:', commerceOrder);
+                console.error('[FLOW WEBHOOK ERROR] metadata:', metadata);
             }
         } else {
             console.log(`[FLOW WEBHOOK] ℹ️ Pago no aprobado. Estado: ${paymentStatus.status}`);
+            console.log('[FLOW WEBHOOK] Estados Flow: 1=Pendiente, 2=Pagado, 3=Rechazado, 4=Anulado');
         }
     } catch (error) {
-        console.error('[FLOW WEBHOOK ERROR]', error);
+        console.error('[FLOW WEBHOOK ERROR] ❌ Error procesando webhook:', error);
+        console.error('[FLOW WEBHOOK ERROR] Stack:', error.stack);
     }
 });
 
