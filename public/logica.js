@@ -1,6 +1,6 @@
 // --- VARIABLES GLOBALES Y CONFIGURACIÓN ---
-//const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
-const API_URL = 'http://localhost:3000';
+const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
+
 const VALOR_UIT = 5150;
 // ❌ MODIFICACIÓN: TASA_INTERES_ANUAL ELIMINADA. SE USA EL VALOR DEL INPUT.
 const TASA_MORA_MENSUAL = 1; // 1% de mora por mes
@@ -4185,3 +4185,4 @@ function imprimirHistorialCierres() {
 // 🔹 EXPONER FUNCIONES GLOBALMENTE
 window.exportarHistorialCierresPDF = exportarHistorialCierresPDF;
 window.imprimirHistorialCierres = imprimirHistorialCierres;
+
