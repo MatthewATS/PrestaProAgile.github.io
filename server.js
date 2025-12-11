@@ -3,7 +3,7 @@ const path = require('path');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const crypto = require('crypto');
-const { createHash } = require('crypto'); // Usamos createHash para la firma Flow
+const { createHash } = require('crypto');
 const axios = require('axios');
 
 const app = express();
@@ -17,39 +17,30 @@ app.use((req, res, next) => {
     next();
 });
 
-// Nota: En un entorno real, DATABASE_URL debe estar configurada.
 const pool = mysql.createPool(process.env.DATABASE_URL);
 
 // --- CONSTANTES DE NEGOCIO Y API DE FLOW ---
 const TASA_MORA_MENSUAL = 1;
 
 // 🚨🚨🚨 CREDENCIALES DE PRODUCCIÓN DE FLOW 🚨🚨🚨
-const FLOW_API_KEY = '1FF50655-0135-4F50-9A60-774ABDBL14C7';
-const FLOW_SECRET_KEY = '1b7e761342e5525b8a294499bde19d29cfa76090';
-const FLOW_ENDPOINT_BASE_API = 'https://api.flow.cl/v1/payment/create';
+const FLOW_API_KEY = '1FF50655-0135-4F50-9A60-774ABDBL14C7'; 
+const FLOW_SECRET_KEY = '1b7e761342e5525b8a294499bde19d29cfa76090'; 
+// Endpoint verificado para la creación de pago
+const FLOW_ENDPOINT_BASE_API = 'https://api.flow.cl/v1/payment/create'; 
 
-// URL de Railway (Debe ser accesible externamente para el webhook de Flow)
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app';
 
 
 /**
  * Genera el hash de firma (sig) requerido por Flow.
- * @param {object} params Parámetros de la solicitud a Flow.
- * @param {string} secretKey La Flow Secret Key.
- * @returns {string} El hash SHA1.
  */
 function generateFlowSignature(params, secretKey) {
-    // 1. Ordenar los parámetros alfabéticamente
     const sortedKeys = Object.keys(params).sort();
-
-    // 2. Concatenar valores y añadir la Secret Key al final
     let signatureString = '';
     sortedKeys.forEach(key => {
         signatureString += params[key];
     });
     signatureString += secretKey;
-
-    // 3. Generar el hash SHA1
     const hash = createHash('sha1').update(signatureString).digest('hex');
     return hash;
 }
@@ -161,8 +152,7 @@ async function registerPaymentInternal(loanId, paymentData) {
         await connection.beginTransaction();
         const { payment_amount, payment_date, mora_amount, payment_method, correlativo_boleta, transaction_id } = paymentData;
 
-        // Ajuste para Flow
-        const finalMethod = payment_method || 'Flow/Transferencia';
+        const finalMethod = payment_method || 'Flow/Transferencia'; 
 
         await connection.query(
             'INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method, correlativo_boleta, transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -572,9 +562,9 @@ app.post('/api/flow/create-order', async (req, res) => {
     const subject = `Pago Préstamo N° ${loanId} - Boleta ${correlativo_boleta}`;
     const custEmail = `${clientDni}@prestapro.cl`; // Email de ejemplo, Flow lo requiere
     const custName = `${clientName} ${clientLastName}`;
-    const returnUrl = `${YOUR_BACKEND_URL}/flow/return`;
+    const returnUrl = `${YOUR_BACKEND_URL}/flow/return`; 
     const callbackUrl = `${YOUR_BACKEND_URL}/api/flow/webhook`;
-
+    
     // Parámetros de la solicitud a Flow
     const flowParams = {
         apiKey: FLOW_API_KEY,
@@ -582,25 +572,25 @@ app.post('/api/flow/create-order', async (req, res) => {
         subject: subject,
         amount: totalAmount.toFixed(2),
         email: custEmail,
-        payment_currency: 'CLP', // Flow requiere moneda CL/CLP
+        // 🚨 AJUSTE EXPERIMENTAL DE MONEDA
+        payment_currency: 'PEN', 
         urlReturn: returnUrl,
         urlCallback: callbackUrl,
         custom: JSON.stringify({ // Metadata
             loanId: loanId,
             correlativo_boleta: correlativo_boleta,
-            // Incluimos data de mora/CI para el webhook
             amount_mora: req.body.amount_mora,
-            amount_ci: req.body.amount_ci
+            amount_ci: req.body.amount_ci 
         })
     };
 
     // 🚨 Generar la firma (sig)
     flowParams.s = generateFlowSignature(flowParams, FLOW_SECRET_KEY);
-
+    
     try {
         console.log('[FLOW DEBUG] Enviando Payload:', flowParams);
 
-        // Flow usa x-www-form-urlencoded, no JSON
+        // Flow usa x-www-form-urlencoded
         const response = await axios.post(FLOW_ENDPOINT_BASE_API, new URLSearchParams(flowParams).toString(), {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded'
@@ -625,6 +615,7 @@ app.post('/api/flow/create-order', async (req, res) => {
         throw new Error(`La respuesta de Flow no contenía URL y Token. Detalles: ${JSON.stringify(flowData)}`);
 
     } catch (error) {
+        // --- LOG DEL ERROR REAL ---
         console.error('[FLOW ERROR] ❌ Falló la llamada REAL a la API de Flow.');
         if (error.response) {
             console.error('   Estado HTTP:', error.response.status);
@@ -636,12 +627,11 @@ app.post('/api/flow/create-order', async (req, res) => {
         // --- FALLBACK: URL de SIMULACIÓN ---
         console.log('[FLOW] ⚠️ Recurriendo a la URL de SIMULACIÓN debido al error anterior.');
 
-        // Reutilizamos la metadata que Flow ignoró al fallar la llamada
         const encodedMetadata = Buffer.from(JSON.stringify({
             loanId: loanId,
-            amount_mora: req.body.amount_mora,
+            amount_mora: req.body.amount_mora, 
             correlativo_boleta: correlativo_boleta,
-            amount_ci: req.body.amount_ci,
+            amount_ci: req.body.amount_ci,     
             amount: amount,
             payment_date: new Date().toISOString().split('T')[0]
         })).toString('base64');
@@ -676,13 +666,13 @@ app.get('/flow/manual-payment', (req, res) => {
         requestDate: new Date().toISOString(),
         status: 2, // 2 = Pagado (Flow status)
         amount: parseFloat(metadataParsed.amount),
-        currency: 'CLP',
+        currency: 'PEN', 
         paymentData: {
             fee: 0,
             comm: 0,
             tax: 0
         },
-        custom: metadataDecoded // Flow devuelve el JSON sin codificar en el campo custom
+        custom: metadataDecoded 
     }, null, 2);
 
     res.send(`
@@ -736,37 +726,39 @@ app.post('/api/flow/webhook', async (req, res) => {
 
     const notification = req.body;
     console.log('[FLOW WEBHOOK] 📥 Notificación recibida:', notification);
-
-    // 1. Verificar la firma (omitiendo por simplicidad del demo, pero crucial en prod)
-
+    
     const flowStatus = notification.status; // 2 = Pagado
 
     if (flowStatus == 2) {
         console.log('[FLOW WEBHOOK] ✅ Pago APROBADO');
-
+        
         const commerceOrder = notification.commerceOrder;
         const totalAmount = parseFloat(notification.amount);
-
-        // 🚨 La metadata en el webhook de Flow está en notification.custom (que es un JSON string)
+        
         let customData = {};
         try {
-            customData = JSON.parse(notification.custom);
+            // Intenta parsear si Flow envió el custom data como JSON string
+            customData = JSON.parse(notification.custom); 
         } catch(e) {
-            console.error('[FLOW WEBHOOK ERROR] No se pudo parsear custom data:', e);
-            return; // No podemos procesar sin metadata
+            // Intenta parsear si es la metadata base64 de la simulación
+            try {
+                customData = JSON.parse(Buffer.from(notification.custom, 'base64').toString('utf8'));
+            } catch (e2) {
+                 console.error('[FLOW WEBHOOK ERROR] No se pudo parsear custom data:', e2);
+                 return; 
+            }
         }
 
         const loanId = customData.loanId;
         const correlativo_boleta = customData.correlativo_boleta;
-
-        // Asumimos que la mora y CI vienen de la metadata
+        
         const amountMora = customData.amount_mora || '0';
-
+        
         const paymentDate = new Date().toISOString().split('T')[0];
 
         if (loanId && commerceOrder && correlativo_boleta) {
             const paymentDataToRegister = {
-                payment_amount: totalAmount,
+                payment_amount: totalAmount, 
                 mora_amount: parseFloat(amountMora),
                 payment_date: paymentDate,
                 payment_method: 'Flow', // Nuevo método
