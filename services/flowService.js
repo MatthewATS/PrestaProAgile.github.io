@@ -11,43 +11,43 @@ const { generateFlowSignature, verifyFlowSignature } = require('../utils/helpers
 async function createFlowPayment(orderData) {
     const { amount, commerceOrder, subject, email, urlConfirmation, urlReturn, optional } = orderData;
 
-    // 🚨 MODO DESARROLLO: Simular Flow si estamos en localhost
-    const isDevelopment = SERVER_CONFIG.NODE_ENV === 'development' ||
-        SERVER_CONFIG.BACKEND_URL.includes('localhost') ||
-        SERVER_CONFIG.BACKEND_URL.includes('127.0.0.1');
+    // 🚨 MODO DESARROLLO DESACTIVADO - SIEMPRE USA FLOW REAL
+    // const isDevelopment = SERVER_CONFIG.NODE_ENV === 'development' ||
+    //                      SERVER_CONFIG.BACKEND_URL.includes('localhost') ||
+    //                      SERVER_CONFIG.BACKEND_URL.includes('127.0.0.1');
 
-    if (isDevelopment) {
-        console.log('[FLOW DEV MODE] 🔧 Modo desarrollo activado - Simulando Flow');
-        console.log('[FLOW DEV MODE] 📦 Datos de la orden:', {
-            amount,
-            commerceOrder,
-            subject,
-            currency: 'PEN'
-        });
+    // if (isDevelopment) {
+    //     console.log('[FLOW DEV MODE] 🔧 Modo desarrollo activado - Simulando Flow');
+    //     console.log('[FLOW DEV MODE] 📦 Datos de la orden:', {
+    //         amount,
+    //         commerceOrder,
+    //         subject,
+    //         currency: 'PEN'
+    //     });
 
-        // Simular respuesta de Flow
-        const mockToken = `DEV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        const mockFlowOrder = `MOCK-${Date.now()}`;
+    //     // Simular respuesta de Flow
+    //     const mockToken = `DEV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    //     const mockFlowOrder = `MOCK-${Date.now()}`;
 
-        // Crear URL simulada que apunta a una página de confirmación local
-        const mockUrl = `${SERVER_CONFIG.BACKEND_URL}/flow-simulator?token=${mockToken}&amount=${amount}&order=${commerceOrder}`;
+    //     // Crear URL simulada que apunta a una página de confirmación local
+    //     const mockUrl = `${SERVER_CONFIG.BACKEND_URL}/flow-simulator?token=${mockToken}&amount=${amount}&order=${commerceOrder}`;
 
-        console.log('[FLOW DEV MODE] ✅ Orden simulada creada:', {
-            token: mockToken,
-            flowOrder: mockFlowOrder,
-            url: mockUrl
-        });
+    //     console.log('[FLOW DEV MODE] ✅ Orden simulada creada:', {
+    //         token: mockToken,
+    //         flowOrder: mockFlowOrder,
+    //         url: mockUrl
+    //     });
 
-        return {
-            success: true,
-            url: mockUrl,
-            token: mockToken,
-            flowOrder: mockFlowOrder,
-            isDevelopment: true
-        };
-    }
+    //     return {
+    //         success: true,
+    //         url: mockUrl,
+    //         token: mockToken,
+    //         flowOrder: mockFlowOrder,
+    //         isDevelopment: true
+    //     };
+    // }
 
-    // 🚨 MODO PRODUCCIÓN: Usar Flow real
+    // 🚨 USAR FLOW REAL SIEMPRE
     const params = {
         apiKey: FLOW_CONFIG.API_KEY,
         commerceOrder: commerceOrder,
@@ -69,11 +69,12 @@ async function createFlowPayment(orderData) {
     const signature = generateFlowSignature(params, FLOW_CONFIG.SECRET_KEY);
     params.s = signature;
 
-    console.log('[FLOW PRODUCTION] 📤 Enviando solicitud a Flow API:', {
+    console.log('[FLOW REAL] 📤 Enviando solicitud a Flow API:', {
         endpoint: `${FLOW_CONFIG.API_URL}/payment/create`,
         commerceOrder: params.commerceOrder,
         amount: params.amount,
-        currency: params.currency
+        currency: params.currency,
+        urlConfirmation: params.urlConfirmation
     });
 
     try {
@@ -87,7 +88,7 @@ async function createFlowPayment(orderData) {
             }
         });
 
-        console.log('[FLOW PRODUCTION] 📥 Respuesta de Flow:', response.data);
+        console.log('[FLOW REAL] 📥 Respuesta de Flow:', response.data);
 
         if (response.data && response.data.url && response.data.token) {
             return {
@@ -101,7 +102,7 @@ async function createFlowPayment(orderData) {
             throw new Error('Respuesta inválida de Flow');
         }
     } catch (error) {
-        console.error('[FLOW PRODUCTION ERROR] Error al crear pago:', {
+        console.error('[FLOW REAL ERROR] Error al crear pago:', {
             status: error.response?.status,
             data: error.response?.data,
             message: error.message
