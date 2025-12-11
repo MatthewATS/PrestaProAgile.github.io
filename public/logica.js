@@ -17,7 +17,7 @@ let clients = new Set();
 let currentLoanForDetails = null;
 let currentLoanForQuickPayment = null;
 let calculatedPaymentData = { amount: 0, mora: 0 }; // Guarda el último cálculo flexible
-let currentIzpUrl = null; // 🚨 CAMBIO: Almacena el URL de Izipay generado (antes currentMpUrl)
+let currentFlowUrl = null; // 🚨 CAMBIO: Almacena el URL de Flow generado
 let currentClientName = null; // Almacena el nombre del cliente para el mensaje compartido
 
 // --- CREDENCIALES (SIMULACIÓN) ---
@@ -45,8 +45,8 @@ function closeModal(modal) {
     }
     if (modal.id === 'deleteConfirmationModal') getDomElement('delete-error-message').style.display = 'none';
     if (modal.id === 'checkoutLinkModal') {
-        // 🚨 CAMBIO: Limpiar la URL de Izipay
-        currentIzpUrl = null;
+        // 🚨 CAMBIO: Limpiar la URL de Flow
+        currentFlowUrl = null;
         currentClientName = null;
         // Reiniciar la vista del módulo de pagos después de cerrar el link de checkout
         if (getDomElement('module-pagos')?.classList.contains('active')) {
@@ -68,8 +68,8 @@ function showSuccessAnimation(message) {
     getDomElement('successAnimation').style.display = 'flex';
     setTimeout(() => {
         getDomElement('successAnimation').style.display = 'none';
-        if(message.includes("Préstamo")) closeModal(getDomElement('loanModal'));
-        if(message.includes("Pago")) {
+        if (message.includes("Préstamo")) closeModal(getDomElement('loanModal'));
+        if (message.includes("Pago")) {
             closeModal(getDomElement('paymentModal'));
             // Si el pago es rápido, resetear el módulo de pagos
             getDomElement('search-dni-pago').value = '';
@@ -239,7 +239,7 @@ function initializeApp() {
     getDomElement('closeReceiptModalBtn')?.addEventListener('click', () => closeModal(getDomElement('receiptModal')));
     getDomElement('closeShareOptionsModalBtn')?.addEventListener('click', () => closeModal(getDomElement('shareOptionsModal')));
     getDomElement('printScheduleBtn')?.addEventListener('click', printSchedule);
-    getDomElement('shareBtn')?.addEventListener('click', () => { currentShareType = 'details';openModal(getDomElement('shareOptionsModal')); });
+    getDomElement('shareBtn')?.addEventListener('click', () => { currentShareType = 'details'; openModal(getDomElement('shareOptionsModal')); });
     getDomElement('printReceiptBtn')?.addEventListener('click', () => printModalContent(getDomElement('receiptModal')));
     getDomElement('downloadReceiptBtn')?.addEventListener('click', downloadReceipt);
 
@@ -322,7 +322,7 @@ function initializeApp() {
 
 
     // === DELEGACIÓN DE EVENTOS DE LA TABLA PRINCIPAL (CORREGIDA) ===
-    getDomElement('historyTableBody')?.addEventListener('click', function(event) {
+    getDomElement('historyTableBody')?.addEventListener('click', function (event) {
         const target = event.target.closest('button');
         if (!target) return;
 
@@ -465,18 +465,18 @@ async function filterCashRegister() {
 
     const totalAllIngresos = todayMovements.reduce((sum, m) => sum + m.total, 0);
     const totalCashIngresos = todayMovements.filter(m => m.method === 'Efectivo').reduce((sum, m) => sum + m.total, 0);
-    // 🚨 CAMBIO: Incluir "Izipay" junto a "Transferencia" y "Yape/Plin" en el cálculo de transferencias/MP
-    const totalTransferIngresos = todayMovements.filter(m => m.method === 'Transferencia' || m.method === 'Yape/Plin' || m.method === 'Izipay').reduce((sum, m) => sum + m.total, 0);
-    // 🚨 CAMBIO: Total de ingresos por tarjeta/Izipay
-    const totalIzpIngresos = todayMovements.filter(m => m.method === 'Izipay').reduce((sum, m) => sum + m.total, 0);
+    // 🚨 CAMBIO: Incluir "Flow" junto a "Transferencia" y "Yape/Plin" en el cálculo de transferencias/MP
+    const totalTransferIngresos = todayMovements.filter(m => m.method === 'Transferencia' || m.method === 'Yape/Plin' || m.method === 'Flow').reduce((sum, m) => sum + m.total, 0);
+    // 🚨 CAMBIO: Total de ingresos por tarjeta/Flow
+    const totalFlowIngresos = todayMovements.filter(m => m.method === 'Flow').reduce((sum, m) => sum + m.total, 0);
 
 
     // Mostrar el resumen del día seleccionado
     const summaryContent = `
-        <p><strong>Total de Ingresos (Caja + Transferencias + Izipay):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalAllIngresos.toFixed(2)}</span></p>
+        <p><strong>Total de Ingresos (Caja + Transferencias + Flow):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalAllIngresos.toFixed(2)}</span></p>
         <p><strong>Ingreso Neto en Efectivo (Cuadre):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalCashIngresos.toFixed(2)}</span></p>
         <p><strong>Ingreso por Transferencia/Yape:</strong> <span style="font-weight: 700; color: var(--primary-color);">S/ ${totalTransferIngresos.toFixed(2)}</span></p>
-        <p><strong>Ingreso por Tarjeta/Izipay:</strong> <span style="font-weight: 700; color: var(--secondary-color);">S/ ${totalIzpIngresos.toFixed(2)}</span></p>
+        <p><strong>Ingreso por Tarjeta/Flow:</strong> <span style="font-weight: 700; color: var(--secondary-color);">S/ ${totalFlowIngresos.toFixed(2)}</span></p>
     `;
     // getDomElement('cashRegisterSummary').innerHTML = summaryContent; // Reubicado abajo
 
@@ -630,9 +630,9 @@ function getMovementsByDateRange(dateFrom, dateTo, methodFilter = null) {
                 const paymentDate = new Date(p.payment_date).getTime();
                 let method = p.payment_method || 'Efectivo';
 
-                // 🚨 CAMBIO CRÍTICO: Reemplazar Mercado Pago por Izipay en la visualización
+                // 🚨 CAMBIO CRÍTICO: Reemplazar Mercado Pago por Flow en la visualización
                 if (method === 'Mercado Pago') {
-                    method = 'Izipay';
+                    method = 'Flow';
                 }
 
                 // 🚨 CRÍTICO: El filtro ahora usa los timestamps calculados (solo ese día)
@@ -683,7 +683,7 @@ async function saveDailySquare() {
     try {
         const response = await fetch(`${API_URL}/api/cash-closures`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 closure_date: date,
                 declared_amount: declaredAmount.toFixed(2),
@@ -759,7 +759,7 @@ function exportarCajaPDF() {
 
     let yResumen = 48;
     summaryText.forEach((line) => {
-        if(line.includes('Diferencia')) return;
+        if (line.includes('Diferencia')) return;
         doc.text(line, 20, yResumen);
         yResumen += 7;
     });
@@ -897,8 +897,8 @@ function imprimirCaja() {
 
     iframeDoc.close();
 
-    iframe.onload = function() {
-        setTimeout(function() {
+    iframe.onload = function () {
+        setTimeout(function () {
             iframe.contentWindow.focus();
             iframe.contentWindow.print();
             setTimeout(() => { document.body.removeChild(iframe); }, 1000);
@@ -1262,7 +1262,7 @@ function initLoanFormLogic() {
     mesesSoloInteresInput.addEventListener('input', updateHibridoInfo);
 
     // Event Listener del formulario de Préstamos (submit)
-    getDomElement('loanForm').addEventListener('submit', async function(event) {
+    getDomElement('loanForm').addEventListener('submit', async function (event) {
         event.preventDefault();
 
         // 🚨 MODIFICACIÓN: Capturar el ID del documento, no solo el DNI
@@ -1296,7 +1296,7 @@ function initLoanFormLogic() {
             meses_solo_interes: tipoCalculoSelect.value === 'Hibrido' ? parseInt(mesesSoloInteresInput.value) : 0
         };
         try {
-            const response = await fetch(`${API_URL}/api/loans`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(newLoanData) });
+            const response = await fetch(`${API_URL}/api/loans`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newLoanData) });
 
             if (!response.ok) {
                 const errorData = await response.json();
@@ -1350,7 +1350,7 @@ function initPaymentListeners() {
     const detailsModal = getDomElement('detailsModal');
     if (detailsModal) {
         // Adjuntamos el listener al modal de detalles, que siempre está presente.
-        detailsModal.addEventListener('click', function(event) {
+        detailsModal.addEventListener('click', function (event) {
             const target = event.target.closest('.view-receipt-btn');
             if (target) {
                 const loanId = target.getAttribute('data-loan-id');
@@ -1438,8 +1438,8 @@ function openPaymentModal(loan) {
 }
 
 // NUEVA FUNCIÓN: Muestra el modal del enlace de pago
-function showCheckoutLinkModal(izpUrl, totalAmount, paymentMethod, clientName, correlativo) {
-    currentIzpUrl = izpUrl; // 🚨 CAMBIO: Usar variable Izipay
+function showCheckoutLinkModal(izpUrl, totalAmount, paymentMethod, clientName, correlativo, windowOpened = false) {
+    currentFlowUrl = izpUrl; // 🚨 CAMBIO: Usar variable Flow
     currentClientName = clientName;
     getDomElement('checkoutLinkAmount').textContent = `S/ ${totalAmount.toFixed(2)}`;
     getDomElement('checkoutLinkMethod').textContent = paymentMethod;
@@ -1447,8 +1447,18 @@ function showCheckoutLinkModal(izpUrl, totalAmount, paymentMethod, clientName, c
 
     // 🚨 CAMBIO: Mostrar el correlativo en el modal y cambiar la etiqueta
     const titleEl = getDomElement('checkoutLinkTitle');
-    titleEl.textContent = `🔗 Enlace de Pago Generado (Boleta N° ${correlativo.toString().padStart(8, '0')})`;
-    getDomElement('mpLinkOutput').previousElementSibling.textContent = 'Enlace de Pago (Izipay)';
+
+    if (windowOpened) {
+        titleEl.textContent = `✅ Pasarela Flow Abierta (Boleta N° ${correlativo.toString().padStart(8, '0')})`;
+        titleEl.style.color = 'var(--success-color)';
+    } else {
+        titleEl.textContent = `🔗 Enlace de Pago Flow (Boleta N° ${correlativo.toString().padStart(8, '0')})`;
+        titleEl.style.color = '';
+    }
+
+    getDomElement('mpLinkOutput').previousElementSibling.textContent = windowOpened
+        ? 'Enlace alternativo (si la ventana no se abrió)'
+        : 'Enlace de Pago (Flow)';
 
 
     // Asegurarse de que el input esté enfocado para copiar si es posible
@@ -1473,15 +1483,15 @@ function copyMpLink() {
     const linkInput = getDomElement('mpLinkOutput');
     linkInput.select();
     linkInput.setSelectionRange(0, 99999);
-    // 🚨 CAMBIO: Usar currentIzpUrl si está definido, aunque el nombre del input sea 'mpLinkOutput'
-    navigator.clipboard.writeText(currentIzpUrl || linkInput.value);
+    // 🚨 CAMBIO: Usar currentFlowUrl si está definido, aunque el nombre del input sea 'mpLinkOutput'
+    navigator.clipboard.writeText(currentFlowUrl || linkInput.value);
     showSuccessAnimation('✅ Enlace copiado al portapapeles.');
 }
 
 // NUEVA FUNCIÓN: Utiliza la API nativa de compartir
 async function shareMpLink() {
-    // 🚨 CAMBIO: Usar currentIzpUrl
-    if (!navigator.share || !currentIzpUrl) {
+    // 🚨 CAMBIO: Usar currentFlowUrl
+    if (!navigator.share || !currentFlowUrl) {
         alert('La función de compartir no está disponible en este dispositivo o navegador.');
         return;
     }
@@ -1489,8 +1499,8 @@ async function shareMpLink() {
     try {
         await navigator.share({
             title: `Pago Préstamo PrestaPro (S/ ${getDomElement('checkoutLinkAmount').textContent})`,
-            text: `¡Hola ${currentClientName || 'cliente'}! Tu enlace de pago para PrestaPro (vía Izipay) ha sido generado. Paga S/ ${getDomElement('checkoutLinkAmount').textContent} usando este link:`,
-            url: currentIzpUrl, // 🚨 CAMBIO: Usar currentIzpUrl
+            text: `¡Hola ${currentClientName || 'cliente'}! Tu enlace de pago para PrestaPro (vía Flow) ha sido generado. Paga S/ ${getDomElement('checkoutLinkAmount').textContent} usando este link:`,
+            url: currentFlowUrl, // 🚨 CAMBIO: Usar currentFlowUrl
         });
         // Opcional: Mostrar una animación de éxito aquí si la compartición fue exitosa (aunque la API de Share no lo garantiza)
     } catch (error) {
@@ -1527,28 +1537,31 @@ async function handlePaymentSubmit(e) {
         payment_date: paymentDate
     };
 
-    // Identificamos el préstamo y cliente para obtener datos necesarios para Izipay
+    // Identificamos el préstamo y cliente para obtener datos necesarios para Flow
     const loan = loans.find(l => l.id == loanId);
 
-    // Si es Transferencia o Yape/Plin, ahora lo mapeamos a Izipay
+    // Si es Transferencia o Yape/Plin, ahora lo mapeamos a Flow
     if (selectedMethod === 'Transferencia' || selectedMethod === 'Yape/Plin') {
-        // --- INICIO DE FLUJO DE PAGO CON IZIPAY ---
+        // --- INICIO DE FLUJO DE PAGO CON FLOW ---
 
         if (!loan) {
             alert("Error: No se encontró la información del cliente para iniciar el pago.");
             return;
         }
 
-        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollect.toFixed(2)} mediante Izipay para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
+        if (!confirm(`Se abrirá la pasarela de pagos Flow para procesar S/ ${totalToCollect.toFixed(2)}. El pago se registrará automáticamente cuando el cliente complete la transacción. ¿Continuar?`)) {
             return;
         }
 
         // Cerrar el modal actual de registro de pago
         closeModal(getDomElement('paymentModal'));
 
+        // Mostrar mensaje de carga
+        showSuccessAnimation('⏳ Generando enlace de pago Flow...');
+
         try {
-            // 🚨 CAMBIO CRÍTICO: Llamada a la nueva ruta de IZIPAY
-            const response = await fetch(`${API_URL}/api/izipay/create-order`, {
+            // 🚨 CAMBIO CRÍTICO: Llamada a la nueva ruta de FLOW
+            const response = await fetch(`${API_URL}/api/flow/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1570,23 +1583,51 @@ async function handlePaymentSubmit(e) {
                 } catch (e) {
                     errorData = { error: 'Error de formato (Estado: ' + response.status + ' ' + response.statusText + ')', status: response.status };
                 }
-                throw new Error(`(${response.status}) Error de Izipay. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
+                throw new Error(`(${response.status}) Error de Flow. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
             }
 
-            const izpData = await response.json();
-            const izpUrl = izpData.url;
+            const flowData = await response.json();
+            const flowUrl = flowData.url;
 
-            if (izpUrl) {
-                // *** CRÍTICO: Muestra el link en un modal en lugar de redirigir ***
-                // 🚨 CAMBIO: Pasar el correlativo de boleta y URL de Izipay
-                showCheckoutLinkModal(izpUrl, totalToCollect, selectedMethod, `${loan.nombres} ${loan.apellidos}`, izpData.correlativo_boleta || 'N/A');
+            if (flowUrl) {
+                // 🚨 NUEVO: Abrir Flow directamente en nueva ventana
+                console.log('[FLOW] 🔗 Abriendo pasarela de Flow:', flowUrl);
+
+                // Abrir en nueva ventana/pestaña
+                const flowWindow = window.open(flowUrl, '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
+
+                if (flowWindow) {
+                    // Mostrar modal con información y enlace alternativo
+                    showCheckoutLinkModal(
+                        flowUrl,
+                        totalToCollect,
+                        selectedMethod,
+                        `${loan.nombres} ${loan.apellidos}`,
+                        flowData.correlativo_boleta || 'N/A',
+                        true // Indicar que ya se abrió la ventana
+                    );
+
+                    showSuccessAnimation('✅ Pasarela Flow abierta. El pago se registrará automáticamente.');
+                } else {
+                    // Si el popup fue bloqueado, mostrar solo el modal con el enlace
+                    showCheckoutLinkModal(
+                        flowUrl,
+                        totalToCollect,
+                        selectedMethod,
+                        `${loan.nombres} ${loan.apellidos}`,
+                        flowData.correlativo_boleta || 'N/A',
+                        false
+                    );
+                    alert('⚠️ Por favor, permite ventanas emergentes para abrir Flow automáticamente. Puedes usar el enlace mostrado para pagar.');
+                }
+
                 return;
             } else {
-                throw new Error("El backend no proporcionó un URL de pago válido de Izipay.");
+                throw new Error("El backend no proporcionó un URL de pago válido de Flow.");
             }
 
         } catch (error) {
-            alert(`❌ Error al iniciar el pago con Izipay. Detalles: ${error.message}`);
+            alert(`❌ Error al iniciar el pago con Flow. Detalles: ${error.message}`);
             return;
         }
 
@@ -1597,7 +1638,7 @@ async function handlePaymentSubmit(e) {
         try {
             const response = await fetch(`${API_URL}/api/loans/${loanId}/payments`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(paymentData)
             });
 
@@ -1650,7 +1691,7 @@ function initQuickPaymentListeners() {
         const type = searchDocTypePago.value;
         searchDniInput.value = '';
         getDomElement('search-dni-status').textContent = '';
-        
+
         if (type === 'DNI') {
             searchDniInput.maxLength = 8;
             searchDniInput.placeholder = 'Ingresa 8 dígitos y presiona Enter';
@@ -1669,7 +1710,7 @@ function initQuickPaymentListeners() {
         }
     });
 
-    quickPaymentTableBody?.addEventListener('click', function(event) {
+    quickPaymentTableBody?.addEventListener('click', function (event) {
         const target = event.target.closest('button');
         if (!target) return;
 
@@ -1725,7 +1766,7 @@ async function searchLoansByDni(docId) {
     const quickPaymentTableBody = getDomElement('quickPaymentTableBody');
     const quickPaymentResultSection = getDomElement('quick-payment-result-section');
     const docType = getDomElement('search-doc-type-pago')?.value || 'DNI';
-    
+
     quickPaymentTableBody.innerHTML = '';
 
     // Validar longitud según tipo
@@ -1961,17 +2002,20 @@ async function handleQuickPaymentSubmit() {
 
     const loan = currentLoanForQuickPayment;
 
-    // Si es Transferencia o Yape/Plin, se usa Izipay.
+    // Si es Transferencia o Yape/Plin, se usa Flow.
     if (selectedMethod === 'Transferencia' || selectedMethod === 'Yape/Plin') {
-        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollectRounded.toFixed(2)} mediante Izipay para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
+        if (!confirm(`Se abrirá la pasarela de pagos Flow para procesar S/ ${totalToCollectRounded.toFixed(2)}. El pago se registrará automáticamente cuando el cliente complete la transacción. ¿Continuar?`)) {
             return;
         }
 
         getDomElement('quick-payment-summary-section').style.display = 'none';
 
+        // Mostrar mensaje de carga
+        showSuccessAnimation('⏳ Generando enlace de pago Flow...');
+
         try {
-            // 🚨 CAMBIO CRÍTICO: Llamada a la nueva ruta de IZIPAY
-            const response = await fetch(`${API_URL}/api/izipay/create-order`, {
+            // 🚨 CAMBIO CRÍTICO: Llamada a la nueva ruta de FLOW
+            const response = await fetch(`${API_URL}/api/flow/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1994,22 +2038,51 @@ async function handleQuickPaymentSubmit() {
                 } catch (e) {
                     errorData = { error: 'Error de formato (Estado: ' + response.status + ' ' + response.statusText + ')', status: response.status };
                 }
-                throw new Error(`(${response.status}) Error de Izipay. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
+                throw new Error(`(${response.status}) Error de Flow. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
             }
 
-            const izpData = await response.json();
-            const izpUrl = izpData.url;
+            const flowData = await response.json();
+            const flowUrl = flowData.url;
 
-            if (izpUrl) {
-                // 🚨 CAMBIO: Pasar la URL y datos de Izipay
-                showCheckoutLinkModal(izpUrl, totalToCollectRounded, selectedMethod, `${loan.nombres} ${loan.apellidos}`, izpData.correlativo_boleta || 'N/A');
+            if (flowUrl) {
+                // 🚨 NUEVO: Abrir Flow directamente en nueva ventana
+                console.log('[FLOW] 🔗 Abriendo pasarela de Flow:', flowUrl);
+
+                // Abrir en nueva ventana/pestaña
+                const flowWindow = window.open(flowUrl, '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
+
+                if (flowWindow) {
+                    // Mostrar modal con información y enlace alternativo
+                    showCheckoutLinkModal(
+                        flowUrl,
+                        totalToCollectRounded,
+                        selectedMethod,
+                        `${loan.nombres} ${loan.apellidos}`,
+                        flowData.correlativo_boleta || 'N/A',
+                        true // Indicar que ya se abrió la ventana
+                    );
+
+                    showSuccessAnimation('✅ Pasarela Flow abierta. El pago se registrará automáticamente.');
+                } else {
+                    // Si el popup fue bloqueado, mostrar solo el modal con el enlace
+                    showCheckoutLinkModal(
+                        flowUrl,
+                        totalToCollectRounded,
+                        selectedMethod,
+                        `${loan.nombres} ${loan.apellidos}`,
+                        flowData.correlativo_boleta || 'N/A',
+                        false
+                    );
+                    alert('⚠️ Por favor, permite ventanas emergentes para abrir Flow automáticamente. Puedes usar el enlace mostrado para pagar.');
+                }
+
                 return;
             } else {
-                throw new Error("El backend no proporcionó un URL de pago válido de Izipay.");
+                throw new Error("El backend no proporcionó un URL de pago válido de Flow.");
             }
 
         } catch (error) {
-            alert(`❌ Error al iniciar el pago con Izipay. Detalles: ${error.message}`);
+            alert(`❌ Error al iniciar el pago con Flow. Detalles: ${error.message}`);
             return;
         }
     }
@@ -2018,7 +2091,7 @@ async function handleQuickPaymentSubmit() {
         try {
             const response = await fetch(`${API_URL}/api/loans/${currentLoanForQuickPayment.id}/payments`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(paymentData)
             });
 
@@ -2266,7 +2339,7 @@ function renderHistoryTable() {
 function updateDashboard() {
     const totalLoaned = loans.reduce((sum, loan) => sum + parseFloat(loan.monto), 0);
     const activeLoans = loans.filter(loan => loan.status === 'Activo').length;
-// --- NUEVO: Lógica de Indicador de Mora ---
+    // --- NUEVO: Lógica de Indicador de Mora ---
     const hasLateLoans = loans.some(loan => loan.status === 'Atrasado' || loan.mora_pendiente > 0);
     const moraIndicator = getDomElement('moraAlertIndicator');
     if (moraIndicator) {
@@ -2275,7 +2348,7 @@ function updateDashboard() {
             moraIndicator.title = '¡ATENCIÓN! Hay préstamos con mora.';
         }
     }
-// --- NUEVO: Lógica de Indicador de Mora ---
+    // --- NUEVO: Lógica de Indicador de Mora ---
     clients.clear();
     loans.forEach(loan => clients.add(loan.dni));
 
@@ -2312,9 +2385,9 @@ function generateQrDataURL(text, size) {
         text: text,
         width: size,
         height: size,
-        colorDark : "#000000",
-        colorLight : "#ffffff",
-        correctLevel : QRCode.CorrectLevel.H
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.H
     });
 
     // Esperar un ciclo para que el QR se genere en el DOM
@@ -2350,8 +2423,8 @@ function showReceipt(payment, loan) {
 
     // 1. OBTENER FECHA DE PAGO (EMISIÓN)
     // Usamos split para asegurar que la fecha se lea correctamente sin errores de zona horaria
-    const partsPago = payment.payment_date.split('-'); 
-    const pDateLocal = new Date(partsPago[0], partsPago[1] - 1, partsPago[2]); 
+    const partsPago = payment.payment_date.split('-');
+    const pDateLocal = new Date(partsPago[0], partsPago[1] - 1, partsPago[2]);
     const paymentDateStr = pDateLocal.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const horaSimulada = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true });
 
@@ -2461,7 +2534,7 @@ function showReceipt(payment, loan) {
                 </div>
                 </div>
         `;
-    } 
+    }
     // =========================================================
     // DISEÑO 2: BOLETA (SIN VENCIMIENTO)
     // =========================================================
@@ -2785,7 +2858,7 @@ function downloadReceipt() {
             1: { halign: 'right', cellWidth: 35 },
             2: { halign: 'right', cellWidth: 35, fontStyle: 'bold' }
         },
-        didParseCell: function(data) {
+        didParseCell: function (data) {
             // Resaltar mora en rojo
             if (data.row.index === 1 && moraPagada > 0 && data.column.index === 2) {
                 data.cell.styles.textColor = [244, 67, 54];
@@ -2962,13 +3035,13 @@ function populateDetailsModal(loan) {
     modalHeaderH2.style = "";
 
     const summaryInfoDiv = getDomElement('detailsModal').querySelector('.modal-body .summary-info');
-    if(summaryInfoDiv) {
+    if (summaryInfoDiv) {
         // Usar los estilos definidos en el CSS para la pantalla (var(--border-color))
         summaryInfoDiv.style.border = "1px solid var(--border-color)";
     }
 
     let paymentSummary = '';
-    if(loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
+    if (loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
         paymentSummary = `
             <p><strong>Cuota "Solo Interés" (Mes 1-${loan.meses_solo_interes}): S/ ${payments.interestOnlyPayment.toFixed(2)}</strong></p>
             <p><strong>Cuota Regular (Desde Mes ${loan.meses_solo_interes + 1}): S/ ${payments.amortizedPayment.toFixed(2)}</strong></p>
@@ -3151,8 +3224,8 @@ function printSchedule() {
     `);
     iframeDoc.close();
 
-    iframe.onload = function() {
-        setTimeout(function() {
+    iframe.onload = function () {
+        setTimeout(function () {
             iframe.contentWindow.focus();
             iframe.contentWindow.print();
             setTimeout(() => { document.body.removeChild(iframe); }, 500);
@@ -3220,7 +3293,7 @@ function compartirPDF() {
         const pdfBlob = doc.output('blob');
         if (navigator.share) {
             const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-            navigator.share({ files: [file], title: 'Detalles del Préstamo', text: `Detalles del préstamo de ${loan.nombres} ${loan.apellidos}`})
+            navigator.share({ files: [file], title: 'Detalles del Préstamo', text: `Detalles del préstamo de ${loan.nombres} ${loan.apellidos}` })
                 .catch((error) => {
                     if (error.name !== 'AbortError') {
                         console.log('Error al compartir, iniciando descarga:', error);
@@ -3587,8 +3660,8 @@ function printModalContent(contentElement) {
     iframeDoc.close();
 
     // Esperar a que cargue y luego imprimir
-    iframe.onload = function() {
-        setTimeout(function() {
+    iframe.onload = function () {
+        setTimeout(function () {
             iframe.contentWindow.focus();
             iframe.contentWindow.print();
 
@@ -3703,7 +3776,7 @@ function handleSmartShare(platform) {
             navigator.clipboard.writeText(`${subject}\n\n${bodyText}`);
             // Solo mostramos animación visual breve, sin alerta intrusiva
             const btn = document.querySelector('.share-option-btn.copy .text');
-            if(btn) {
+            if (btn) {
                 const original = btn.textContent;
                 btn.textContent = "¡Copiado!";
                 setTimeout(() => btn.textContent = original, 2000);
@@ -3804,7 +3877,7 @@ function descargarPDFDetalles(loan) {
         });
 
         // TABLA HISTORIAL (Si existe)
-        if(loan.payments && loan.payments.length > 0) {
+        if (loan.payments && loan.payments.length > 0) {
             let pagstartY = doc.lastAutoTable.finalY + 15;
 
             // Si falta espacio en la hoja, saltar página
@@ -3820,8 +3893,8 @@ function descargarPDFDetalles(loan) {
             const pagosData = loan.payments.map((p, index) => [
                 (index + 1).toString(),
                 new Date(p.payment_date).toLocaleDateString('es-PE', { timeZone: 'UTC' }),
-                `S/ ${(p.payment_amount - (p.mora_amount||0)).toFixed(2)}`,
-                `S/ ${(p.mora_amount||0).toFixed(2)}`,
+                `S/ ${(p.payment_amount - (p.mora_amount || 0)).toFixed(2)}`,
+                `S/ ${(p.mora_amount || 0).toFixed(2)}`,
                 p.payment_method || 'Efectivo'
             ]);
 
@@ -4037,8 +4110,8 @@ function imprimirHistorialCierres() {
 
         iframeDoc.close();
 
-        iframe.onload = function() {
-            setTimeout(function() {
+        iframe.onload = function () {
+            setTimeout(function () {
                 iframe.contentWindow.focus();
                 iframe.contentWindow.print();
                 // 4. Limpiar
