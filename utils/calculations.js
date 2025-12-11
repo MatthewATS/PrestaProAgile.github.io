@@ -134,7 +134,33 @@ function calculateMora(loan, totalPaid, payments = []) {
 
 
 
+/**
+ * Calculate TEA (Tasa Efectiva Anual) from TEM
+ * Formula: TEA = (1 + TEM)^12 - 1
+ * @param {Number} tem - Monthly interest rate (as decimal, e.g., 0.00833 for 0.833%)
+ * @returns {Number} - Annual interest rate (as percentage, e.g., 10.00 for 10%)
+ */
+function calculateTEA(tem) {
+    return (Math.pow(1 + tem, 12) - 1) * 100;
+}
+
+/**
+ * Calculate TCEA (Tasa de Costo Efectivo Anual)
+ * Formula: TCEA = (Costo Total / Monto Prestado)^(1/n) - 1
+ * @param {Number} monto - Original loan amount
+ * @param {Number} totalCost - Total cost including all fees and interest
+ * @param {Number} plazoMeses - Loan term in months
+ * @returns {Number} - TCEA as percentage
+ */
+function calculateTCEA(monto, totalCost, plazoMeses) {
+    const n = plazoMeses / 12; // Convert months to years
+    if (n <= 0 || monto <= 0) return 0;
+    return (Math.pow(totalCost / monto, 1 / n) - 1) * 100;
+}
+
 module.exports = {
     calculateSchedule,
-    calculateMora
+    calculateMora,
+    calculateTEA,
+    calculateTCEA
 };

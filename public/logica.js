@@ -2508,6 +2508,15 @@ function showReceipt(payment, loan) {
     const capitalInteresPagado = totalPagado - moraPagada;
     const paymentMethod = payment.payment_method || 'Efectivo';
 
+    // 🚨 CÁLCULO DE IGV: Reverse calculate para mostrar desglose
+    const IGV_RATE = 0.18;
+    const subtotalCapitalInteres = capitalInteresPagado / 1.18;
+    const igvCapitalInteres = capitalInteresPagado - subtotalCapitalInteres;
+    const subtotalMora = moraPagada / 1.18;
+    const igvMora = moraPagada - subtotalMora;
+    const subtotalTotal = subtotalCapitalInteres + subtotalMora;
+    const igvTotal = igvCapitalInteres + igvMora;
+
     // Generar Correlativo y Transaction ID
     const transactionId = payment.transaction_id || `TRX-${Math.floor(Math.random() * 90000000) + 10000000}`;
     const correlativo = payment.correlativo_boleta || (Math.floor(Math.random() * 999999) + 1);
@@ -2593,8 +2602,8 @@ function showReceipt(payment, loan) {
                                 <td style="padding: 5px; text-align: center;">UNIDAD</td>
                                 <td style="padding: 5px;">SERV01</td>
                                 <td style="padding: 5px;">CUOTA PRÉSTAMO Y/O INTERESES</td>
-                                <td style="padding: 5px; text-align: right;">${capitalInteresPagado.toFixed(2)}</td>
-                                <td style="padding: 5px; text-align: right;">${capitalInteresPagado.toFixed(2)}</td>
+                                <td style="padding: 5px; text-align: right;">${subtotalCapitalInteres.toFixed(2)}</td>
+                                <td style="padding: 5px; text-align: right;">${subtotalCapitalInteres.toFixed(2)}</td>
                             </tr>
                             ${moraPagada > 0 ? `
                             <tr>
@@ -2602,8 +2611,8 @@ function showReceipt(payment, loan) {
                                 <td style="padding: 5px; text-align: center;">UNIDAD</td>
                                 <td style="padding: 5px;">MORA</td>
                                 <td style="padding: 5px;">PENALIDAD POR ATRASO</td>
-                                <td style="padding: 5px; text-align: right;">${moraPagada.toFixed(2)}</td>
-                                <td style="padding: 5px; text-align: right;">${moraPagada.toFixed(2)}</td>
+                                <td style="padding: 5px; text-align: right;">${subtotalMora.toFixed(2)}</td>
+                                <td style="padding: 5px; text-align: right;">${subtotalMora.toFixed(2)}</td>
                             </tr>` : ''}
                         </tbody>
                     </table>
@@ -2622,9 +2631,9 @@ function showReceipt(payment, loan) {
 
                     <div style="width: 40%; border-left: 1px solid #000;">
                          <table style="width: 100%; border-collapse: collapse;">
-                            <tr><td style="padding: 3px 10px; text-align: right;">Sub Total Ventas :</td><td style="padding: 3px 10px; text-align: right;">S/ ${totalPagado.toFixed(2)}</td></tr>
-                            <tr><td style="padding: 3px 10px; text-align: right;">Op. Gravada :</td><td style="padding: 3px 10px; text-align: right;">S/ ${totalPagado.toFixed(2)}</td></tr>
-                            <tr><td style="padding: 3px 10px; text-align: right;">IGV (0%) :</td><td style="padding: 3px 10px; text-align: right;">S/ 0.00</td></tr> 
+                            <tr><td style="padding: 3px 10px; text-align: right;">Sub Total :</td><td style="padding: 3px 10px; text-align: right;">S/ ${subtotalTotal.toFixed(2)}</td></tr>
+                            <tr><td style="padding: 3px 10px; text-align: right;">Op. Gravada :</td><td style="padding: 3px 10px; text-align: right;">S/ ${subtotalTotal.toFixed(2)}</td></tr>
+                            <tr><td style="padding: 3px 10px; text-align: right;">IGV (18%) :</td><td style="padding: 3px 10px; text-align: right;">S/ ${igvTotal.toFixed(2)}</td></tr>
                             <tr><td style="padding: 3px 10px; text-align: right; border-top: 1px solid #000; font-weight: bold;">Importe Total :</td><td style="padding: 3px 10px; text-align: right; border-top: 1px solid #000; font-weight: bold;">S/ ${totalPagado.toFixed(2)}</td></tr>
                          </table>
                     </div>
@@ -2676,7 +2685,7 @@ function showReceipt(payment, loan) {
                         <tr>
                             <td style="padding-top: 5px;">1</td>
                             <td style="padding-top: 5px;">SERV</td>
-                            <td style="text-align: right; padding-top: 5px;">${capitalInteresPagado.toFixed(2)}</td>
+                            <td style="text-align: right; padding-top: 5px;">${subtotalCapitalInteres.toFixed(2)}</td>
                         </tr>
                         <tr>
                             <td colspan="3" style="font-size: 11px;">CUOTA DE PRÉSTAMO</td>
@@ -2685,7 +2694,7 @@ function showReceipt(payment, loan) {
                         <tr>
                             <td style="padding-top: 5px;">1</td>
                             <td style="padding-top: 5px;">MORA</td>
-                            <td style="text-align: right; padding-top: 5px;">${moraPagada.toFixed(2)}</td>
+                            <td style="text-align: right; padding-top: 5px;">${subtotalMora.toFixed(2)}</td>
                         </tr>
                         <tr>
                             <td colspan="3" style="font-size: 11px;">PENALIDAD POR ATRASO</td>
@@ -2695,12 +2704,12 @@ function showReceipt(payment, loan) {
 
                 <div style="border-top: 1px solid #000; padding-top: 5px; font-size: 13px; font-weight: bold;">
                     <div style="display: flex; justify-content: space-between;">
-                        <span>OP. GRAVADA</span>
-                        <span>(S/) ${totalPagado.toFixed(2)}</span>
+                        <span>SUBTOTAL</span>
+                        <span>(S/) ${subtotalTotal.toFixed(2)}</span>
                     </div>
                     <div style="display: flex; justify-content: space-between;">
-                        <span>I.G.V</span>
-                        <span>(S/) 0.00</span>
+                        <span>I.G.V (18%)</span>
+                        <span>(S/) ${igvTotal.toFixed(2)}</span>
                     </div>
                     <div style="display: flex; justify-content: space-between; font-size: 18px; margin-top: 5px;">
                         <span>TOTAL</span>
