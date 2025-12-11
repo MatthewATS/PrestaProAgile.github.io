@@ -22,10 +22,11 @@ const pool = mysql.createPool(process.env.DATABASE_URL);
 // --- CONSTANTES DE NEGOCIO Y API DE FLOW ---
 const TASA_MORA_MENSUAL = 1;
 
-// 🚨🚨🚨 CREDENCIALES DE PRODUCCIÓN DE FLOW 🚨🚨🚨
+// 🚨🚨🚨 CREDENCIALES (SE ASUME QUE ESTAS CLAVES SON DE PRODUCCIÓN) 🚨🚨🚨
 const FLOW_API_KEY = '1FF50655-0135-4F50-9A60-774ABDBL14C7'; 
 const FLOW_SECRET_KEY = '1b7e761342e5525b8a294499bde19d29cfa76090'; 
-const FLOW_ENDPOINT_BASE_API = 'https://api.flow.cl/v1/payment/create'; 
+// 🚨 CAMBIO CRÍTICO: Usando el ENDPOINT de SANDBOX solicitado
+const FLOW_ENDPOINT_BASE_API = 'https://sandbox.flow.cl/api/payment/create'; 
 
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app';
 
@@ -571,7 +572,7 @@ app.post('/api/flow/create-order', async (req, res) => {
         subject: subject,
         amount: totalAmount.toFixed(2),
         email: custEmail,
-        // 🚨 AJUSTE DE MONEDA: Volvemos a CLP, ya que PEN podría no ser soportado
+        // 🚨 Mantenemos CLP, ya que es el estándar de Flow, a pesar de usar Soles (S/)
         payment_currency: 'CLP', 
         urlReturn: returnUrl,
         urlCallback: callbackUrl,
@@ -599,10 +600,10 @@ app.post('/api/flow/create-order', async (req, res) => {
         const flowData = response.data;
 
         if (flowData.url && flowData.token) {
-            // 🚨 CONSTRUCCIÓN DEL URL DE REDIRECCIÓN REAL DE FLOW
+            // 🚨 CONSTRUCCIÓN DEL URL DE REDIRECCIÓN REAL DE FLOW (Apunta a Sandbox si es el caso)
             const realFlowUrl = `${flowData.url}?token=${flowData.token}`;
 
-            console.log('[FLOW] ✅ Orden de pago REAL generada exitosamente:', realFlowUrl);
+            console.log('[FLOW] ✅ Orden de pago REAL (SANDBOX) generada exitosamente:', realFlowUrl);
             return res.json({
                 success: true,
                 url: realFlowUrl, // URL real de Flow que empieza con HTTPS!
@@ -620,10 +621,11 @@ app.post('/api/flow/create-order', async (req, res) => {
             console.error('   Estado HTTP:', error.response.status);
             console.error('   Respuesta de Flow:', error.response.data);
         } else {
+            // Este es el error ENOTFOUND que se está viendo
             console.error('   Error de Red/Conexión:', error.message);
         }
 
-        // --- FALLBACK: URL de SIMULACIÓN (Esto es lo que ves cuando falla el try) ---
+        // --- FALLBACK: URL de SIMULACIÓN (Esto es lo que verás si la clave de Sandbox es incorrecta o hay un bloqueo) ---
         console.log('[FLOW] ⚠️ Recurriendo a la URL de SIMULACIÓN debido al error anterior.');
 
         const encodedMetadata = Buffer.from(JSON.stringify({
@@ -664,8 +666,8 @@ app.get('/flow/manual-payment', (req, res) => {
         commerceOrder: txn,
         requestDate: new Date().toISOString(),
         status: 2, // 2 = Pagado (Flow status)
-        amount: parseFloat(metadataParsed.amount),
         currency: 'PEN', 
+        amount: parseFloat(metadataParsed.amount),
         paymentData: {
             fee: 0,
             comm: 0,
@@ -736,10 +738,8 @@ app.post('/api/flow/webhook', async (req, res) => {
         
         let customData = {};
         try {
-            // Intenta parsear si Flow envió el custom data como JSON string
             customData = JSON.parse(notification.custom); 
         } catch(e) {
-            // Intenta parsear si es la metadata base64 de la simulación
             try {
                 customData = JSON.parse(Buffer.from(notification.custom, 'base64').toString('utf8'));
             } catch (e2) {
