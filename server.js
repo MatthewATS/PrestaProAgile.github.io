@@ -3,7 +3,7 @@ const path = require('path');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const crypto = require('crypto');
-const { createHash } = require('crypto');
+const { createHash } = require('crypto'); // Usamos createHash para la firma Flow
 const axios = require('axios');
 
 const app = express();
@@ -25,7 +25,6 @@ const TASA_MORA_MENSUAL = 1;
 // 🚨🚨🚨 CREDENCIALES DE PRODUCCIÓN DE FLOW 🚨🚨🚨
 const FLOW_API_KEY = '1FF50655-0135-4F50-9A60-774ABDBL14C7'; 
 const FLOW_SECRET_KEY = '1b7e761342e5525b8a294499bde19d29cfa76090'; 
-// Endpoint verificado para la creación de pago
 const FLOW_ENDPOINT_BASE_API = 'https://api.flow.cl/v1/payment/create'; 
 
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app';
@@ -572,8 +571,8 @@ app.post('/api/flow/create-order', async (req, res) => {
         subject: subject,
         amount: totalAmount.toFixed(2),
         email: custEmail,
-        // 🚨 AJUSTE EXPERIMENTAL DE MONEDA
-        payment_currency: 'PEN', 
+        // 🚨 AJUSTE DE MONEDA: Volvemos a CLP, ya que PEN podría no ser soportado
+        payment_currency: 'CLP', 
         urlReturn: returnUrl,
         urlCallback: callbackUrl,
         custom: JSON.stringify({ // Metadata
@@ -624,7 +623,7 @@ app.post('/api/flow/create-order', async (req, res) => {
             console.error('   Error de Red/Conexión:', error.message);
         }
 
-        // --- FALLBACK: URL de SIMULACIÓN ---
+        // --- FALLBACK: URL de SIMULACIÓN (Esto es lo que ves cuando falla el try) ---
         console.log('[FLOW] ⚠️ Recurriendo a la URL de SIMULACIÓN debido al error anterior.');
 
         const encodedMetadata = Buffer.from(JSON.stringify({
