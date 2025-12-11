@@ -62,12 +62,12 @@ app.get('/payment-success', (req, res) => {
 // ERROR HANDLING
 // ==========================================================
 
-// 404 handler
-app.use((req, res, next) => {
-    console.log('[404] Ruta no encontrada:', req.originalUrl);
+// 404 handler for API routes only
+app.use('/api/*', (req, res, next) => {
+    console.log('[404] Ruta de API no encontrada:', req.originalUrl);
     res.status(404).json({
         success: false,
-        message: 'Ruta de API o Recurso no encontrado',
+        message: 'Ruta de API no encontrada',
         endpoint: req.originalUrl
     });
 });
