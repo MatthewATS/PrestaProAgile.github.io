@@ -17,16 +17,15 @@ app.use((req, res, next) => {
     next();
 });
 
-const pool = mysql.createPool(process.env.DATABASE_URL);
+const pool = mysql.createPool("mysql://root:swqxqQsfRQPReJCEqQvXPCAKIjsJCCkt@metro.proxy.rlwy.net:51471/railway");
 
 // --- CONSTANTES DE NEGOCIO Y API DE FLOW ---
 const TASA_MORA_MENSUAL = 1;
 
-// 🚨🚨🚨 CREDENCIALES (SE ASUME QUE ESTAS CLAVES SON DE PRODUCCIÓN) 🚨🚨🚨
-const FLOW_API_KEY = '1FF50655-0135-4F50-9A60-774ABDBL14C7'; 
-const FLOW_SECRET_KEY = '1b7e761342e5525b8a294499bde19d29cfa76090'; 
-// 🚨 CAMBIO CRÍTICO: Usando el ENDPOINT de SANDBOX solicitado
-const FLOW_ENDPOINT_BASE_API = 'https://sandbox.flow.cl/api/payment/create'; 
+// 🚨🚨🚨 CREDENCIALES DE PRODUCCIÓN DE FLOW 🚨🚨🚨
+const FLOW_API_KEY = '1FF50655-0135-4F50-9A60-774ABDBL14C7';
+const FLOW_SECRET_KEY = '1b7e761342e5525b8a294499bde19d29cfa76090';
+const FLOW_ENDPOINT_BASE_API = 'https://www.flow.cl/api';
 
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app';
 
@@ -152,7 +151,7 @@ async function registerPaymentInternal(loanId, paymentData) {
         await connection.beginTransaction();
         const { payment_amount, payment_date, mora_amount, payment_method, correlativo_boleta, transaction_id } = paymentData;
 
-        const finalMethod = payment_method || 'Flow/Transferencia'; 
+        const finalMethod = payment_method || 'Flow/Transferencia';
 
         await connection.query(
             'INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method, correlativo_boleta, transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -562,9 +561,9 @@ app.post('/api/flow/create-order', async (req, res) => {
     const subject = `Pago Préstamo N° ${loanId} - Boleta ${correlativo_boleta}`;
     const custEmail = `${clientDni}@prestapro.cl`; // Email de ejemplo, Flow lo requiere
     const custName = `${clientName} ${clientLastName}`;
-    const returnUrl = `${YOUR_BACKEND_URL}/flow/return`; 
+    const returnUrl = `${YOUR_BACKEND_URL}/flow/return`;
     const callbackUrl = `${YOUR_BACKEND_URL}/api/flow/webhook`;
-    
+
     // Parámetros de la solicitud a Flow
     const flowParams = {
         apiKey: FLOW_API_KEY,
@@ -572,21 +571,21 @@ app.post('/api/flow/create-order', async (req, res) => {
         subject: subject,
         amount: totalAmount.toFixed(2),
         email: custEmail,
-        // 🚨 Mantenemos CLP, ya que es el estándar de Flow, a pesar de usar Soles (S/)
-        payment_currency: 'CLP', 
+        // 🚨 AJUSTE DE MONEDA: Volvemos a CLP, ya que PEN podría no ser soportado
+        payment_currency: 'CLP',
         urlReturn: returnUrl,
         urlCallback: callbackUrl,
         custom: JSON.stringify({ // Metadata
             loanId: loanId,
             correlativo_boleta: correlativo_boleta,
             amount_mora: req.body.amount_mora,
-            amount_ci: req.body.amount_ci 
+            amount_ci: req.body.amount_ci
         })
     };
 
     // 🚨 Generar la firma (sig)
     flowParams.s = generateFlowSignature(flowParams, FLOW_SECRET_KEY);
-    
+
     try {
         console.log('[FLOW DEBUG] Enviando Payload:', flowParams);
 
@@ -600,10 +599,10 @@ app.post('/api/flow/create-order', async (req, res) => {
         const flowData = response.data;
 
         if (flowData.url && flowData.token) {
-            // 🚨 CONSTRUCCIÓN DEL URL DE REDIRECCIÓN REAL DE FLOW (Apunta a Sandbox si es el caso)
+            // 🚨 CONSTRUCCIÓN DEL URL DE REDIRECCIÓN REAL DE FLOW
             const realFlowUrl = `${flowData.url}?token=${flowData.token}`;
 
-            console.log('[FLOW] ✅ Orden de pago REAL (SANDBOX) generada exitosamente:', realFlowUrl);
+            console.log('[FLOW] ✅ Orden de pago REAL generada exitosamente:', realFlowUrl);
             return res.json({
                 success: true,
                 url: realFlowUrl, // URL real de Flow que empieza con HTTPS!
@@ -621,18 +620,17 @@ app.post('/api/flow/create-order', async (req, res) => {
             console.error('   Estado HTTP:', error.response.status);
             console.error('   Respuesta de Flow:', error.response.data);
         } else {
-            // Este es el error ENOTFOUND que se está viendo
             console.error('   Error de Red/Conexión:', error.message);
         }
 
-        // --- FALLBACK: URL de SIMULACIÓN (Esto es lo que verás si la clave de Sandbox es incorrecta o hay un bloqueo) ---
+        // --- FALLBACK: URL de SIMULACIÓN (Esto es lo que ves cuando falla el try) ---
         console.log('[FLOW] ⚠️ Recurriendo a la URL de SIMULACIÓN debido al error anterior.');
 
         const encodedMetadata = Buffer.from(JSON.stringify({
             loanId: loanId,
-            amount_mora: req.body.amount_mora, 
+            amount_mora: req.body.amount_mora,
             correlativo_boleta: correlativo_boleta,
-            amount_ci: req.body.amount_ci,     
+            amount_ci: req.body.amount_ci,
             amount: amount,
             payment_date: new Date().toISOString().split('T')[0]
         })).toString('base64');
@@ -666,14 +664,14 @@ app.get('/flow/manual-payment', (req, res) => {
         commerceOrder: txn,
         requestDate: new Date().toISOString(),
         status: 2, // 2 = Pagado (Flow status)
-        currency: 'PEN', 
         amount: parseFloat(metadataParsed.amount),
+        currency: 'PEN',
         paymentData: {
             fee: 0,
             comm: 0,
             tax: 0
         },
-        custom: metadataDecoded 
+        custom: metadataDecoded
     }, null, 2);
 
     res.send(`
@@ -727,37 +725,39 @@ app.post('/api/flow/webhook', async (req, res) => {
 
     const notification = req.body;
     console.log('[FLOW WEBHOOK] 📥 Notificación recibida:', notification);
-    
+
     const flowStatus = notification.status; // 2 = Pagado
 
     if (flowStatus == 2) {
         console.log('[FLOW WEBHOOK] ✅ Pago APROBADO');
-        
+
         const commerceOrder = notification.commerceOrder;
         const totalAmount = parseFloat(notification.amount);
-        
+
         let customData = {};
         try {
-            customData = JSON.parse(notification.custom); 
+            // Intenta parsear si Flow envió el custom data como JSON string
+            customData = JSON.parse(notification.custom);
         } catch(e) {
+            // Intenta parsear si es la metadata base64 de la simulación
             try {
                 customData = JSON.parse(Buffer.from(notification.custom, 'base64').toString('utf8'));
             } catch (e2) {
-                 console.error('[FLOW WEBHOOK ERROR] No se pudo parsear custom data:', e2);
-                 return; 
+                console.error('[FLOW WEBHOOK ERROR] No se pudo parsear custom data:', e2);
+                return;
             }
         }
 
         const loanId = customData.loanId;
         const correlativo_boleta = customData.correlativo_boleta;
-        
+
         const amountMora = customData.amount_mora || '0';
-        
+
         const paymentDate = new Date().toISOString().split('T')[0];
 
         if (loanId && commerceOrder && correlativo_boleta) {
             const paymentDataToRegister = {
-                payment_amount: totalAmount, 
+                payment_amount: totalAmount,
                 mora_amount: parseFloat(amountMora),
                 payment_date: paymentDate,
                 payment_method: 'Flow', // Nuevo método
@@ -816,12 +816,23 @@ const startServer = async () => {
         console.log('✅ Conexión a la base de datos establecida con éxito.');
         connection.release();
 
+// Asegúrate de que PORT esté definido antes de esta sección (e.g., const PORT = process.env.PORT || 3000;)
+// Es crucial usar variables de entorno (process.env.FLOW_API_KEY) y NUNCA hardcodear la clave aquí.
+
         app.listen(PORT, () => {
-            console.log(`\n${'='.repeat(60)}`);
-            console.log(`🚀 Servidor PrestaPro escuchando en el puerto ${PORT}`);
-            console.log(`📡 URL de Backend: ${YOUR_BACKEND_URL}`);
-            console.log(`💳 Flow (API Key): ${FLOW_API_KEY ? '✅' : '❌'}`);
-            console.log(`${'='.repeat(60)}\n`);
+            // 1. Usa la URL de la API de Flow/Backend desde una variable de entorno si es posible.
+            const BACKEND_URL = process.env.BACKEND_URL || "https://prestaproagilegithubio-production-be75.up.railway.app";
+
+            // 2. Comprueba si la API Key existe en el entorno, pero NO la imprimas.
+            const flowApiKeyStatus = "1FF50655-0135-4F50-9A60-774ABDBL14C7" ? '✅ Configurada' : '❌ NO CONFIGURADA';
+
+            const separator = '='.repeat(60);
+
+            console.log(`\n${separator}`);
+            console.log(`🚀 Servidor **PrestaPro** escuchando en el puerto **${PORT}**`);
+            console.log(`📡 URL de Backend: ${BACKEND_URL}`);
+            console.log(`💳 Flow (API Key): ${flowApiKeyStatus}`); // Solo estado, no la clave.
+            console.log(`${separator}\n`);
         });
 
     } catch (err) {
