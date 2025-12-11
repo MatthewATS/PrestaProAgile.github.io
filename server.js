@@ -25,7 +25,7 @@ const TASA_MORA_MENSUAL = 1;
 // 🚨🚨🚨 CREDENCIALES DE PRODUCCIÓN DE FLOW 🚨🚨🚨
 const FLOW_API_KEY = '1FF50655-0135-4F50-9A60-774ABDBL14C7';
 const FLOW_SECRET_KEY = '1b7e761342e5525b8a294499bde19d29cfa76090';
-const FLOW_ENDPOINT_BASE_API = 'https://www.flow.cl/api';
+const FLOW_ENDPOINT_BASE_API = 'https://www.flow.cl/api/payment/create';
 
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app';
 
@@ -572,9 +572,9 @@ app.post('/api/flow/create-order', async (req, res) => {
         amount: totalAmount.toFixed(2),
         email: custEmail,
         // 🚨 AJUSTE DE MONEDA: Volvemos a CLP, ya que PEN podría no ser soportado
-        payment_currency: 'CLP',
+        currency: 'CLP',
         urlReturn: returnUrl,
-        urlCallback: callbackUrl,
+        urlConfirmation: callbackUrl,
         custom: JSON.stringify({ // Metadata
             loanId: loanId,
             correlativo_boleta: correlativo_boleta,
