@@ -30,10 +30,15 @@ router.post('/create-order', async (req, res) => {
 
         const totalAmount = parseFloat(amount);
 
+        // Create unique commerceOrder with timestamp to avoid duplicates
+        // Format: LOAN-{loanId}-{correlativo}-{timestamp}
+        const timestamp = Date.now();
+        const uniqueCommerceOrder = `LOAN-${loanId}-${correlativo_boleta}-${timestamp}`;
+
         // Create Flow payment
         const orderData = {
             amount: totalAmount,
-            commerceOrder: `LOAN-${loanId}-${correlativo_boleta}`,
+            commerceOrder: uniqueCommerceOrder,
             subject: `Pago de Préstamo #${loanId}`,
             email: `cliente-${clientDni}@prestapro.com`,
             // Optional: Add custom parameters for webhook
@@ -107,16 +112,17 @@ router.post('/webhook', async (req, res) => {
             console.log('[FLOW WEBHOOK] ✅ Pago APROBADO');
 
             // Extraer loanId y correlativo del commerceOrder
-            // Formato: LOAN-{loanId}-{correlativo}
+            // Formato: LOAN-{loanId}-{correlativo}-{timestamp}
             const commerceOrder = paymentStatus.commerceOrder || '';
-            const match = commerceOrder.match(/LOAN-(\d+)-(\d+)/);
+            // Regex actualizado para soportar timestamp opcional
+            const match = commerceOrder.match(/LOAN-(\d+)-(\d+)(?:-\d+)?/);
 
             let loanId, correlativo_boleta;
 
             if (match) {
                 loanId = parseInt(match[1]);
                 correlativo_boleta = parseInt(match[2]);
-                console.log('[FLOW WEBHOOK] 📝 Datos extraídos del commerceOrder:', { loanId, correlativo_boleta });
+                console.log('[FLOW WEBHOOK] 📝 Datos extraídos del commerceOrder:', { loanId, correlativo_boleta, commerceOrder });
             }
 
             // También intentar obtener de metadata opcional
