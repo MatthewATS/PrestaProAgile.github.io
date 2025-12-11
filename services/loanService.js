@@ -30,7 +30,8 @@ async function getAllLoans() {
         const totalPaidCI = associatedPayments.reduce((sum, p) => sum + (parseFloat(p.payment_amount) - (parseFloat(p.mora_amount) || 0)), 0);
         loan.total_paid = parseFloat(totalPaidCI.toFixed(2));
 
-        loan.mora_pendiente = calculateMora(loan, loan.total_paid);
+        loan.mora_pendiente = calculateMora(loan, loan.total_paid, associatedPayments);
+
 
         if (loan.total_paid >= loan.total_due) {
             loan.status = 'Pagado';

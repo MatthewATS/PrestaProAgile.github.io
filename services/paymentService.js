@@ -29,7 +29,11 @@ async function registerPaymentInternal(loanId, paymentData) {
         const loan = loanRows[0];
         const { totalDue } = calculateSchedule(loan);
 
-        if (totalPaidCI >= totalDue) {
+        // Tolerancia para diferencias por redondeo (ej. S/ 0.05 o S/ 0.10)
+        // Se permite cerrar el préstamo si la diferencia es menor o igual a 0.50
+        const ROUNDING_TOLERANCE = 0.50;
+
+        if (totalPaidCI >= (totalDue - ROUNDING_TOLERANCE)) {
             await connection.query("UPDATE loans SET status = 'Pagado' WHERE id = ?", [loanId]);
             console.log(`[PAYMENT INTERNAL] ✅ Préstamo ${loanId} marcado como PAGADO`);
         }

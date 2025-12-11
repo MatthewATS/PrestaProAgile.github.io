@@ -1610,11 +1610,22 @@ async function handlePaymentSubmit(e) {
     const paymentAmount = parseFloat(getDomElement('payment_amount').value);
     const moraAmount = parseFloat(getDomElement('mora_amount').value) || 0;
     const paymentDate = getDomElement('payment_date').value;
-    const totalToCollect = paymentAmount + moraAmount; // Monto total que se enviará
+    const totalToCollect = paymentAmount + moraAmount; // Monto total calculado originalmente
+
+    let finalPaymentAmount = paymentAmount; // default
+    let finalTotalToCollect = totalToCollect; // default
+
+    // 🚨 MODIFICACIÓN: Redondeo para Efectivo (a favor del cliente, floor a 0.10)
+    if (selectedMethod === 'Efectivo') {
+        finalTotalToCollect = Math.floor(totalToCollect * 10) / 10;
+        // Ajustamos el payment_amount (Capital+Interés) para reflejar la reducción, manteniendo la Mora intacta
+        // O simplemente enviamos el total reducido. El backend distribuirá.
+        // Aquí reduciremos el total enviado.
+    }
 
     // Data básica para el registro interno (será enriquecida por el backend)
     const paymentData = {
-        payment_amount: totalToCollect,
+        payment_amount: finalTotalToCollect, // Enviamos el monto redondeado
         mora_amount: moraAmount,
         payment_method: selectedMethod,
         payment_date: paymentDate
@@ -1628,6 +1639,7 @@ async function handlePaymentSubmit(e) {
 
         if (!loan) { alert("Error cliente no encontrado"); return; }
 
+        // Flow siempre usa el monto exacto (sin redondeo de efectivo)
         if (!confirm(`Se abrirá la pasarela de pagos Flow (Tarjeta, Yape, Transferencia) por S/ ${totalToCollect.toFixed(2)}. ¿Continuar?`)) {
             return;
         }
@@ -1998,9 +2010,19 @@ function calculateFlexiblePayment(loan) {
     const totalToCollect = calculatedPaymentData.amount + calculatedPaymentData.mora;
     const selectedMethod = document.querySelector('input[name="quick_payment_method"]:checked')?.value;
 
+    let finalTotalToCollect = totalToCollect;
+    let roundingDifference = 0;
+
+    // 🚨 MODIFICACIÓN: Redondeo a favor del cliente si es Efectivo
+    if (selectedMethod === 'Efectivo') {
+        finalTotalToCollect = Math.floor(totalToCollect * 10) / 10;
+        roundingDifference = totalToCollect - finalTotalToCollect;
+    }
+
     let isPaymentAllowed = true;
 
     // **MODIFICACIÓN 3: Lógica de restricción de monto para Yape/Plin**
+    // Usamos el total sin redondear para la validación de Yape (que no aplica redondeo)
     if (selectedMethod === 'Yape/Plin' && totalToCollect > MP_LIMIT_YAPE) {
         isPaymentAllowed = false;
         paymentDescriptionText = `❌ Monto (S/ ${totalToCollect.toFixed(2)}) excede el límite de Yape/Plin (S/ ${MP_LIMIT_YAPE.toFixed(2)}). Seleccione otro método.`;
@@ -2008,7 +2030,14 @@ function calculateFlexiblePayment(loan) {
 
     getDomElement('summary-capital-interest').textContent = `S/ ${calculatedPaymentData.amount.toFixed(2)}`;
     getDomElement('summary-mora').textContent = `S/ ${calculatedPaymentData.mora.toFixed(2)}`;
-    getDomElement('summary-total').textContent = `S/ ${totalToCollect.toFixed(2)}`;
+
+    // Mostrar total redondeado si aplica
+    if (roundingDifference > 0) {
+        getDomElement('summary-total').innerHTML = `S/ ${finalTotalToCollect.toFixed(2)} <span style="font-size: 0.8em; color: var(--success-color);">(Redondeado de ${totalToCollect.toFixed(2)})</span>`;
+    } else {
+        getDomElement('summary-total').textContent = `S/ ${finalTotalToCollect.toFixed(2)}`;
+    }
+
     getDomElement('payment_description').textContent = paymentDescriptionText;
 
     // Habilitar el botón solo si hay un monto mayor a cero, se seleccionó un método Y no hay restricción.
@@ -2043,7 +2072,16 @@ async function handleQuickPaymentSubmit() {
     }
 
     // 🚨 MODIFICACIÓN CRÍTICA: Redondear a 2 decimales y convertir a número
-    const totalToCollectRounded = Math.round(totalToCollect * 100) / 100;
+
+    let finalTotal = totalToCollect;
+
+    // Aplicar redondeo si es Efectivo (Misma lógica que en calculateFlexiblePayment)
+    if (selectedMethod === 'Efectivo') {
+        finalTotal = Math.floor(totalToCollect * 10) / 10;
+        console.log(`[PAGO RÁPIDO] Redondeo Efectivo aplicado: ${totalToCollect} -> ${finalTotal}`);
+    }
+
+    const totalToCollectRounded = Math.round(finalTotal * 100) / 100;
     const amountCIRounded = Math.round(calculatedPaymentData.amount * 100) / 100;
     const moraRounded = Math.round(calculatedPaymentData.mora * 100) / 100;
 
@@ -2172,56 +2210,103 @@ async function handleQuickPaymentSubmit() {
 
 // --- FUNCIONES DE MORA Y CÁLCULO ---
 function calculateMora(loan) {
+    console.log('🔍 [FRONTEND MORA] Calculating for loan:', loan.id, 'Total paid:', loan.total_paid, 'Payments:', loan.payments?.length || 0);
     if (loan.status === 'Pagado') return { totalMora: 0, mesesAtrasados: 0, amountOverdue: 0 };
 
     const { schedule } = calculateSchedule(loan);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    console.log('📅 [FRONTEND] Today:', today.toISOString().split('T')[0]);
 
-    let totalMora = 0;
-    let totalAmountOverdue = 0;
-    let latestDueDate = new Date(loan.fecha);
     let totalPaid = loan.total_paid || 0; // Total pagado (Capital/Interés)
+    console.log('💰 [FRONTEND] Total paid:', totalPaid, 'Total due:', loan.total_due);
+
+    // If loan is paid or no overdue amount, no mora
+    if (totalPaid >= loan.total_due) {
+        console.log('❌ [FRONTEND] No mora: Loan is paid');
+        return { totalMora: 0, mesesAtrasados: 0, amountOverdue: 0 };
+    }
+
+    // Find the first overdue installment
+    let firstOverdueDate = null;
+    let totalAmountOverdue = 0;
 
     for (const item of schedule) {
-        const dueDate = new Date(item.fecha);
+        const dueDate = item.fechaObj ? new Date(item.fechaObj) : new Date(item.fecha);
         dueDate.setHours(0, 0, 0, 0);
 
         if (dueDate <= today) {
-            // Se calcula la expectativa acumulada de Capital/Interés
             const cumulativeExpected = schedule.slice(0, item.cuota).reduce((sum, s) => sum + parseFloat(s.monto), 0);
 
             if (totalPaid < cumulativeExpected) {
-                const amountOverdue = cumulativeExpected - totalPaid;
-
-                const monthsLate = (today.getFullYear() - dueDate.getFullYear()) * 12 +
-                    (today.getMonth() - dueDate.getMonth());
-
-                const monthsToCharge = Math.max(1, monthsLate);
-
-                const outstandingBalanceForMora = loan.total_due - totalPaid;
-
-                totalMora = outstandingBalanceForMora * (TASA_MORA_MENSUAL / 100) * monthsToCharge;
-                totalAmountOverdue = amountOverdue;
-                latestDueDate = dueDate;
+                firstOverdueDate = dueDate;
+                totalAmountOverdue = cumulativeExpected - totalPaid;
+                console.log('📍 [FRONTEND] First overdue:', dueDate.toISOString().split('T')[0], 'Expected:', cumulativeExpected);
                 break;
             }
         }
     }
 
-    let mesesAtrasados = 0;
-    if (totalAmountOverdue > 0) {
-        mesesAtrasados = (today.getFullYear() - latestDueDate.getFullYear()) * 12 +
-            (today.getMonth() - latestDueDate.getMonth());
-
-        if (today.getDate() < latestDueDate.getDate()) {
-            mesesAtrasados -= 1;
-        }
-        mesesAtrasados = Math.max(1, mesesAtrasados);
+    // If no overdue installments, no mora
+    if (!firstOverdueDate) {
+        console.log('❌ [FRONTEND] No overdue installments found');
+        return { totalMora: 0, mesesAtrasados: 0, amountOverdue: 0 };
     }
 
-    return { totalMora: totalMora > 0 ? parseFloat(totalMora.toFixed(2)) : 0, mesesAtrasados, amountOverdue: totalAmountOverdue };
+    // Calculate mora month by month from first overdue date to today
+    let totalMora = 0;
+
+    // Start from the NEXT month after the due date
+    let currentDate = new Date(firstOverdueDate);
+    currentDate.setHours(0, 0, 0, 0);
+    currentDate.setMonth(currentDate.getMonth() + 1); // Move to next month after due date
+    currentDate.setDate(1); // Set to first day of the month
+
+    // Create a set of months that had payments (format: "YYYY-MM")
+    const monthsWithPayments = new Set();
+    if (loan.payments && Array.isArray(loan.payments)) {
+        loan.payments.forEach(payment => {
+            const paymentDate = new Date(payment.payment_date);
+            const monthKey = `${paymentDate.getFullYear()}-${String(paymentDate.getMonth() + 1).padStart(2, '0')}`;
+            monthsWithPayments.add(monthKey);
+        });
+    }
+
+    // Iterate through each month from month after due date to current month
+    const todayMonth = new Date(today);
+    todayMonth.setDate(1); // Set to first day of current month
+
+    let monthsWithMora = 0;
+    while (currentDate <= todayMonth) {
+        const monthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+
+        // If this month had NO payment, charge mora
+        if (!monthsWithPayments.has(monthKey)) {
+            // Calculate outstanding balance at this point
+            const outstandingBalance = loan.total_due - totalPaid;
+
+            // Charge 1% of outstanding balance for this month
+            const moraForMonth = outstandingBalance * (TASA_MORA_MENSUAL / 100);
+            totalMora += moraForMonth;
+            monthsWithMora++;
+            console.log(`💸 [FRONTEND] Month ${monthKey}: +S/ ${moraForMonth.toFixed(2)} (Balance: ${outstandingBalance.toFixed(2)})`);
+        } else {
+            console.log(`✅ [FRONTEND] Month ${monthKey}: Has payment, no mora`);
+        }
+
+        // Move to next month
+        currentDate.setMonth(currentDate.getMonth() + 1);
+    }
+    console.log('✅ [FRONTEND] Total mora:', totalMora.toFixed(2));
+
+
+    return {
+        totalMora: totalMora > 0 ? parseFloat(totalMora.toFixed(2)) : 0,
+        mesesAtrasados: monthsWithMora,
+        amountOverdue: totalAmountOverdue
+    };
 }
+
 
 function calculateSchedule(loan) {
     // 🚨 CORRECCIÓN: Convertir la tasa de interés mensual (loan.interes) a decimal
@@ -2241,6 +2326,7 @@ function calculateSchedule(loan) {
             schedule.push({
                 cuota: i,
                 fecha: paymentDate.toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }),
+                fechaObj: new Date(paymentDate), // Add Date object for calculations
                 monto: interestOnlyPayment.toFixed(2)
             });
         }
@@ -2263,6 +2349,7 @@ function calculateSchedule(loan) {
             schedule.push({
                 cuota: loan.meses_solo_interes + i,
                 fecha: paymentDate.toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }),
+                fechaObj: new Date(paymentDate), // Add Date object for calculations
                 monto: amortizedPayment.toFixed(2)
             });
         }
@@ -2281,6 +2368,7 @@ function calculateSchedule(loan) {
             schedule.push({
                 cuota: i,
                 fecha: paymentDate.toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }),
+                fechaObj: new Date(paymentDate), // Add Date object for calculations
                 monto: monthlyPayment.toFixed(2)
             });
         }
