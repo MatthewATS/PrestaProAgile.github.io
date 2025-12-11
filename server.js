@@ -25,15 +25,11 @@ const pool = mysql.createPool(process.env.DATABASE_URL);
 const TASA_MORA_MENSUAL = 1;
 
 // 🚨🚨🚨 CREDENCIALES DE PRODUCCIÓN PROPORCIONADAS 🚨🚨🚨
-// Merchant ID (user id)
 const IZP_MERCHANT_ID = '68304620'; 
-// Contraseña de Producción
 const IZP_PASSWORD = 'prodpassword_CEhMhCy3YlZblRGkqVOGZJKlR5ei2a6cUR6KgtAMIdLWG'; 
-// Clave Pública de Producción (Se mantiene la provista, aunque no se usa en este código)
 const IZP_PUBLIC_KEY = '68304620:publickey_wjo2urlfqtyvbTiMaVZSdF1fSkGenL5fG87WNzb1aEu4V';
-// Endpoint de PRODUCCIÓN (Usando el tuyo)
 const IZP_ENDPOINT_BASE_API = 'https://api.micuentaweb.pe/api-payment/V4/Charge/CreatePayment';
-const IZP_HMAC_KEY = 'xenUz7o7m1yTrLTqpHJq4QekjbKA4DsyY0lDMwmlpzSj'; // Clave de firma (suele ser fija)
+const IZP_HMAC_KEY = 'xenUz7o7m1yTrLTqpHJq4QekjbKA4DsyY0lDMwmlpzSj'; 
 
 // URL de Railway
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app';
@@ -43,7 +39,6 @@ const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithu
 // 1. UTILIDADES DE CÁLCULO Y DB
 // ==========================================================
 
-// 🚨 FUNCIÓN: Obtener el siguiente correlativo de boleta
 async function getNextCorrelativo(connection) {
     const [rows] = await connection.query(
         "SELECT MAX(correlativo_boleta) AS max_correlativo FROM payments"
@@ -140,14 +135,13 @@ function calculateMora(loan, totalPaid) {
     }
 }
 
-// 🚨 FUNCIÓN: Registro interno de pagos
 async function registerPaymentInternal(loanId, paymentData) {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
         const { payment_amount, payment_date, mora_amount, payment_method, correlativo_boleta, transaction_id } = paymentData;
 
-        const finalMethod = payment_method || 'Izipay/Transferencia'; // Ajuste
+        const finalMethod = payment_method || 'Izipay/Transferencia'; 
 
         await connection.query(
             'INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method, correlativo_boleta, transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -534,13 +528,11 @@ app.get('/api/cash-closures/:date', async (req, res) => {
 // 4. RUTAS DE IZIPAY (Sustituye a Mercado Pago)
 // ==========================================================
 
-// 🚨 POST /api/izipay/create-order (CORREGIDO CON DETALLE DE ERROR)
 app.post('/api/izipay/create-order', async (req, res) => {
     console.log('[IZIPAY] 📥 Recibida solicitud de creación de orden:', req.body);
 
     const { amount, loanId, clientDni, payment_date, amount_ci, amount_mora, clientName, clientLastName } = req.body;
 
-    // --- PASO 1: Generar Correlativo de Boleta y Transaction ID ---
     let correlativo_boleta = null;
     let transaction_id = null;
     try {
@@ -554,36 +546,29 @@ app.post('/api/izipay/create-order', async (req, res) => {
     }
 
     const totalAmount = parseFloat(amount);
-    // Izipay maneja el monto en céntimos
     const amountInCents = Math.round(totalAmount * 100);
 
-    // --- PASO 2: INTENTAR LLAMADA REAL A IZIPAY API ---
     let checkoutUrl = null;
 
     try {
-        // La autenticación básica usa Merchant ID y Password
         const authString = Buffer.from(`${IZP_MERCHANT_ID}:${IZP_PASSWORD}`).toString('base64');
 
         const izipayPayload = {
             'amount': amountInCents,
             'currency': 'PEN',
             'orderId': transaction_id,
-            // Datos del cliente para el formulario
             'customer': {
-                'email': 'customer@example.com', // Usar un email de cliente real si se tiene
+                'email': 'customer@example.com',
                 'billingDetails': {
                     'firstName': clientName,
                     'lastName': clientLastName
                 }
             },
-            // Configuración de la integración/respuesta
             'siteId': IZP_MERCHANT_ID,
             'transactionOptions': {
-                // URLs públicas para el retorno y la notificación de pago (Webhook)
                 'answerUrl': `${YOUR_BACKEND_URL}/izipay/return`,
                 'notificationUrl': `${YOUR_BACKEND_URL}/api/izipay/webhook`
             },
-            // Metadata para recuperar en el Webhook
             'metadata': {
                 'loanId': loanId,
                 'amount_mora': amount_mora,
@@ -593,9 +578,7 @@ app.post('/api/izipay/create-order', async (req, res) => {
             }
         };
 
-        // *************** DEPURACIÓN: MOSTRAR PAYLOAD EN CONSOLA ***************
         console.log('[IZIPAY DEBUG] Enviando Payload:', izipayPayload);
-        // **********************************************************************
 
         const response = await axios.post(IZP_ENDPOINT_BASE_API, izipayPayload, {
             headers: {
@@ -604,25 +587,25 @@ app.post('/api/izipay/create-order', async (req, res) => {
             }
         });
 
-        // 🚨 Izipay (Micuentaweb) devuelve la URL de redirección en el formToken
-        checkoutUrl = response.data.answer.formToken;
+        const formToken = response.data.answer.formToken;
 
-        if (checkoutUrl) {
-            console.log('[IZIPAY] ✅ Orden de pago REAL generada exitosamente:', checkoutUrl);
+        if (formToken) {
+            // 🚨 CORRECCIÓN CRÍTICA: Construir la URL de redirección real de Micuentaweb/Izipay
+            const realIzipayUrl = `https://webpayment.micuentaweb.pe/v1/redirect?kr-answer=${formToken}`;
+            
+            console.log('[IZIPAY] ✅ Orden de pago REAL generada exitosamente:', realIzipayUrl);
             return res.json({
                 success: true,
-                url: checkoutUrl, // URL real de Izipay
+                url: realIzipayUrl, // Devuelve el URL real de Izipay
                 transactionId: transaction_id,
                 correlativo_boleta: correlativo_boleta
             });
         }
 
-        throw new Error("La respuesta de Izipay no contenía la URL de pago (formToken).");
+        throw new Error("La respuesta de Izipay no contenía el token de pago (formToken).");
 
     } catch (error) {
-        // Este bloque se ejecuta si la llamada a Izipay falla por cualquier razón
-        
-        // *************** DEPURACIÓN: MOSTRAR ERROR COMPLETO DE AXIOS ***************
+        // Fallback si la llamada real falla (problema de credenciales, SSL, etc.)
         console.error('[IZIPAY ERROR] ❌ Falló la llamada REAL a la API de Izipay.');
         if (error.response) {
             console.error('   Estado HTTP:', error.response.status);
@@ -630,9 +613,8 @@ app.post('/api/izipay/create-order', async (req, res) => {
         } else {
             console.error('   Error de Red/Conexión:', error.message);
         }
-        // ***************************************************************************
 
-        // --- FALLBACK: RETORNO DE URL SIMULADO (FLUJO DEMO) ---
+        // --- FALLBACK: URL de SIMULACIÓN ---
         console.log('[IZIPAY] ⚠️ Recurriendo a la URL de SIMULACIÓN debido al error anterior.');
 
         const encodedMetadata = Buffer.from(JSON.stringify({
@@ -644,12 +626,10 @@ app.post('/api/izipay/create-order', async (req, res) => {
             payment_date: payment_date
         })).toString('base64');
 
-        // **USAMOS LA URL DE RAILWAY para que sea accesible al front**
         const checkoutUrlSimulated = `${YOUR_BACKEND_URL}/izipay/manual-payment?txn=${transaction_id}&metadata=${encodedMetadata}`;
 
         return res.json({
             success: true,
-            // 🚨 CRÍTICO: Devolver la URL de SIMULACIÓN
             url: checkoutUrlSimulated,
             transactionId: transaction_id,
             correlativo_boleta: correlativo_boleta
@@ -659,8 +639,6 @@ app.post('/api/izipay/create-order', async (req, res) => {
 });
 
 
-// 🚨 GET /izipay/manual-payment (Ruta de ayuda para la SIMULACIÓN)
-// Esta ruta sirve una página simple con las instrucciones para simular el Webhook.
 app.get('/izipay/manual-payment', (req, res) => {
     const { txn, metadata } = req.query;
 
@@ -668,14 +646,13 @@ app.get('/izipay/manual-payment', (req, res) => {
         return res.status(400).send('Faltan parámetros de transacción.');
     }
 
-    // Decodificar la metadata para mostrar las instrucciones
     const metadataDecoded = Buffer.from(metadata, 'base64').toString('utf8');
     const metadataParsed = JSON.parse(metadataDecoded);
 
     const webhookExampleBody = JSON.stringify({
         status: 'PAID',
         kr_order_id: txn,
-        amount: Math.round(parseFloat(metadataParsed.amount) * 100), // Monto en céntimos
+        amount: Math.round(parseFloat(metadataParsed.amount) * 100), 
         kr_hash: 'SIMULATED_HASH',
         kr_metadata: {
             loanId: metadataParsed.loanId,
@@ -730,9 +707,7 @@ app.get('/izipay/manual-payment', (req, res) => {
     `);
 });
 
-// 🚨 POST /api/izipay/webhook (WEBHOOK)
 app.post('/api/izipay/webhook', async (req, res) => {
-    // 🚨 CRÍTICO: Responder inmediatamente para evitar reintentos del proveedor
     res.status(200).send('OK');
 
     const notification = req.body;
@@ -740,35 +715,29 @@ app.post('/api/izipay/webhook', async (req, res) => {
 
     const status = notification.status;
     const transactionId = notification.kr_order_id;
-    // const krHash = notification.kr_hash; // Se omite la verificación de Hash por ser simulación
-
-    // Suponemos que la metadata está en el cuerpo de la petición (como en la simulación manual)
     const extraMetadata = notification.kr_metadata || {};
 
-    // 1. Procesar si el pago fue exitoso
     if (status === 'PAID') {
         console.log('[IZIPAY WEBHOOK] ✅ Pago APROBADO');
 
         const loanId = extraMetadata.loanId;
-        const totalAmount = parseFloat(notification.amount / 100); // Convertir céntimos a soles
+        const totalAmount = parseFloat(notification.amount / 100); 
         const paymentDate = new Date().toISOString().split('T')[0];
 
-        // 🚨 CRÍTICO: Obtener metadata que guardamos durante la creación de la orden
         const amountMora = extraMetadata.amount_mora || '0';
         const correlativo_boleta = extraMetadata.correlativo_boleta || null;
 
 
         if (loanId && transactionId && correlativo_boleta) {
             const paymentDataToRegister = {
-                payment_amount: totalAmount, // Total
+                payment_amount: totalAmount, 
                 mora_amount: parseFloat(amountMora),
                 payment_date: paymentDate,
-                payment_method: 'Izipay', // Nuevo método
+                payment_method: 'Izipay', 
                 correlativo_boleta: parseInt(correlativo_boleta),
                 transaction_id: transactionId
             };
 
-            // 🚨 CRÍTICO: El registro interno asume que el pago fue exitoso
             try {
                 await registerPaymentInternal(loanId, paymentDataToRegister);
                 console.log(`[IZIPAY WEBHOOK] ✅ Pago registrado exitosamente para Préstamo ID: ${loanId} con Boleta N° ${correlativo_boleta}`);
@@ -788,15 +757,12 @@ app.post('/api/izipay/webhook', async (req, res) => {
 // 5. CONFIGURACIÓN FINAL DEL SERVIDOR
 // ==========================================================
 
-// Sirve archivos estáticos (HTML, CSS, JS)
 app.use(express.static(path.join(__dirname)));
 
-// Ruta para servir el front.html como index
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'front.html'));
 });
 
-// Manejador de errores 404
 app.use((req, res, next) => {
     console.log('[404] Ruta no encontrada:', req.originalUrl);
     res.status(404).json({
@@ -806,7 +772,6 @@ app.use((req, res, next) => {
     });
 });
 
-// INICIO DEL SERVIDOR
 const startServer = async () => {
     try {
         const connection = await pool.getConnection();
@@ -817,7 +782,6 @@ const startServer = async () => {
             console.log(`\n${'='.repeat(60)}`);
             console.log(`🚀 Servidor PrestaPro escuchando en el puerto ${PORT}`);
             console.log(`📡 URL de Backend: ${YOUR_BACKEND_URL}`);
-            // 🚨 LOG: Ahora verifica Izipay
             console.log(`💳 Izipay (Merchant ID): ${IZP_MERCHANT_ID ? '✅' : '❌'}`);
             console.log(`⚠️ REVISA EL LOG DEL SERVIDOR AL INTENTAR CREAR UNA ORDEN DE PAGO IZIPAY PARA VER EL ERROR DE CONEXIÓN.`);
             console.log(`${'='.repeat(60)}\n`);
