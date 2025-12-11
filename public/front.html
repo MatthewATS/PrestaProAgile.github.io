@@ -157,11 +157,20 @@
                 <div class="modal-body">
 
                     <div id="quick-payment-search-section" style="margin-bottom: 25px;">
-                        <h3 class="step-header">1. Identificar Préstamo por DNI</h3>
-                        <div class="form-group">
-                            <label for="search-dni-pago">DNI del Cliente</label>
-                            <input type="text" id="search-dni-pago" placeholder="Ingresa 8 dígitos y presiona Enter" pattern="\d{8}" maxlength="8" inputmode="numeric">
-                            <small id="search-dni-status" style="margin-top: 5px; display: block;"></small>
+                        <h3 class="step-header">1. Identificar Préstamo por Documento</h3>
+                        <div class="form-row">
+                            <div class="form-group" style="max-width: 150px;">
+                                <label for="search-doc-type-pago">Tipo Doc.</label>
+                                <select id="search-doc-type-pago" required>
+                                    <option value="DNI">DNI</option>
+                                    <option value="RUC">RUC</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex-grow: 1;">
+                                <label for="search-dni-pago">N° de Documento</label>
+                                <input type="text" id="search-dni-pago" placeholder="Ingresa 8 u 11 dígitos y presiona Enter" maxlength="11" inputmode="numeric">
+                                <small id="search-dni-status" style="margin-top: 5px; display: block;"></small>
+                            </div>
                         </div>
                     </div>
 

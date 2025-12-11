@@ -17,7 +17,7 @@ let clients = new Set();
 let currentLoanForDetails = null;
 let currentLoanForQuickPayment = null;
 let calculatedPaymentData = { amount: 0, mora: 0 }; // Guarda el último cálculo flexible
-let currentIzpUrl = null; // Usaremos esta variable para guardar la URL de Flow (Nombre genérico)
+let currentIzpUrl = null; // 🚨 CAMBIO: Almacena el URL de Izipay generado (antes currentMpUrl)
 let currentClientName = null; // Almacena el nombre del cliente para el mensaje compartido
 
 // --- CREDENCIALES (SIMULACIÓN) ---
@@ -45,7 +45,7 @@ function closeModal(modal) {
     }
     if (modal.id === 'deleteConfirmationModal') getDomElement('delete-error-message').style.display = 'none';
     if (modal.id === 'checkoutLinkModal') {
-        // 🚨 CAMBIO: Limpiar la URL de Flow
+        // 🚨 CAMBIO: Limpiar la URL de Izipay
         currentIzpUrl = null;
         currentClientName = null;
         // Reiniciar la vista del módulo de pagos después de cerrar el link de checkout
@@ -117,9 +117,9 @@ function initializeApp() {
 
     // Nuevo Modal Link
     getDomElement('closeCheckoutLinkModalBtn')?.addEventListener('click', () => closeModal(getDomElement('checkoutLinkModal')));
-    getDomElement('copyLinkBtn')?.addEventListener('click', copyIzpLink);
-    // 🚨 CAMBIO: Usa la función shareIzpLink
-    getDomElement('shareMpLinkBtn')?.addEventListener('click', shareIzpLink);
+    getDomElement('copyLinkBtn')?.addEventListener('click', copyMpLink);
+    // 🚨 CAMBIO: Usa la función shareMpLink
+    getDomElement('shareMpLinkBtn')?.addEventListener('click', shareMpLink);
 
 
     // --- FUNCIÓN DE MOSTRAR APLICACIÓN (MODIFICADA) ---
@@ -465,18 +465,18 @@ async function filterCashRegister() {
 
     const totalAllIngresos = todayMovements.reduce((sum, m) => sum + m.total, 0);
     const totalCashIngresos = todayMovements.filter(m => m.method === 'Efectivo').reduce((sum, m) => sum + m.total, 0);
-    // 🚨 CAMBIO: Incluir "Flow" en el cálculo de transferencias/MP
-    const totalTransferIngresos = todayMovements.filter(m => m.method === 'Transferencia' || m.method === 'Yape/Plin' || m.method === 'Flow').reduce((sum, m) => sum + m.total, 0);
-    // 🚨 CAMBIO: Total de ingresos por tarjeta/Flow
-    const totalFlowIngresos = todayMovements.filter(m => m.method === 'Flow').reduce((sum, m) => sum + m.total, 0);
+    // 🚨 CAMBIO: Incluir "Izipay" junto a "Transferencia" y "Yape/Plin" en el cálculo de transferencias/MP
+    const totalTransferIngresos = todayMovements.filter(m => m.method === 'Transferencia' || m.method === 'Yape/Plin' || m.method === 'Izipay').reduce((sum, m) => sum + m.total, 0);
+    // 🚨 CAMBIO: Total de ingresos por tarjeta/Izipay
+    const totalIzpIngresos = todayMovements.filter(m => m.method === 'Izipay').reduce((sum, m) => sum + m.total, 0);
 
 
     // Mostrar el resumen del día seleccionado
     const summaryContent = `
-        <p><strong>Total de Ingresos (Caja + Transferencias + Flow):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalAllIngresos.toFixed(2)}</span></p>
+        <p><strong>Total de Ingresos (Caja + Transferencias + Izipay):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalAllIngresos.toFixed(2)}</span></p>
         <p><strong>Ingreso Neto en Efectivo (Cuadre):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalCashIngresos.toFixed(2)}</span></p>
         <p><strong>Ingreso por Transferencia/Yape:</strong> <span style="font-weight: 700; color: var(--primary-color);">S/ ${totalTransferIngresos.toFixed(2)}</span></p>
-        <p><strong>Ingreso por Tarjeta/Flow:</strong> <span style="font-weight: 700; color: var(--secondary-color);">S/ ${totalFlowIngresos.toFixed(2)}</span></p>
+        <p><strong>Ingreso por Tarjeta/Izipay:</strong> <span style="font-weight: 700; color: var(--secondary-color);">S/ ${totalIzpIngresos.toFixed(2)}</span></p>
     `;
     // getDomElement('cashRegisterSummary').innerHTML = summaryContent; // Reubicado abajo
 
@@ -630,9 +630,9 @@ function getMovementsByDateRange(dateFrom, dateTo, methodFilter = null) {
                 const paymentDate = new Date(p.payment_date).getTime();
                 let method = p.payment_method || 'Efectivo';
 
-                // 🚨 CAMBIO CRÍTICO: Reemplazar Izipay/Mercado Pago por Flow en la visualización
-                if (method === 'Mercado Pago' || method === 'Izipay') {
-                    method = 'Flow';
+                // 🚨 CAMBIO CRÍTICO: Reemplazar Mercado Pago por Izipay en la visualización
+                if (method === 'Mercado Pago') {
+                    method = 'Izipay';
                 }
 
                 // 🚨 CRÍTICO: El filtro ahora usa los timestamps calculados (solo ese día)
@@ -736,7 +736,7 @@ function exportarCajaPDF() {
     // 1.1. Verificar si la caja está cerrada revisando el contenido de la tabla
     const tbody = getDomElement('cashRegisterTableBody');
     // Si el primer TD contiene el texto de cierre, está cerrado
-    const isClosed = tbody.querySelector('td')?.textContent.includes('🔒 NO DISPONIBLE - CUADRE DE CAJA HECHO');
+    const isClosed = tbody.querySelector('td')?.textContent.includes('CUADRE DE CAJA HECHO');
 
 
     // 2. Encabezado
@@ -816,7 +816,7 @@ function imprimirCaja() {
 
     // 1. Verificar si la caja está cerrada revisando el contenido de la tabla
     const tbody = getDomElement('cashRegisterTableBody');
-    const isClosed = tbody.querySelector('td')?.textContent.includes('🔒 NO DISPONIBLE - CUADRE DE CAJA HECHO');
+    const isClosed = tbody.querySelector('td')?.textContent.includes('CUADRE DE CAJA HECHO');
 
     let tableContentHTML = '';
 
@@ -847,6 +847,7 @@ function imprimirCaja() {
         <!DOCTYPE html>
         <html lang="es">
         <head>
+            <meta charset="UTF-8">
             <title>Reporte de Caja</title>
             <style>
                 body { font-family: sans-serif; padding: 20px; color: #333; }
@@ -958,7 +959,7 @@ function initLoanFormLogic() {
             <div class="form-row">
                 <div class="form-group">
                     <label for="monto">Monto del Préstamo (S/)</label>
-                    <input type="number" id="monto" required step="0.01" min="100" placeholder="5000">
+                    <input type="number" id="monto" required step="0.01" min="1" placeholder="5000">
                 </div>
                 <div class="form-group">
                     <label for="fecha">Fecha de Desembolso</label>
@@ -1403,7 +1404,7 @@ function openPaymentModal(loan) {
     paymentDateInput.value = getTodayDateISO(); // Usa la función auxiliar
 
     paymentAmountInput.value = remainingCapitalInterest.toFixed(2);
-    paymentAmountInput.min = remainingCapitalInterest > 0 ? '0.01' : '0.00';
+    paymentAmountInput.min = remainingCapitalInterest > 0 ? '1.00' : '0.00';
     paymentAmountInput.max = remainingCapitalInterest.toFixed(2);
     paymentAmountHint.textContent = `Monto máximo a pagar (Capital/Interés): S/ ${remainingCapitalInterest.toFixed(2)}`;
 
@@ -1438,34 +1439,16 @@ function openPaymentModal(loan) {
 
 // NUEVA FUNCIÓN: Muestra el modal del enlace de pago
 function showCheckoutLinkModal(izpUrl, totalAmount, paymentMethod, clientName, correlativo) {
-    currentIzpUrl = izpUrl; // 🚨 CAMBIO: Usar variable Flow URL
+    currentIzpUrl = izpUrl; // 🚨 CAMBIO: Usar variable Izipay
     currentClientName = clientName;
     getDomElement('checkoutLinkAmount').textContent = `S/ ${totalAmount.toFixed(2)}`;
     getDomElement('checkoutLinkMethod').textContent = paymentMethod;
     getDomElement('mpLinkOutput').value = izpUrl; // El ID del input HTML sigue siendo 'mpLinkOutput'
 
-    // 🚨 CAMBIO: Mostrar el correlativo en el modal y cambiar la etiqueta (Flow)
+    // 🚨 CAMBIO: Mostrar el correlativo en el modal y cambiar la etiqueta
     const titleEl = getDomElement('checkoutLinkTitle');
-    titleEl.textContent = `🔗 Enlace de Pago Flow (Boleta N° ${correlativo.toString().padStart(8, '0')})`;
-    getDomElement('mpLinkOutput').previousElementSibling.textContent = 'Enlace de Pago (Flow)';
-
-    // 🚨 CRÍTICO: MODIFICACIÓN DEL MENSAJE PARA EXPLICAR LA SIMULACIÓN
-    const instructionsDiv = getDomElement('checkoutLinkModal').querySelector('.alert-success div');
-    // Si la URL es la de simulación (que empieza con la URL del backend), mostramos la advertencia
-    if (izpUrl.includes(API_URL)) {
-        instructionsDiv.innerHTML = `
-            <p style="margin: 0;"><strong>¡ATENCIÓN! ESTA ES UNA SIMULACIÓN (Flow Falló).</strong></p>
-            <p style="margin: 5px 0 0 0;">
-                El servidor no pudo conectar con Flow. Abre el enlace de abajo y **sigue las instrucciones de cURL/Postman** que aparecerán para simular la confirmación del pago. El pago **NO** se registrará hasta que ejecutes el Webhook de simulación.
-            </p>
-        `;
-    } else {
-        // Si la URL es la real (de Flow), mostramos el mensaje normal
-        instructionsDiv.innerHTML = `
-            <p style="margin: 0;"><strong>¡Enlace de Pago Flow Generado!</strong></p>
-            <p style="margin: 5px 0 0 0;">Copia el enlace de abajo y compártelo con el cliente. El pago se registrará automáticamente al ser completado.</p>
-        `;
-    }
+    titleEl.textContent = `🔗 Enlace de Pago Generado (Boleta N° ${correlativo.toString().padStart(8, '0')})`;
+    getDomElement('mpLinkOutput').previousElementSibling.textContent = 'Enlace de Pago (Izipay)';
 
 
     // Asegurarse de que el input esté enfocado para copiar si es posible
@@ -1486,7 +1469,7 @@ function showCheckoutLinkModal(izpUrl, totalAmount, paymentMethod, clientName, c
     openModal(getDomElement('checkoutLinkModal'));
 }
 
-function copyIzpLink() {
+function copyMpLink() {
     const linkInput = getDomElement('mpLinkOutput');
     linkInput.select();
     linkInput.setSelectionRange(0, 99999);
@@ -1496,26 +1479,25 @@ function copyIzpLink() {
 }
 
 // NUEVA FUNCIÓN: Utiliza la API nativa de compartir
-async function shareIzpLink() {
+async function shareMpLink() {
     // 🚨 CAMBIO: Usar currentIzpUrl
     if (!navigator.share || !currentIzpUrl) {
-        // En lugar de alert, solo copiamos y salimos
-        copyIzpLink();
+        alert('La función de compartir no está disponible en este dispositivo o navegador.');
         return;
     }
 
     try {
         await navigator.share({
             title: `Pago Préstamo PrestaPro (S/ ${getDomElement('checkoutLinkAmount').textContent})`,
-            text: `¡Hola ${currentClientName || 'cliente'}! Tu enlace de pago para PrestaPro (vía Flow) ha sido generado. Paga S/ ${getDomElement('checkoutLinkAmount').textContent} usando este link:`,
-            url: currentIzpUrl,
+            text: `¡Hola ${currentClientName || 'cliente'}! Tu enlace de pago para PrestaPro (vía Izipay) ha sido generado. Paga S/ ${getDomElement('checkoutLinkAmount').textContent} usando este link:`,
+            url: currentIzpUrl, // 🚨 CAMBIO: Usar currentIzpUrl
         });
         // Opcional: Mostrar una animación de éxito aquí si la compartición fue exitosa (aunque la API de Share no lo garantiza)
     } catch (error) {
         if (error.name !== 'AbortError') {
             console.error('Error al compartir:', error);
-            // Si falla la API nativa, copiamos para que pueda pegarlo
-            copyIzpLink();
+            // Si falla la API nativa, se recomienda al usuario copiar
+            alert("No se pudo iniciar la función de compartir. Por favor, utiliza el botón 'Copiar Enlace' para enviarlo manualmente.");
         }
     }
 }
@@ -1545,19 +1527,19 @@ async function handlePaymentSubmit(e) {
         payment_date: paymentDate
     };
 
-    // Identificamos el préstamo y cliente para obtener datos necesarios para Flow
+    // Identificamos el préstamo y cliente para obtener datos necesarios para Izipay
     const loan = loans.find(l => l.id == loanId);
 
-    // Si es Transferencia o Yape/Plin, ahora lo mapeamos a Flow
+    // Si es Transferencia o Yape/Plin, ahora lo mapeamos a Izipay
     if (selectedMethod === 'Transferencia' || selectedMethod === 'Yape/Plin') {
-        // --- INICIO DE FLUJO DE PAGO CON FLOW ---
+        // --- INICIO DE FLUJO DE PAGO CON IZIPAY ---
 
         if (!loan) {
             alert("Error: No se encontró la información del cliente para iniciar el pago.");
             return;
         }
 
-        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollect.toFixed(2)} mediante Flow para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
+        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollect.toFixed(2)} mediante Izipay para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
             return;
         }
 
@@ -1565,8 +1547,8 @@ async function handlePaymentSubmit(e) {
         closeModal(getDomElement('paymentModal'));
 
         try {
-            // 🚨 CAMBIO CRÍTICO: Llamada a la nueva ruta de FLOW
-            const response = await fetch(`${API_URL}/api/flow/create-order`, {
+            // 🚨 CAMBIO CRÍTICO: Llamada a la nueva ruta de IZIPAY
+            const response = await fetch(`${API_URL}/api/izipay/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1588,23 +1570,23 @@ async function handlePaymentSubmit(e) {
                 } catch (e) {
                     errorData = { error: 'Error de formato (Estado: ' + response.status + ' ' + response.statusText + ')', status: response.status };
                 }
-                throw new Error(`(${response.status}) Error de Flow. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
+                throw new Error(`(${response.status}) Error de Izipay. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
             }
 
-            const flowData = await response.json();
-            const flowUrl = flowData.url;
+            const izpData = await response.json();
+            const izpUrl = izpData.url;
 
-            if (flowUrl) {
+            if (izpUrl) {
                 // *** CRÍTICO: Muestra el link en un modal en lugar de redirigir ***
-                // 🚨 CAMBIO: Pasar el correlativo de boleta y URL de Flow
-                showCheckoutLinkModal(flowUrl, totalToCollect, selectedMethod, `${loan.nombres} ${loan.apellidos}`, flowData.correlativo_boleta || 'N/A');
+                // 🚨 CAMBIO: Pasar el correlativo de boleta y URL de Izipay
+                showCheckoutLinkModal(izpUrl, totalToCollect, selectedMethod, `${loan.nombres} ${loan.apellidos}`, izpData.correlativo_boleta || 'N/A');
                 return;
             } else {
-                throw new Error("El backend no proporcionó un URL de pago válido de Flow.");
+                throw new Error("El backend no proporcionó un URL de pago válido de Izipay.");
             }
 
         } catch (error) {
-            alert(`❌ Error al iniciar el pago con Flow. Detalles: ${error.message}`);
+            alert(`❌ Error al iniciar el pago con Izipay. Detalles: ${error.message}`);
             return;
         }
 
@@ -1655,12 +1637,28 @@ async function handlePaymentSubmit(e) {
 // --- LÓGICA DE PAGOS RÁPIDOS (CHECKOUT) ---
 function initQuickPaymentListeners() {
     const searchDniInput = getDomElement('search-dni-pago');
+    const searchDocTypePago = getDomElement('search-doc-type-pago');
     const quickPaymentTableBody = getDomElement('quickPaymentTableBody');
     const confirmQuickPaymentBtn = getDomElement('confirmQuickPaymentBtn');
     const paymentSelectionType = getDomElement('payment_selection_type');
     const numInstallmentsInput = getDomElement('num_installments_to_pay');
 
     searchDniInput?.addEventListener('input', (e) => { e.target.value = e.target.value.replace(/[^0-9]/g, ''); });
+
+    // Listener para cambio de tipo de documento
+    searchDocTypePago?.addEventListener('change', () => {
+        const type = searchDocTypePago.value;
+        searchDniInput.value = '';
+        getDomElement('search-dni-status').textContent = '';
+        
+        if (type === 'DNI') {
+            searchDniInput.maxLength = 8;
+            searchDniInput.placeholder = 'Ingresa 8 dígitos y presiona Enter';
+        } else {
+            searchDniInput.maxLength = 11;
+            searchDniInput.placeholder = 'Ingresa 11 dígitos y presiona Enter';
+        }
+    });
 
     // CRÍTICO: Listener de búsqueda DNI (tecla Enter)
     searchDniInput?.addEventListener('keydown', (event) => {
@@ -1722,25 +1720,27 @@ function initQuickPaymentListeners() {
     });
 }
 
-async function searchLoansByDni(dni) {
+async function searchLoansByDni(docId) {
     const statusEl = getDomElement('search-dni-status');
     const quickPaymentTableBody = getDomElement('quickPaymentTableBody');
     const quickPaymentResultSection = getDomElement('quick-payment-result-section');
+    const docType = getDomElement('search-doc-type-pago')?.value || 'DNI';
+    
     quickPaymentTableBody.innerHTML = '';
 
-    // 🚨 NOTA: Esta función sigue siendo solo por DNI (8 dígitos) para el módulo de pagos,
-    // ya que el campo de entrada en el HTML de pagos está diseñado solo para 8 dígitos.
-    if (dni.length !== 8) {
-        statusEl.textContent = 'Ingresa 8 dígitos de DNI.';
+    // Validar longitud según tipo
+    const expectedLength = docType === 'DNI' ? 8 : 11;
+    if (docId.length !== expectedLength) {
+        statusEl.textContent = `Ingresa ${expectedLength} dígitos de ${docType}.`;
         statusEl.style.color = 'var(--danger-color)';
         quickPaymentResultSection.style.display = 'none';
         return;
     }
 
-    const foundLoans = loans.filter(loan => loan.dni === dni && loan.status === 'Activo');
+    const foundLoans = loans.filter(loan => loan.dni === docId && loan.status === 'Activo');
 
     if (foundLoans.length === 0) {
-        statusEl.textContent = '❌ No se encontraron préstamos activos para este DNI.';
+        statusEl.textContent = `❌ No se encontraron préstamos activos para este ${docType}.`;
         statusEl.style.color = 'var(--danger-color)';
         quickPaymentResultSection.style.display = 'none';
         quickPaymentTableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #9CA3AF;">No se encontraron préstamos activos.</td></tr>';
@@ -1961,17 +1961,17 @@ async function handleQuickPaymentSubmit() {
 
     const loan = currentLoanForQuickPayment;
 
-    // Si es Transferencia o Yape/Plin, ahora lo mapeamos a Flow
+    // Si es Transferencia o Yape/Plin, se usa Izipay.
     if (selectedMethod === 'Transferencia' || selectedMethod === 'Yape/Plin') {
-        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollectRounded.toFixed(2)} mediante Flow para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
+        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollectRounded.toFixed(2)} mediante Izipay para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
             return;
         }
 
         getDomElement('quick-payment-summary-section').style.display = 'none';
 
         try {
-            // 🚨 CAMBIO CRÍTICO: Llamada a la nueva ruta de FLOW
-            const response = await fetch(`${API_URL}/api/flow/create-order`, {
+            // 🚨 CAMBIO CRÍTICO: Llamada a la nueva ruta de IZIPAY
+            const response = await fetch(`${API_URL}/api/izipay/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1994,22 +1994,22 @@ async function handleQuickPaymentSubmit() {
                 } catch (e) {
                     errorData = { error: 'Error de formato (Estado: ' + response.status + ' ' + response.statusText + ')', status: response.status };
                 }
-                throw new Error(`(${response.status}) Error de Flow. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
+                throw new Error(`(${response.status}) Error de Izipay. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
             }
 
-            const flowData = await response.json();
-            const flowUrl = flowData.url;
+            const izpData = await response.json();
+            const izpUrl = izpData.url;
 
-            if (flowUrl) {
-                // 🚨 CAMBIO: Pasar la URL y datos de Flow
-                showCheckoutLinkModal(flowUrl, totalToCollectRounded, selectedMethod, `${loan.nombres} ${loan.apellidos}`, flowData.correlativo_boleta || 'N/A');
+            if (izpUrl) {
+                // 🚨 CAMBIO: Pasar la URL y datos de Izipay
+                showCheckoutLinkModal(izpUrl, totalToCollectRounded, selectedMethod, `${loan.nombres} ${loan.apellidos}`, izpData.correlativo_boleta || 'N/A');
                 return;
             } else {
-                throw new Error("El backend no proporcionó un URL de pago válido de Flow.");
+                throw new Error("El backend no proporcionó un URL de pago válido de Izipay.");
             }
 
         } catch (error) {
-            alert(`❌ Error al iniciar el pago con Flow. Detalles: ${error.message}`);
+            alert(`❌ Error al iniciar el pago con Izipay. Detalles: ${error.message}`);
             return;
         }
     }
@@ -2330,7 +2330,7 @@ function generateQrDataURL(text, size) {
     return '';
 }
 
-// MODIFICADA: Implementa el nuevo diseño de HTML para el modal de recibo
+// --- REEMPLAZA TODA LA FUNCIÓN showReceipt POR ESTA (VERSIÓN SIN VENCIMIENTOS) ---
 function showReceipt(payment, loan) {
     if (!payment || !loan) {
         alert('No se pudieron obtener los datos completos del pago para generar el recibo.');
@@ -2344,102 +2344,223 @@ function showReceipt(payment, loan) {
     const capitalInteresPagado = totalPagado - moraPagada;
     const paymentMethod = payment.payment_method || 'Efectivo';
 
-    // 🚨 CRÍTICO: Usar el correlativo y transaction ID real (vienen del backend)
+    // Generar Correlativo y Transaction ID
     const transactionId = payment.transaction_id || `TRX-${Math.floor(Math.random() * 90000000) + 10000000}`;
     const correlativo = payment.correlativo_boleta || (Math.floor(Math.random() * 999999) + 1);
 
-    const paymentDate = new Date(payment.payment_date).toLocaleDateString('es-PE', { timeZone: 'UTC' });
+    // 1. OBTENER FECHA DE PAGO (EMISIÓN)
+    // Usamos split para asegurar que la fecha se lea correctamente sin errores de zona horaria
+    const partsPago = payment.payment_date.split('-'); 
+    const pDateLocal = new Date(partsPago[0], partsPago[1] - 1, partsPago[2]); 
+    const paymentDateStr = pDateLocal.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const horaSimulada = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-    // Cálculo simple de Impuestos (simulación)
-    const valorVenta = capitalInteresPagado; // El capital/interés es la base
-    const IGV = 0.00; // Asumimos que los servicios de préstamo están exentos/no aplican IGV en esta simulación.
-    const importeTotal = totalPagado;
-    const subtotal = importeTotal - IGV;
+    // Determinar si es FACTURA (RUC 11 dígitos) o BOLETA
+    const esFactura = loan.dni && loan.dni.length === 11;
+    const tipoComprobante = esFactura ? 'FACTURA ELECTRÓNICA' : 'BOLETA DE VENTA ELECTRÓNICA';
+    const serieComprobante = esFactura ? 'E001' : 'B002';
 
-    // Generar el Data URL del QR
-    const qrText = `|${RUC_EMPRESA}|03|B001|${correlativo.toString().padStart(8, '0')}|${totalPagado.toFixed(2)}|${IGV.toFixed(2)}|${paymentDate}|1|${loan.dni}|`;
+    // Generar QR
+    const qrText = `|${RUC_EMPRESA}|${esFactura ? '01' : '03'}|${serieComprobante}|${correlativo}|${totalPagado.toFixed(2)}|${paymentDateStr}|${loan.dni}|`;
     const qrDataUrl = generateQrDataURL(qrText, 100);
 
+    // =========================================================
+    // DISEÑO 1: FACTURA (SIN VENCIMIENTO Y SIN TEXTO SUNAT)
+    // =========================================================
+    if (esFactura) {
+        receiptContent.innerHTML = `
+            <div class="receipt-container" style="max-width: 800px; margin: 0 auto; border: 1px solid #000; background: white; font-family: Arial, sans-serif; color: #000; padding: 0;">
+                
+                <div style="display: flex; justify-content: space-between; padding: 15px; border-bottom: 1px solid #000;">
+                    <div style="width: 60%;">
+                        <img src="assets/logo-verde.png" alt="Logo" style="height: 60px; margin-bottom: 10px;">
+                        <h3 style="margin: 0; font-size: 16px; font-weight: bold;">${RAZON_SOCIAL_EMPRESA}</h3>
+                        <p style="margin: 2px 0; font-size: 11px;">${DIRECCION_EMPRESA}</p>
+                        <p style="margin: 2px 0; font-size: 11px;">LIMA - PERÚ</p>
+                    </div>
+                    
+                    <div style="width: 35%; border: 2px solid #000; text-align: center; padding: 10px 0;">
+                        <p style="margin: 5px 0; font-size: 14px; font-weight: bold;">R.U.C.: ${RUC_EMPRESA}</p>
+                        <p style="margin: 5px 0; font-size: 14px; font-weight: bold; background-color: #f0f0f0; padding: 5px 0;">${tipoComprobante}</p>
+                        <p style="margin: 5px 0; font-size: 14px;">${serieComprobante} - ${correlativo.toString().padStart(8, '0')}</p>
+                    </div>
+                </div>
 
-    receiptContent.innerHTML = `
-        <div class="receipt-container">
-            <div class="receipt-header sunat-header">
-                <div class="sunat-company-info">
-                    <p style="font-weight: 700; margin: 0;">${RAZON_SOCIAL_EMPRESA}</p>
-                    <p style="font-size: 13px; margin: 0;">${DIRECCION_EMPRESA}</p>
-                    <p style="font-size: 13px; margin: 0;">Teléfono: (01) 123-4567 | Email: info@prestapro.com.pe</p>
-                    <p style="font-size: 11px; margin: 0; font-style: italic;">SERVICIOS DE PRÉSTAMOS PERSONALES</p>
+                <div style="padding: 10px 15px; font-size: 11px; line-height: 1.6;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <div style="width: 65%;">
+                            <table style="width: 100%; border: none;">
+                                <tr>
+                                    <td style="font-weight: bold; width: 140px;">Fecha de Emisión</td>
+                                    <td>: ${paymentDateStr}</td>
+                                </tr>
+                                <tr><td style="font-weight: bold;">Señor(es)</td><td>: ${loan.nombres}</td></tr>
+                                <tr><td style="font-weight: bold;">RUC</td><td>: ${loan.dni}</td></tr>
+                                <tr><td style="font-weight: bold;">Tipo de Moneda</td><td>: SOLES</td></tr>
+                            </table>
+                        </div>
+                        <div style="width: 30%; text-align: right;">
+                             <div style="border: 1px solid #000; padding: 3px; display: inline-block; font-size: 10px;">Forma de pago: ${paymentMethod}</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="sunat-ruc-box">
-                    <strong>R.U.C. N° ${RUC_EMPRESA}</strong>
-                    <h3 style="color: var(--primary-color); margin: 5px 0 0 0;">BOLETA DE VENTA ELECTRÓNICA</h3>
-                    <p style="margin: 0;">B001 - N° ${correlativo.toString().padStart(8, '0')}</p>
+
+                <div style="margin-top: 10px;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                        <thead>
+                            <tr style="border-top: 1px solid #000; border-bottom: 1px solid #000;">
+                                <th style="padding: 5px; text-align: center;">Cantidad</th>
+                                <th style="padding: 5px; text-align: center;">Unidad Medida</th>
+                                <th style="padding: 5px; text-align: left;">Código</th>
+                                <th style="padding: 5px; text-align: left;">Descripción</th>
+                                <th style="padding: 5px; text-align: right;">Valor Unitario</th>
+                                <th style="padding: 5px; text-align: right;">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td style="padding: 5px; text-align: center;">1.00</td>
+                                <td style="padding: 5px; text-align: center;">UNIDAD</td>
+                                <td style="padding: 5px;">SERV01</td>
+                                <td style="padding: 5px;">CUOTA PRÉSTAMO Y/O INTERESES</td>
+                                <td style="padding: 5px; text-align: right;">${capitalInteresPagado.toFixed(2)}</td>
+                                <td style="padding: 5px; text-align: right;">${capitalInteresPagado.toFixed(2)}</td>
+                            </tr>
+                            ${moraPagada > 0 ? `
+                            <tr>
+                                <td style="padding: 5px; text-align: center;">1.00</td>
+                                <td style="padding: 5px; text-align: center;">UNIDAD</td>
+                                <td style="padding: 5px;">MORA</td>
+                                <td style="padding: 5px;">PENALIDAD POR ATRASO</td>
+                                <td style="padding: 5px; text-align: right;">${moraPagada.toFixed(2)}</td>
+                                <td style="padding: 5px; text-align: right;">${moraPagada.toFixed(2)}</td>
+                            </tr>` : ''}
+                        </tbody>
+                    </table>
                 </div>
-            </div>
-            
-            <div class="receipt-section">
-                <h4 style="color: var(--secondary-color);">DATOS DEL CLIENTE</h4>
-                <div class="receipt-row"><span class="receipt-label">DNI/RUC:</span><span class="receipt-value">${loan.dni}</span></div>
-                <div class="receipt-row"><span class="receipt-label">Cliente:</span><span class="receipt-value">${loan.nombres} ${loan.apellidos}</span></div>
-                <div class="receipt-row"><span class="receipt-label">Fecha de Emisión:</span><span class="receipt-value">${paymentDate}</span></div>
-            </div>
-            
-            <div class="receipt-section">
-                <h4 style="color: var(--secondary-color);">DETALLE DE LA OPERACIÓN</h4>
-                <table class="receipt-detail-table">
+
+                <div style="border-top: 1px solid #000; display: flex; font-size: 11px;">
+                    <div style="width: 60%; padding: 10px;">
+                        <p style="margin: 5px 0;"><strong>Valor de Venta de Operaciones Gratuitas : S/ 0.00</strong></p>
+                        <p style="margin: 15px 0; font-weight: bold;">SON: ${numeroALetras(totalPagado)} SOLES</p>
+                        
+                        <div style="border: 1px solid #000; padding: 5px; margin-top: 10px;">
+                            <p style="margin: 2px 0;"><strong>Información del crédito</strong></p>
+                            <p style="margin: 2px 0;">Monto neto pendiente de pago : S/ 0.00 (Cancelado)</p>
+                        </div>
+                    </div>
+
+                    <div style="width: 40%; border-left: 1px solid #000;">
+                         <table style="width: 100%; border-collapse: collapse;">
+                            <tr><td style="padding: 3px 10px; text-align: right;">Sub Total Ventas :</td><td style="padding: 3px 10px; text-align: right;">S/ ${totalPagado.toFixed(2)}</td></tr>
+                            <tr><td style="padding: 3px 10px; text-align: right;">Op. Gravada :</td><td style="padding: 3px 10px; text-align: right;">S/ ${totalPagado.toFixed(2)}</td></tr>
+                            <tr><td style="padding: 3px 10px; text-align: right;">IGV (0%) :</td><td style="padding: 3px 10px; text-align: right;">S/ 0.00</td></tr> 
+                            <tr><td style="padding: 3px 10px; text-align: right; border-top: 1px solid #000; font-weight: bold;">Importe Total :</td><td style="padding: 3px 10px; text-align: right; border-top: 1px solid #000; font-weight: bold;">S/ ${totalPagado.toFixed(2)}</td></tr>
+                         </table>
+                    </div>
+                </div>
+                </div>
+        `;
+    } 
+    // =========================================================
+    // DISEÑO 2: BOLETA (SIN VENCIMIENTO)
+    // =========================================================
+    else {
+        receiptContent.innerHTML = `
+            <div class="receipt-container" style="width: 380px; margin: 0 auto; background: white; font-family: 'Courier New', Courier, monospace; color: #000; padding: 15px; border: 1px solid #ccc;">
+                
+                <div style="text-align: center; margin-bottom: 10px; background: #000; padding: 10px;">
+                    <img src="assets/logo-verde.png" alt="Logo" style="height: 50px;">
+                </div>
+
+                <div style="text-align: center; font-weight: bold; font-size: 14px; margin-bottom: 15px;">
+                    <div style="font-size: 16px;">${RAZON_SOCIAL_EMPRESA}</div>
+                    <div>RUC: ${RUC_EMPRESA}</div>
+                    <div style="font-size: 12px; font-weight: normal;">${DIRECCION_EMPRESA}</div>
+                </div>
+
+                <div style="text-align: center; font-weight: bold; margin-bottom: 15px;">
+                    <div style="font-size: 15px;">BOLETA DE VENTA ELECTRÓNICA</div>
+                    <div style="font-size: 16px;">${serieComprobante} - ${correlativo.toString().padStart(8, '0')}</div>
+                </div>
+
+                <div style="text-align: center; margin-bottom: 10px; font-size: 13px;">
+                    <div style="text-transform: uppercase;">${loan.nombres} ${loan.apellidos}</div>
+                    <div>---</div>
+                    <div style="font-weight: bold;">DNI ${loan.dni}</div>
+                </div>
+
+                <div style="border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 5px 0; margin-bottom: 10px; font-size: 12px; display: flex; justify-content: space-between;">
+                    <span>FECHA: ${paymentDateStr}</span>
+                    <span>HORA: ${horaSimulada}</span>
+                </div>
+                <table style="width: 100%; font-size: 12px; margin-bottom: 10px; border-collapse: collapse;">
                     <thead>
                         <tr>
-                            <th>DESCRIPCIÓN</th>
-                            <th style="text-align: right;">VALOR VENTA</th>
-                            <th style="text-align: right;">IMPORTE</th>
+                            <th style="text-align: left; border-bottom: 1px solid #000;">Cant</th>
+                            <th style="text-align: left; border-bottom: 1px solid #000;">COD</th>
+                            <th style="text-align: right; border-bottom: 1px solid #000;">TOTAL</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td>Amortización Cápital/Interés Préstamo #${loan.id}</td>
-                            <td style="text-align: right;">S/ ${valorVenta.toFixed(2)}</td>
-                            <td style="text-align: right;">S/ ${capitalInteresPagado.toFixed(2)}</td>
+                            <td style="padding-top: 5px;">1</td>
+                            <td style="padding-top: 5px;">SERV</td>
+                            <td style="text-align: right; padding-top: 5px;">${capitalInteresPagado.toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                            <td colspan="3" style="font-size: 11px;">CUOTA DE PRÉSTAMO</td>
                         </tr>
                         ${moraPagada > 0 ? `
                         <tr>
-                            <td style="color: var(--danger-color); font-weight: 600;">Mora / Penalidad por Atraso</td>
-                            <td style="text-align: right;">S/ 0.00</td>
-                            <td style="text-align: right; color: var(--danger-color); font-weight: 700;">S/ ${moraPagada.toFixed(2)}</td>
+                            <td style="padding-top: 5px;">1</td>
+                            <td style="padding-top: 5px;">MORA</td>
+                            <td style="text-align: right; padding-top: 5px;">${moraPagada.toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                            <td colspan="3" style="font-size: 11px;">PENALIDAD POR ATRASO</td>
                         </tr>` : ''}
                     </tbody>
                 </table>
-            </div>
 
-            <div class="receipt-summary-box">
-                <div class="receipt-summary-content">
-                    <div class="summary-item"><span>SUBTOTAL</span><span class="receipt-value">S/ ${subtotal.toFixed(2)}</span></div>
-                    <div class="summary-item"><span>IGV (0%)</span><span class="receipt-value">S/ ${IGV.toFixed(2)}</span></div>
-                    <div class="summary-item summary-total"><span>IMPORTE TOTAL</span><span class="receipt-value" style="color: var(--success-color);">S/ ${importeTotal.toFixed(2)}</span></div>
-                </div>
-            </div>
-
-            <div class="receipt-footer" style="display: flex; gap: 20px; align-items: flex-start;">
-                
-                <div class="qr-code-container" style="flex-shrink: 0; text-align: center; border: 1px solid var(--border-color); padding: 10px; border-radius: 8px;">
-                    <img src="${qrDataUrl}" alt="Código QR SUNAT" style="width: 100px; height: 100px; display: block; margin: 0 auto;">
-                    <p style="font-size: 10px; color: var(--secondary-color); margin-top: 5px; font-weight: 600;">Código QR SUNAT</p>
-                    <p style="font-size: 7px; color: #9CA3AF; margin: 0; max-width: 100px; word-break: break-all;">${qrText}</p>
-                </div>
-                
-                <div style="flex-grow: 1;">
-                    <div class="amount-in-words">
-                        <p style="font-weight: 700; color: var(--secondary-color); margin: 0;">SON: ${numeroALetras(importeTotal)} SOLES</p>
+                <div style="border-top: 1px solid #000; padding-top: 5px; font-size: 13px; font-weight: bold;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>OP. GRAVADA</span>
+                        <span>(S/) ${totalPagado.toFixed(2)}</span>
                     </div>
-                    <p style="margin: 5px 0;">Método de Pago: ${paymentMethod}. Transacción: ${transactionId}</p>
-                    <p style="margin: 5px 0;">Pago correspondiente al préstamo N° ${loan.id}. Operación registrada correctamente.</p>
-                    <p style="margin: 5px 0; font-size: 10px;">Representación impresa de la Boleta de Venta Electrónica. Puede verificar este documento en la web de SUNAT (Simulación).</p>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>I.G.V</span>
+                        <span>(S/) 0.00</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 18px; margin-top: 5px;">
+                        <span>TOTAL</span>
+                        <span>(S/) ${totalPagado.toFixed(2)}</span>
+                    </div>
                 </div>
+
+                <div style="margin-top: 10px; font-size: 12px; border-bottom: 1px dashed #000; padding-bottom: 10px;">
+                    SON: ${numeroALetras(totalPagado)} SOLES
+                </div>
+
+                <div style="margin-top: 10px; font-size: 12px;">
+                    <div><strong>FORMA PAGO:</strong> ${paymentMethod.toUpperCase()}</div>
+                </div>
+
+                <div style="text-align: center; margin-top: 15px;">
+                    <img src="${qrDataUrl}" alt="QR" style="width: 100px; height: 100px;">
+                </div>
+
+                <div style="text-align: center; font-size: 10px; margin-top: 10px; color: #555;">
+                    <p style="margin: 0;">Representación Impresa de la BOLETA DE VENTA ELECTRÓNICA</p>
+                    <p style="margin-top: 5px; font-weight: bold;">PrestaPro System</p>
+                </div>
+
             </div>
-        </div>
-    `;
+        `;
+    }
 
     openModal(getDomElement('receiptModal'));
-    currentReceiptData = { payment, loan, totalPagado, paymentMethod, capitalInteresPagado, moraPagada, transactionId, correlativo, paymentDate, valorVenta, IGV, subtotal };
+    currentReceiptData = { payment, loan, totalPagado, paymentMethod, capitalInteresPagado, moraPagada, transactionId, correlativo, paymentDate: paymentDateStr };
 }
 
 function numeroALetras(num) {
@@ -2791,7 +2912,7 @@ function downloadReceipt() {
     doc.setTextColor(150, 150, 150);
     doc.setFont(undefined, 'italic');
     const legalText = doc.splitTextToSize(
-        'Representación impresa de la Boleta de Venta Electrónica. Puede verificar este documento en la web de SUNAT (Simulación).',
+        'Representación impresa de la Boleta de Venta Electrónica. Puede verificar este documento en www.sunat.gob.pe. Este es un documento simulado para fines demostrativos.',
         196 - infoX - 10
     );
     doc.text(legalText, infoX, infoY);
@@ -3141,6 +3262,7 @@ function printModalContent(contentElement) {
         <!DOCTYPE html>
         <html lang="es">
         <head>
+            <meta charset="UTF-8">
             <title>Boleta de Venta - PrestaPro</title>
             <link rel="preconnect" href="https://fonts.googleapis.com">
             <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -3887,6 +4009,7 @@ function imprimirHistorialCierres() {
             <!DOCTYPE html>
             <html lang="es">
             <head>
+                <meta charset="UTF-8">
                 <title>Historial de Cierres de Caja</title>
                 <style>
                     body { font-family: sans-serif; padding: 20px; color: #333; }
