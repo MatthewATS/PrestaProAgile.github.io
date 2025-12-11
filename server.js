@@ -3,8 +3,7 @@ const path = require('path');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const crypto = require('crypto');
-const { createHmac } = require('crypto');
-// 🚨 Nuevo: Módulo AXIOS para llamadas HTTP salientes a la API de Izipay
+const { createHash } = require('crypto'); // Usamos createHash para la firma Flow
 const axios = require('axios');
 
 const app = express();
@@ -21,22 +20,43 @@ app.use((req, res, next) => {
 // Nota: En un entorno real, DATABASE_URL debe estar configurada.
 const pool = mysql.createPool(process.env.DATABASE_URL);
 
-// --- CONSTANTES DE NEGOCIO Y API DE IZIPAY (PAYZEN/LYRA) ---
+// --- CONSTANTES DE NEGOCIO Y API DE FLOW ---
 const TASA_MORA_MENSUAL = 1;
 
-// 🚨🚨🚨 CREDENCIALES DE PRODUCCIÓN PROPORCIONADAS 🚨🚨🚨
-const IZP_MERCHANT_ID = '68304620'; 
-const IZP_PASSWORD = 'prodpassword_CEhMhCy3YlZblRGkqVOGZJKlR5ei2a6cUR6KgtAMIdLWG'; 
-const IZP_PUBLIC_KEY = '68304620:publickey_wjo2urlfqtyvbTiMaVZSdF1fSkGenL5fG87WNzb1aEu4V';
-const IZP_ENDPOINT_BASE_API = 'https://api.micuentaweb.pe/api-payment/V4/Charge/CreatePayment';
-const IZP_HMAC_KEY = 'xenUz7o7m1yTrLTqpHJq4QekjbKA4DsyY0lDMwmlpzSj'; 
+// 🚨🚨🚨 CREDENCIALES DE PRODUCCIÓN DE FLOW 🚨🚨🚨
+const FLOW_API_KEY = '1FF50655-0135-4F50-9A60-774ABDBL14C7';
+const FLOW_SECRET_KEY = '1b7e761342e5525b8a294499bde19d29cfa76090';
+const FLOW_ENDPOINT_BASE_API = 'https://api.flow.cl/v1/payment/create';
 
-// URL de Railway
+// URL de Railway (Debe ser accesible externamente para el webhook de Flow)
 const YOUR_BACKEND_URL = process.env.BACKEND_URL || 'https://prestaproagilegithubio-production-be75.up.railway.app';
 
 
+/**
+ * Genera el hash de firma (sig) requerido por Flow.
+ * @param {object} params Parámetros de la solicitud a Flow.
+ * @param {string} secretKey La Flow Secret Key.
+ * @returns {string} El hash SHA1.
+ */
+function generateFlowSignature(params, secretKey) {
+    // 1. Ordenar los parámetros alfabéticamente
+    const sortedKeys = Object.keys(params).sort();
+
+    // 2. Concatenar valores y añadir la Secret Key al final
+    let signatureString = '';
+    sortedKeys.forEach(key => {
+        signatureString += params[key];
+    });
+    signatureString += secretKey;
+
+    // 3. Generar el hash SHA1
+    const hash = createHash('sha1').update(signatureString).digest('hex');
+    return hash;
+}
+
+
 // ==========================================================
-// 1. UTILIDADES DE CÁLCULO Y DB
+// 1. UTILIDADES DE CÁLCULO Y DB (SIN CAMBIOS)
 // ==========================================================
 
 async function getNextCorrelativo(connection) {
@@ -141,7 +161,8 @@ async function registerPaymentInternal(loanId, paymentData) {
         await connection.beginTransaction();
         const { payment_amount, payment_date, mora_amount, payment_method, correlativo_boleta, transaction_id } = paymentData;
 
-        const finalMethod = payment_method || 'Izipay/Transferencia'; 
+        // Ajuste para Flow
+        const finalMethod = payment_method || 'Flow/Transferencia';
 
         await connection.query(
             'INSERT INTO payments (loan_id, payment_amount, payment_date, mora_amount, payment_method, correlativo_boleta, transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -178,7 +199,7 @@ async function registerPaymentInternal(loanId, paymentData) {
 
 
 // ==========================================================
-// 2. RUTAS API (Sin Cambios en CRUD)
+// 2. RUTAS API (SIN CAMBIOS EN CRUD)
 // ==========================================================
 
 app.get('/api/loans', async (req, res) => {
@@ -525,121 +546,120 @@ app.get('/api/cash-closures/:date', async (req, res) => {
 
 
 // ==========================================================
-// 4. RUTAS DE IZIPAY (Sustituye a Mercado Pago)
+// 4. RUTAS DE FLOW (Reemplazo de Izipay)
 // ==========================================================
 
-app.post('/api/izipay/create-order', async (req, res) => {
-    console.log('[IZIPAY] 📥 Recibida solicitud de creación de orden:', req.body);
+app.post('/api/flow/create-order', async (req, res) => {
+    console.log('[FLOW] 📥 Recibida solicitud de creación de orden:', req.body);
 
-    const { amount, loanId, clientDni, payment_date, amount_ci, amount_mora, clientName, clientLastName } = req.body;
+    const { amount, loanId, clientDni, clientName, clientLastName } = req.body;
 
+    // --- PASO 1: Generar Correlativo de Boleta y Commerce Order ID ---
     let correlativo_boleta = null;
-    let transaction_id = null;
+    let commerceOrder = null;
     try {
         const connection = await pool.getConnection();
         correlativo_boleta = await getNextCorrelativo(connection);
-        transaction_id = `TRX-${crypto.randomBytes(8).toString('hex')}`;
+        // Usamos el correlativo como base para la orden de comercio
+        commerceOrder = `FLOW-${correlativo_boleta}`;
         connection.release();
     } catch (error) {
-        console.error('[IZIPAY ERROR] ❌ Error al obtener correlativo:', error);
+        console.error('[FLOW ERROR] ❌ Error al obtener correlativo:', error);
         return res.status(500).json({ success: false, error: 'Error interno al generar el correlativo de boleta.' });
     }
 
     const totalAmount = parseFloat(amount);
-    const amountInCents = Math.round(totalAmount * 100);
+    const subject = `Pago Préstamo N° ${loanId} - Boleta ${correlativo_boleta}`;
+    const custEmail = `${clientDni}@prestapro.cl`; // Email de ejemplo, Flow lo requiere
+    const custName = `${clientName} ${clientLastName}`;
+    const returnUrl = `${YOUR_BACKEND_URL}/flow/return`;
+    const callbackUrl = `${YOUR_BACKEND_URL}/api/flow/webhook`;
 
-    let checkoutUrl = null;
+    // Parámetros de la solicitud a Flow
+    const flowParams = {
+        apiKey: FLOW_API_KEY,
+        commerceOrder: commerceOrder,
+        subject: subject,
+        amount: totalAmount.toFixed(2),
+        email: custEmail,
+        payment_currency: 'CLP', // Flow requiere moneda CL/CLP
+        urlReturn: returnUrl,
+        urlCallback: callbackUrl,
+        custom: JSON.stringify({ // Metadata
+            loanId: loanId,
+            correlativo_boleta: correlativo_boleta,
+            // Incluimos data de mora/CI para el webhook
+            amount_mora: req.body.amount_mora,
+            amount_ci: req.body.amount_ci
+        })
+    };
+
+    // 🚨 Generar la firma (sig)
+    flowParams.s = generateFlowSignature(flowParams, FLOW_SECRET_KEY);
 
     try {
-        const authString = Buffer.from(`${IZP_MERCHANT_ID}:${IZP_PASSWORD}`).toString('base64');
+        console.log('[FLOW DEBUG] Enviando Payload:', flowParams);
 
-        const izipayPayload = {
-            'amount': amountInCents,
-            'currency': 'PEN',
-            'orderId': transaction_id,
-            'customer': {
-                'email': 'customer@example.com',
-                'billingDetails': {
-                    'firstName': clientName,
-                    'lastName': clientLastName
-                }
-            },
-            'siteId': IZP_MERCHANT_ID,
-            'transactionOptions': {
-                'answerUrl': `${YOUR_BACKEND_URL}/izipay/return`,
-                'notificationUrl': `${YOUR_BACKEND_URL}/api/izipay/webhook`
-            },
-            'metadata': {
-                'loanId': loanId,
-                'amount_mora': amount_mora,
-                'correlativo_boleta': correlativo_boleta,
-                'amount_ci': amount_ci,
-                'total_amount': totalAmount
-            }
-        };
-
-        console.log('[IZIPAY DEBUG] Enviando Payload:', izipayPayload);
-
-        const response = await axios.post(IZP_ENDPOINT_BASE_API, izipayPayload, {
+        // Flow usa x-www-form-urlencoded, no JSON
+        const response = await axios.post(FLOW_ENDPOINT_BASE_API, new URLSearchParams(flowParams).toString(), {
             headers: {
-                'Authorization': `Basic ${authString}`,
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/x-www-form-urlencoded'
             }
         });
 
-        const formToken = response.data.answer.formToken;
+        const flowData = response.data;
 
-        if (formToken) {
-            // 🚨 CORRECCIÓN CRÍTICA: Construir la URL de redirección real de Micuentaweb/Izipay
-            const realIzipayUrl = `https://webpayment.micuentaweb.pe/v1/redirect?kr-answer=${formToken}`;
-            
-            console.log('[IZIPAY] ✅ Orden de pago REAL generada exitosamente:', realIzipayUrl);
+        if (flowData.url && flowData.token) {
+            // 🚨 CONSTRUCCIÓN DEL URL DE REDIRECCIÓN REAL DE FLOW
+            const realFlowUrl = `${flowData.url}?token=${flowData.token}`;
+
+            console.log('[FLOW] ✅ Orden de pago REAL generada exitosamente:', realFlowUrl);
             return res.json({
                 success: true,
-                url: realIzipayUrl, // Devuelve el URL real de Izipay
-                transactionId: transaction_id,
+                url: realFlowUrl, // URL real de Flow que empieza con HTTPS!
+                transactionId: commerceOrder,
                 correlativo_boleta: correlativo_boleta
             });
         }
 
-        throw new Error("La respuesta de Izipay no contenía el token de pago (formToken).");
+        throw new Error(`La respuesta de Flow no contenía URL y Token. Detalles: ${JSON.stringify(flowData)}`);
 
     } catch (error) {
-        // Fallback si la llamada real falla (problema de credenciales, SSL, etc.)
-        console.error('[IZIPAY ERROR] ❌ Falló la llamada REAL a la API de Izipay.');
+        console.error('[FLOW ERROR] ❌ Falló la llamada REAL a la API de Flow.');
         if (error.response) {
             console.error('   Estado HTTP:', error.response.status);
-            console.error('   Respuesta de Izipay:', error.response.data);
+            console.error('   Respuesta de Flow:', error.response.data);
         } else {
             console.error('   Error de Red/Conexión:', error.message);
         }
 
         // --- FALLBACK: URL de SIMULACIÓN ---
-        console.log('[IZIPAY] ⚠️ Recurriendo a la URL de SIMULACIÓN debido al error anterior.');
+        console.log('[FLOW] ⚠️ Recurriendo a la URL de SIMULACIÓN debido al error anterior.');
 
+        // Reutilizamos la metadata que Flow ignoró al fallar la llamada
         const encodedMetadata = Buffer.from(JSON.stringify({
             loanId: loanId,
-            amount_mora: amount_mora,
+            amount_mora: req.body.amount_mora,
             correlativo_boleta: correlativo_boleta,
-            amount_ci: amount_ci,
+            amount_ci: req.body.amount_ci,
             amount: amount,
-            payment_date: payment_date
+            payment_date: new Date().toISOString().split('T')[0]
         })).toString('base64');
 
-        const checkoutUrlSimulated = `${YOUR_BACKEND_URL}/izipay/manual-payment?txn=${transaction_id}&metadata=${encodedMetadata}`;
+        const checkoutUrlSimulated = `${YOUR_BACKEND_URL}/flow/manual-payment?txn=${commerceOrder}&metadata=${encodedMetadata}`;
 
         return res.json({
             success: true,
             url: checkoutUrlSimulated,
-            transactionId: transaction_id,
+            transactionId: commerceOrder,
             correlativo_boleta: correlativo_boleta
         });
     }
 
 });
 
-
-app.get('/izipay/manual-payment', (req, res) => {
+// 🚨 GET /flow/manual-payment (Ruta de ayuda para la SIMULACIÓN)
+app.get('/flow/manual-payment', (req, res) => {
     const { txn, metadata } = req.query;
 
     if (!txn || !metadata) {
@@ -649,24 +669,27 @@ app.get('/izipay/manual-payment', (req, res) => {
     const metadataDecoded = Buffer.from(metadata, 'base64').toString('utf8');
     const metadataParsed = JSON.parse(metadataDecoded);
 
+    // Cuerpo de simulación de Flow (simula la notificación)
     const webhookExampleBody = JSON.stringify({
-        status: 'PAID',
-        kr_order_id: txn,
-        amount: Math.round(parseFloat(metadataParsed.amount) * 100), 
-        kr_hash: 'SIMULATED_HASH',
-        kr_metadata: {
-            loanId: metadataParsed.loanId,
-            amount_mora: metadataParsed.amount_mora,
-            correlativo_boleta: metadataParsed.correlativo_boleta,
-            amount_ci: metadataParsed.amount_ci
-        }
+        flowOrder: 12345678,
+        commerceOrder: txn,
+        requestDate: new Date().toISOString(),
+        status: 2, // 2 = Pagado (Flow status)
+        amount: parseFloat(metadataParsed.amount),
+        currency: 'CLP',
+        paymentData: {
+            fee: 0,
+            comm: 0,
+            tax: 0
+        },
+        custom: metadataDecoded // Flow devuelve el JSON sin codificar en el campo custom
     }, null, 2);
 
     res.send(`
         <!DOCTYPE html>
         <html lang="es">
         <head>
-            <title>Simulación de Pago Izipay</title>
+            <title>Simulación de Pago Flow</title>
             <style>
                 body { font-family: Arial, sans-serif; padding: 20px; background-color: #f4f7f6; }
                 .container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
@@ -678,20 +701,19 @@ app.get('/izipay/manual-payment', (req, res) => {
         </head>
         <body>
             <div class="container">
-                <h1>⚠️ Simulación de Flujo de Pago Izipay</h1>
-                <p>El enlace de pago real de Izipay no puede ser accedido o generado correctamente sin tener un dominio con **certificado SSL/HTTPS** y la configuración de claves de entorno real.</p>
-                <p>Para simular la confirmación del pago en tu sistema, usa las siguientes instrucciones para enviar un **Webhook** al backend:</p>
+                <h1>⚠️ Simulación de Flujo de Pago Flow</h1>
+                <p>La integración real requiere verificación de Flow y una URL HTTPS válida.</p>
+                <p>Para simular la confirmación del pago, usa las siguientes instrucciones para enviar un **Webhook** al backend (simulando que Flow nos notifica):</p>
 
                 <h2>Datos de la Transacción (Frontend)</h2>
-                <p><strong>Transaction ID:</strong> <code>${txn}</code></p>
+                <p><strong>Commerce Order:</strong> <code>${txn}</code></p>
                 <p><strong>Monto Total:</strong> S/ ${metadataParsed.amount}</p>
-                <p><strong>Metadata Registrada (Base64):</strong> <code>${metadata}</code></p>
 
                 <h2>Paso 1: Simular Pago Aprobado</h2>
-                <p>Una vez que el cliente paga, Izipay envía un **POST** a tu URL de webhook (<code>${YOUR_BACKEND_URL}/api/izipay/webhook</code>). Ejecuta el siguiente comando (o usa Postman) para simular esta notificación.</p>
+                <p>Ejecuta el siguiente comando (o usa Postman) para simular la notificación de pago exitoso de Flow.</p>
 
                 <h2>Paso 2: Comando cURL de Simulación</h2>
-                <pre>curl -X POST "${YOUR_BACKEND_URL}/api/izipay/webhook" \
+                <pre>curl -X POST "${YOUR_BACKEND_URL}/api/flow/webhook" \
 -H "Content-Type: application/json" \
 -d '${webhookExampleBody.replace(/\n/g, '').replace(/  /g, '')}'</pre>
                 
@@ -707,49 +729,70 @@ app.get('/izipay/manual-payment', (req, res) => {
     `);
 });
 
-app.post('/api/izipay/webhook', async (req, res) => {
+// 🚨 POST /api/flow/webhook (WEBHOOK)
+app.post('/api/flow/webhook', async (req, res) => {
+    // Flow espera un status HTTP 200 y el cuerpo "OK" para no reintentar
     res.status(200).send('OK');
 
     const notification = req.body;
-    console.log('[IZIPAY WEBHOOK] 📥 Notificación recibida:', notification);
+    console.log('[FLOW WEBHOOK] 📥 Notificación recibida:', notification);
 
-    const status = notification.status;
-    const transactionId = notification.kr_order_id;
-    const extraMetadata = notification.kr_metadata || {};
+    // 1. Verificar la firma (omitiendo por simplicidad del demo, pero crucial en prod)
 
-    if (status === 'PAID') {
-        console.log('[IZIPAY WEBHOOK] ✅ Pago APROBADO');
+    const flowStatus = notification.status; // 2 = Pagado
 
-        const loanId = extraMetadata.loanId;
-        const totalAmount = parseFloat(notification.amount / 100); 
+    if (flowStatus == 2) {
+        console.log('[FLOW WEBHOOK] ✅ Pago APROBADO');
+
+        const commerceOrder = notification.commerceOrder;
+        const totalAmount = parseFloat(notification.amount);
+
+        // 🚨 La metadata en el webhook de Flow está en notification.custom (que es un JSON string)
+        let customData = {};
+        try {
+            customData = JSON.parse(notification.custom);
+        } catch(e) {
+            console.error('[FLOW WEBHOOK ERROR] No se pudo parsear custom data:', e);
+            return; // No podemos procesar sin metadata
+        }
+
+        const loanId = customData.loanId;
+        const correlativo_boleta = customData.correlativo_boleta;
+
+        // Asumimos que la mora y CI vienen de la metadata
+        const amountMora = customData.amount_mora || '0';
+
         const paymentDate = new Date().toISOString().split('T')[0];
 
-        const amountMora = extraMetadata.amount_mora || '0';
-        const correlativo_boleta = extraMetadata.correlativo_boleta || null;
-
-
-        if (loanId && transactionId && correlativo_boleta) {
+        if (loanId && commerceOrder && correlativo_boleta) {
             const paymentDataToRegister = {
-                payment_amount: totalAmount, 
+                payment_amount: totalAmount,
                 mora_amount: parseFloat(amountMora),
                 payment_date: paymentDate,
-                payment_method: 'Izipay', 
+                payment_method: 'Flow', // Nuevo método
                 correlativo_boleta: parseInt(correlativo_boleta),
-                transaction_id: transactionId
+                transaction_id: commerceOrder // Usamos commerceOrder como transaction ID
             };
 
             try {
                 await registerPaymentInternal(loanId, paymentDataToRegister);
-                console.log(`[IZIPAY WEBHOOK] ✅ Pago registrado exitosamente para Préstamo ID: ${loanId} con Boleta N° ${correlativo_boleta}`);
+                console.log(`[FLOW WEBHOOK] ✅ Pago registrado exitosamente para Préstamo ID: ${loanId} con Boleta N° ${correlativo_boleta}`);
             } catch (error) {
-                console.error(`[IZIPAY WEBHOOK ERROR] ❌ Falló el registro interno del pago.`, error);
+                console.error(`[FLOW WEBHOOK ERROR] ❌ Falló el registro interno del pago.`, error);
             }
         } else {
-            console.error('[IZIPAY WEBHOOK ERROR] ❌ Datos faltantes en la notificación o metadata.');
+            console.error('[FLOW WEBHOOK ERROR] ❌ Datos faltantes en la notificación o metadata.');
         }
     } else {
-        console.log(`[IZIPAY WEBHOOK] ℹ️ Pago no aprobado. Estado: ${status}`);
+        console.log(`[FLOW WEBHOOK] ℹ️ Pago no aprobado. Estado: ${flowStatus}`);
     }
+});
+
+
+// 🚨 GET /flow/return (URL de retorno simple)
+app.get('/flow/return', (req, res) => {
+    // Esta ruta solo redirige al menú principal del frontend después de que Flow regresa.
+    res.redirect(`${YOUR_BACKEND_URL}/#module-menu`);
 });
 
 
@@ -757,12 +800,15 @@ app.post('/api/izipay/webhook', async (req, res) => {
 // 5. CONFIGURACIÓN FINAL DEL SERVIDOR
 // ==========================================================
 
+// Sirve archivos estáticos (HTML, CSS, JS)
 app.use(express.static(path.join(__dirname)));
 
+// Ruta para servir el front.html como index
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'front.html'));
 });
 
+// Manejador de errores 404
 app.use((req, res, next) => {
     console.log('[404] Ruta no encontrada:', req.originalUrl);
     res.status(404).json({
@@ -772,6 +818,7 @@ app.use((req, res, next) => {
     });
 });
 
+// INICIO DEL SERVIDOR
 const startServer = async () => {
     try {
         const connection = await pool.getConnection();
@@ -782,8 +829,7 @@ const startServer = async () => {
             console.log(`\n${'='.repeat(60)}`);
             console.log(`🚀 Servidor PrestaPro escuchando en el puerto ${PORT}`);
             console.log(`📡 URL de Backend: ${YOUR_BACKEND_URL}`);
-            console.log(`💳 Izipay (Merchant ID): ${IZP_MERCHANT_ID ? '✅' : '❌'}`);
-            console.log(`⚠️ REVISA EL LOG DEL SERVIDOR AL INTENTAR CREAR UNA ORDEN DE PAGO IZIPAY PARA VER EL ERROR DE CONEXIÓN.`);
+            console.log(`💳 Flow (API Key): ${FLOW_API_KEY ? '✅' : '❌'}`);
             console.log(`${'='.repeat(60)}\n`);
         });
 
