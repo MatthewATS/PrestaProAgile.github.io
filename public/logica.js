@@ -67,7 +67,7 @@ function closeModal(modal) {
         currentFlowUrl = null;
         currentClientName = null;
         // DETENER VIGILANCIA SI CIERRAN MANUALMENTE
-        if (paymentPollingInterval) clearInterval(paymentPollingInterval); 
+        if (paymentPollingInterval) clearInterval(paymentPollingInterval);
         // ... resto del código ...
     }
 }
@@ -431,17 +431,48 @@ async function deleteLoan(loanId) {
 
 
 // --- LÓGICA DE CUADRE DE CAJA (Mínima) ---
-async function openCashRegister() {
+async function openCashRegister() { // Navegación al módulo
     const today = getTodayDateISO();
-    // Se fuerza la misma fecha en ambos campos para cuadre diario
     getDomElement('cashRegisterDateFrom').value = today;
-    getDomElement('cashRegisterDateTo').value = today; // Mantener, aunque esté oculto
+    getDomElement('cashRegisterDateTo').value = today;
     await filterCashRegister();
 }
+
+async function openRegister() {
+    const date = getDomElement('cashRegisterDateFrom').value;
+    const initialAmount = parseFloat(getDomElement('openingAmount').value) || 0;
+
+    if (!date) {
+        alert("Por favor selecciona una fecha.");
+        return;
+    }
+
+    if (confirm(`¿Estás seguro de abrir la caja para el día ${date} con un monto inicial de S/ ${initialAmount.toFixed(2)}?`)) {
+        try {
+            const response = await fetch(`${API_URL}/api/cash-closures/open`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ opening_date: date, initial_amount: initialAmount })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'Error al abrir caja');
+            }
+
+            showSuccessAnimation('✅ ¡Caja Abierta Correctamente!');
+            await filterCashRegister();
+        } catch (error) {
+            alert(`Error: ${error.message}`);
+        }
+    }
+}
+
 
 function initCashRegisterListeners() {
     getDomElement('filterCashRegisterBtn')?.addEventListener('click', filterCashRegister);
     getDomElement('saveDailySquareBtn')?.addEventListener('click', saveDailySquare);
+    getDomElement('btnOpenRegister')?.addEventListener('click', openRegister); // NEW LISTENER
 
     // 🚨 MODIFICADO: Solo listener en DateFrom
     getDomElement('cashRegisterDateFrom')?.addEventListener('change', (e) => {
@@ -457,108 +488,135 @@ function initCashRegisterListeners() {
     getDomElement('printCashRegisterBtn')?.addEventListener('click', imprimirCaja);
 }
 
+
 // 🚨 MODIFICADA: La función ahora solo se centra en un solo día
 async function filterCashRegister() {
     const dateFrom = getDomElement('cashRegisterDateFrom').value;
-    const dateTo = dateFrom; // Forzamos la igualdad
+    if (!dateFrom) return;
 
-    // Usamos el rango estricto de la fecha seleccionada
-    const allMovements = getMovementsByDateRange(dateFrom, dateTo, null);
-
-    // 1. Filtrar movimientos del día seleccionado (este filtro es estricto por la hora)
-    const todayMovements = allMovements.filter(m => {
-        // Aseguramos que la comparación sea solo por fecha (ISO string YYYY-MM-DD)
-        const paymentDate = new Date(m.date).toISOString().split('T')[0];
-        return paymentDate === dateFrom;
-    });
-
-    const totalAllIngresos = todayMovements.reduce((sum, m) => sum + m.total, 0);
-    const totalCashIngresos = todayMovements.filter(m => m.method === 'Efectivo').reduce((sum, m) => sum + m.total, 0);
-    // 🚨 CAMBIO: Incluir "Flow" junto a "Transferencia" y "Yape/Plin" en el cálculo de transferencias/MP
-    const totalTransferIngresos = todayMovements.filter(m => m.method === 'Transferencia' || m.method === 'Yape/Plin' || m.method === 'Flow').reduce((sum, m) => sum + m.total, 0);
-    // 🚨 CAMBIO: Total de ingresos por tarjeta/Flow
-    const totalFlowIngresos = todayMovements.filter(m => m.method === 'Flow').reduce((sum, m) => sum + m.total, 0);
-
-
-    // Mostrar el resumen del día seleccionado
-    const summaryContent = `
-        <p><strong>Total de Ingresos (Caja + Transferencias + Flow):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalAllIngresos.toFixed(2)}</span></p>
-        <p><strong>Ingreso Neto en Efectivo (Cuadre):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalCashIngresos.toFixed(2)}</span></p>
-        <p><strong>Ingreso por Transferencia/Yape:</strong> <span style="font-weight: 700; color: var(--primary-color);">S/ ${totalTransferIngresos.toFixed(2)}</span></p>
-        <p><strong>Ingreso por Tarjeta/Flow:</strong> <span style="font-weight: 700; color: var(--secondary-color);">S/ ${totalFlowIngresos.toFixed(2)}</span></p>
-    `;
-    // getDomElement('cashRegisterSummary').innerHTML = summaryContent; // Reubicado abajo
-
-    // Control de la sección de cuadre diario
+    // UI Elements Containers
+    const openingSection = getDomElement('cashOpeningSection');
+    const workingArea = getDomElement('cashWorkingArea');
+    const statusAlert = getDomElement('cashStatusAlert');
     const dailySquareSection = getDomElement('dailySquareSection');
-    const squareFormContainer = getDomElement('squareFormContainer');
-    const squareStatusMessage = getDomElement('squareStatusMessage');
-    const declaredAmountInput = getDomElement('declaredAmount');
+    const saveBtn = getDomElement('saveDailySquareBtn');
 
-    // Obtener el contenedor de la tabla de movimientos para aplicar estilos
-    const cashRegisterTableContainer = getDomElement('cashRegisterTableBody').closest('.table-container');
+    // Hide all first to reset state
+    if (openingSection) openingSection.style.display = 'none';
+    if (workingArea) workingArea.style.display = 'none';
+    if (statusAlert) statusAlert.style.display = 'none';
 
-    // 1. Verificar estado del cierre en DB
-    const closureDate = dateFrom;
-    const checkResponse = await fetch(`${API_URL}/api/cash-closures/${closureDate}`);
-    const checkData = await checkResponse.json();
+    try {
+        // 1. Get Status from Backend
+        const statusRes = await fetch(`${API_URL}/api/cash-closures/status/${dateFrom}`);
+        const statusData = await statusRes.json();
 
-    const formattedDateTitle = new Date(closureDate).toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' });
-    getDomElement('dailySquareDate').textContent = formattedDateTitle;
+        let initialAmount = parseFloat(statusData.initialAmount || 0);
 
-    const cashRegisterSummary = getDomElement('cashRegisterSummary');
+        // 2. Fetch Movements
+        const allMovements = getMovementsByDateRange(dateFrom, dateFrom, null);
+        const todayMovements = allMovements.filter(m => m.fecha.startsWith(dateFrom));
 
-    if (checkData.closed) {
-        // Cierre ya realizado: Mostrar resumen estático de cierre.
-        squareFormContainer.style.display = 'none';
-        squareStatusMessage.className = 'alert alert-info';
-        squareStatusMessage.innerHTML = `<span>🔒</span> <strong>Cierre de Caja Realizado.</strong> Monto del Sistema: S/ ${checkData.data.system_cash_amount.toFixed(2)}. Diferencia: S/ ${checkData.data.difference.toFixed(2)}. Cerrado el ${new Date(checkData.data.closed_at).toLocaleString('es-PE')}.`;
-        squareStatusMessage.style.display = 'flex';
+        // 3. Handle States
+        if (statusData.status === 'pending') {
+            // STATE: CLOSED/NOT OPENED YET
+            if (openingSection) {
+                openingSection.style.display = 'block';
+                getDomElement('openingAmount').value = '0.00';
+            }
+        } else {
+            // STATE: OPEN or CLOSED
+            if (workingArea) workingArea.style.display = 'block';
 
-        // 🚨 CAMBIO CRÍTICO: Sobreescribir el resumen con el mensaje de "CUADRE HECHO"
-        cashRegisterSummary.className = 'cash-register-summary alert-success';
-        cashRegisterSummary.style.backgroundColor = 'var(--success-color)';
-        cashRegisterSummary.style.color = 'var(--bg-primary)';
-        cashRegisterSummary.style.border = '1px solid var(--success-color)';
-        cashRegisterSummary.innerHTML = `
-            <p style="text-align: center; font-size: 18px; font-weight: 700; color: var(--bg-primary);">✅ CUADRE DE CAJA HECHO (${formattedDateTitle})</p>
-            <p style="text-align: center; font-size: 14px; color: var(--bg-primary);">Revisa la sección de 'Historial de Cierres Oficiales' para más detalles.</p>
-        `;
+            // Populate Initial Amount & Summary
+            getDomElement('summaryInitialAmount').textContent = `S/ ${initialAmount.toFixed(2)}`;
 
-        // Aplicar clase para bloquear visualmente la tabla
-        if (cashRegisterTableContainer) {
-            cashRegisterTableContainer.classList.add('locked-cash-register');
+            const cashIncome = todayMovements.filter(m => m.method === 'Efectivo').reduce((sum, m) => sum + m.total, 0);
+            const bankIncome = todayMovements.filter(m => m.method !== 'Efectivo').reduce((sum, m) => sum + m.total, 0);
+            const totalTheoretical = initialAmount + cashIncome;
+
+            getDomElement('summaryCashIncome').textContent = `S/ ${cashIncome.toFixed(2)}`;
+            getDomElement('summaryBankIncome').textContent = `S/ ${bankIncome.toFixed(2)}`;
+            getDomElement('summaryFinalCalculated').textContent = `S/ ${totalTheoretical.toFixed(2)}`;
+            getDomElement('dailySquareDate').textContent = dateFrom;
+
+            // Render Table
+            renderCashRegisterTable(todayMovements, statusData.status === 'closed');
+
+            if (statusData.status === 'closed') {
+                // CLOSED VIEW
+                if (statusAlert) {
+                    statusAlert.style.display = 'block';
+                    statusAlert.className = 'alert alert-info';
+                    statusAlert.innerHTML = `<strong>🔒 CAJA CERRADA</strong> - Cerrada por ${statusData.closureData.closed_by || 'Admin'} a las ${new Date(statusData.closureData.closed_at).toLocaleTimeString()}.`;
+                }
+
+                dailySquareSection.style.display = 'block';
+                getDomElement('squareFormContainer').style.display = 'none'; // Hide form
+                if (getDomElement('declaredAmount')) getDomElement('declaredAmount').value = statusData.closureData.declared_amount;
+
+            } else {
+                // OPEN VIEW
+                if (statusAlert) {
+                    statusAlert.style.display = 'block';
+                    statusAlert.className = 'alert alert-success';
+                    statusAlert.innerHTML = `<strong>🔓 CAJA ABIERTA</strong> - Operando normalmente.`;
+                }
+
+                dailySquareSection.style.display = 'block';
+                const formContainer = getDomElement('squareFormContainer');
+                if (formContainer) formContainer.style.display = 'block';
+
+                saveBtn.disabled = false;
+                const declaredInput = getDomElement('declaredAmount');
+                if (declaredInput) {
+                    declaredInput.value = '';
+                    declaredInput.disabled = false;
+                }
+                // Reset validation messages
+                const valMsg = getDomElement('squareValidationMessage');
+                if (valMsg) valMsg.style.display = 'none';
+            }
         }
 
-    } else {
-        // Cierre pendiente: Mostrar resumen con los totales calculados.
-        squareFormContainer.style.display = 'block';
-        squareStatusMessage.style.display = 'none';
+        // 4. Update History Table
+        updateClosureHistoryTable();
 
-        // 🚨 CAMBIO CRÍTICO: Volver a los estilos por defecto y mostrar el resumen de totales
-        cashRegisterSummary.className = 'cash-register-summary'; // Volver a la clase normal
-        cashRegisterSummary.style.backgroundColor = 'var(--primary-light)';
-        cashRegisterSummary.style.color = 'var(--text-color)';
-        cashRegisterSummary.style.border = '1px solid var(--primary-color)';
-        cashRegisterSummary.innerHTML = summaryContent; // Reutilizar el contenido de totales
-
-
-        declaredAmountInput.value = totalCashIngresos.toFixed(2);
-        getDomElement('squareValidationMessage').style.display = 'none';
-        getDomElement('saveDailySquareBtn').disabled = false;
-
-        // Remover clase si no está cerrado
-        if (cashRegisterTableContainer) {
-            cashRegisterTableContainer.classList.remove('locked-cash-register');
-        }
+    } catch (error) {
+        console.error("Error filtering cash register:", error);
+        alert("Error al cargar datos de caja. Revise la consola.");
     }
+}
 
+async function updateClosureHistoryTable() {
+    try {
+        const response = await fetch(`${API_URL}/api/cash-closures/history`);
+        if (!response.ok) return;
+        const history = await response.json();
 
-    // 🚨 CRÍTICO: Renderizar la tabla de movimientos detallada del día seleccionado
-    renderCashRegisterTable(todayMovements, checkData.closed);
+        const tbody = getDomElement('closureHistoryTableBody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
 
-    // 🔹 IMPORTANTE: El historial de cierres se renderiza aparte y sin filtro
-    await renderClosureHistory();
+        history.forEach(h => {
+            const row = document.createElement('tr');
+            const diff = parseFloat(h.difference);
+            const diffClass = diff < 0 ? 'text-danger' : (diff > 0 ? 'text-success' : '');
+            const diffSymbol = diff > 0 ? '+' : '';
+
+            row.innerHTML = `
+                <td align="center">${h.closure_date}</td>
+                <td align="center">${new Date(h.closed_at).toLocaleTimeString()}</td>
+                <td align="right">S/ ${parseFloat(h.system_cash_amount).toFixed(2)}</td>
+                <td align="right">S/ ${parseFloat(h.declared_amount).toFixed(2)}</td>
+                <td align="right" class="${diffClass}" style="${diff < 0 ? 'color:red' : 'color:green'}">${diffSymbol}S/ ${diff.toFixed(2)}</td>
+                <td align="center">${h.closed_by || 'Admin'}</td>
+             `;
+            tbody.appendChild(row);
+        });
+    } catch (e) {
+        console.log("Error updating history table", e);
+    }
 }
 
 // 🚨 MODIFICADA: Ahora muestra los movimientos detallados del día y gestiona el estado de cierre
@@ -579,23 +637,12 @@ function renderCashRegisterTable(dailyMovements, isClosed) {
         <th style="text-align: right;">Total Ingreso</th>
     `;
 
-    // Si la caja está cerrada, sobreescribir con el mensaje
+    // Si la caja está cerrada, se bloquea visualmente (pero se ve la data)
     if (isClosed) {
-        // Aplicar clase para bloquear visualmente la tabla
         tableContainer.classList.add('locked-cash-register');
-
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="5" style="text-align: center; color: var(--danger-color); font-weight: 700; padding: 40px; font-size: 16px; background-color: var(--light-gray);">
-                    🔒 NO DISPONIBLE - CUADRE DE CAJA HECHO
-                </td>
-            </tr>
-        `;
-        return;
+    } else {
+        tableContainer.classList.remove('locked-cash-register');
     }
-
-    // Si no está cerrada, asegurar que sea interactuable
-    tableContainer.classList.remove('locked-cash-register');
 
     if (dailyMovements.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #9CA3AF;">No se encontraron movimientos para este día.</td></tr>';
@@ -674,50 +721,77 @@ async function saveDailySquare() {
         return;
     }
 
-
-    const allMovements = getMovementsByDateRange(date, date, null);
-    const cashMovements = allMovements.filter(m => m.method === 'Efectivo');
-    const totalCashIngresos = cashMovements.reduce((sum, m) => sum + m.total, 0);
-
-    const difference = declaredAmount - totalCashIngresos;
-
-    // 1. Validar el cuadre antes de enviar a DB
-    if (Math.abs(difference) >= 0.01) {
+    if (isNaN(declaredAmount) || declaredAmount < 0) {
         validationMessage.className = 'alert alert-danger';
-        validationMessage.innerHTML = `<span>❌</span> <strong>¡Descuadre!</strong> El monto declarado (S/ ${declaredAmount.toFixed(2)}) no coincide con el ingreso en efectivo del sistema (S/ ${totalCashIngresos.toFixed(2)}). <br><strong>Diferencia:</strong> S/ ${difference.toFixed(2)}. Corrija el monto antes de cerrar.`;
+        validationMessage.innerHTML = '<span>❌</span> Ingrese un monto válido.';
         return;
     }
 
-    // 2. Si cuadra, registrar en DB (Esto evita el doble registro gracias al backend)
     try {
+        // 1. Get Status to retrieve Initial Amount
+        const statusRes = await fetch(`${API_URL}/api/cash-closures/status/${date}`);
+        const statusData = await statusRes.json();
+
+        if (statusData.status !== 'open') {
+            throw new Error('La caja debe estar ABIERTA para poder cerrarla.');
+        }
+
+        const initialAmount = parseFloat(statusData.initialAmount || 0);
+
+        // 2. Calculate Totals
+        const allMovements = getMovementsByDateRange(date, date, null);
+        const cashIncome = allMovements.filter(m => m.fecha.startsWith(date) && m.method === 'Efectivo')
+            .reduce((sum, m) => sum + m.total, 0);
+
+        const systemCashAmount = initialAmount + cashIncome;
+        const difference = declaredAmount - systemCashAmount;
+
+        const confirmMsg = `
+            RESUMEN DE CIERRE (${date}):
+            --------------------------------
+            Saldo Inicial:      S/ ${initialAmount.toFixed(2)}
+            + Ingresos Efectivo: S/ ${cashIncome.toFixed(2)}
+            = TEÓRICO EN CAJA:   S/ ${systemCashAmount.toFixed(2)}
+            
+            - DECLARADO FÍSICO:  S/ ${declaredAmount.toFixed(2)}
+            --------------------------------
+            DIFERENCIA:         S/ ${difference.toFixed(2)}
+            
+            ¿CONFIRMAR EL CIERRE? (No se podrá modificar después)
+        `;
+
+        // Permitimos cancelar, pero si acepta, procedemos
+        if (!confirm(confirmMsg)) {
+            validationMessage.style.display = 'none';
+            return;
+        }
+
+        const payload = {
+            closure_date: date,
+            declared_amount: declaredAmount,
+            system_cash_amount: systemCashAmount, // Ahora incluye saldo inicial
+            difference: difference
+        };
+
         const response = await fetch(`${API_URL}/api/cash-closures`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                closure_date: date,
-                declared_amount: declaredAmount.toFixed(2),
-                system_cash_amount: totalCashIngresos.toFixed(2),
-                difference: difference.toFixed(2)
-            })
+            body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
             const errorData = await response.json();
-            if (response.status === 409) {
-                // Error 409 (Conflict) significa que ya se cerró
-                throw new Error("Ya existe un cierre de caja para esta fecha.");
-            }
-            throw new Error(errorData.error || `Error ${response.status}`);
+            throw new Error(errorData.error || 'Error desconocido al guardar.');
         }
 
-        // 3. Éxito: Deshabilitar el botón y actualizar el estado
+        // 3. Éxito
         validationMessage.className = 'alert alert-success';
-        validationMessage.innerHTML = `<span>✅</span> <strong>¡Caja Cuadrada!</strong> Cierre de caja registrado para el día ${new Date(date).toLocaleDateString('es-PE')}.`;
+        validationMessage.innerHTML = `<span>✅</span> <strong>¡Caja Cerrada!</strong> se guardó correctamente.`;
 
-        // Vuelve a filtrar para mostrar el estado de "Cerrado" y actualizar el historial
+        getDomElement('declaredAmount').value = '';
+        getDomElement('saveDailySquareBtn').disabled = true;
+
         await filterCashRegister();
-
-        // 🔹 NUEVA LÍNEA: Mostrar animación de éxito
         showSuccessAnimation('✅ Cierre de Caja Guardado en Historial');
 
     } catch (error) {
@@ -1551,7 +1625,7 @@ async function handlePaymentSubmit(e) {
 
     // Si es Transferencia o Yape/Plin, ahora lo mapeamos a Flow
     if (selectedMethod === 'Flow') {
-        
+
         if (!loan) { alert("Error cliente no encontrado"); return; }
 
         if (!confirm(`Se abrirá la pasarela de pagos Flow (Tarjeta, Yape, Transferencia) por S/ ${totalToCollect.toFixed(2)}. ¿Continuar?`)) {
@@ -1578,7 +1652,7 @@ async function handlePaymentSubmit(e) {
             });
 
             // ... (Manejo de errores igual) ...
-            
+
             const flowData = await response.json();
             const flowUrl = flowData.url;
             const token = flowData.token; // IMPORTANTE: Asegúrate de que el backend devuelva el token
@@ -1596,13 +1670,13 @@ async function handlePaymentSubmit(e) {
                     flowData.correlativo_boleta || 'N/A',
                     !!flowWindow
                 );
-                
+
                 // 🚨 INICIAR VIGILANCIA AQUÍ
                 startPaymentStatusPolling(token, loanId, flowData.correlativo_boleta);
 
                 return;
             }
-             else {
+            else {
                 throw new Error("El backend no proporcionó un URL de pago válido de Flow.");
             }
 
@@ -3803,12 +3877,12 @@ function startPaymentStatusPolling(token, loanId, correlativoPrevisto) {
 
                         // 4. Buscar el préstamo actualizado en la memoria
                         const updatedLoan = loans.find(l => l.id == loanId);
-                        
+
                         if (updatedLoan && updatedLoan.payments && updatedLoan.payments.length > 0) {
                             // 5. Encontrar el pago correcto.
                             // Buscamos el pago que coincida con el correlativo previsto O el último pago realizado hoy.
                             let newPayment = updatedLoan.payments.find(p => p.correlativo === correlativoPrevisto);
-                            
+
                             if (!newPayment) {
                                 // Si no coincide el correlativo exacto, tomamos el último pago del array (el más reciente)
                                 console.log("⚠️ No se encontró por correlativo exacto, usando el último pago registrado.");
@@ -3823,13 +3897,13 @@ function startPaymentStatusPolling(token, loanId, correlativoPrevisto) {
                                 if (paymentForReceipt.payment_method === 'Flow') {
                                     paymentForReceipt.payment_method = 'Flow (Tarjeta/Digital)';
                                 }
-                                
+
                                 showReceipt(paymentForReceipt, updatedLoan);
                             } else {
                                 throw new Error("No se pudo encontrar el registro del pago recién hecho.");
                             }
                         } else {
-                             throw new Error("El préstamo no tiene pagos registrados después de la recarga.");
+                            throw new Error("El préstamo no tiene pagos registrados después de la recarga.");
                         }
                     } catch (innerError) {
                         console.error("❌ Error crítico al intentar mostrar la boleta automática:", innerError);
@@ -3841,7 +3915,7 @@ function startPaymentStatusPolling(token, loanId, correlativoPrevisto) {
 
         } catch (error) {
             console.error("Error de red durante la vigilancia del pago:", error);
-             // No detenemos el intervalo por un error de red momentáneo, seguimos intentando.
+            // No detenemos el intervalo por un error de red momentáneo, seguimos intentando.
         }
     }, 3000); // Revisar cada 3 segundos
 }
