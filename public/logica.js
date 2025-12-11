@@ -2393,10 +2393,13 @@ function showReceipt(payment, loan) {
 
     // 1. OBTENER FECHA DE PAGO (EMISIÓN)
     // Usamos split para asegurar que la fecha se lea correctamente sin errores de zona horaria
-    const partsPago = payment.payment_date.split('-');
-    const pDateLocal = new Date(partsPago[0], partsPago[1] - 1, partsPago[2]);
+    const paymentDateOnly = payment.payment_date.split('T')[0];
+    const pDateLocal = new Date(paymentDateOnly + 'T12:00:00'); // Añadimos hora fija para evitar problemas de DST
     const paymentDateStr = pDateLocal.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const horaSimulada = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true });
+    let paymentMethodDisplay = payment.payment_method || 'Efectivo';
+    if (paymentMethodDisplay.includes('Flow')) {
+        paymentMethodDisplay = 'FLOW (TARJETA/DIGITAL)';
+    }
 
     // Determinar si es FACTURA (RUC 11 dígitos) o BOLETA
     const esFactura = loan.dni && loan.dni.length === 11;
