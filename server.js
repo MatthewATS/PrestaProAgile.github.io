@@ -75,9 +75,8 @@ app.post('/payment-success', async (req, res) => {
                 console.log('[LOCALHOST FIX] 🔧 Intentando registrar pago forzosamente...');
                 const statusData = await getFlowPaymentStatus(token);
                 
-                if (statusData.status === 2) { // Si está PAGADO
+                if (statusData.status === 2) { 
                     const commerceOrder = statusData.commerceOrder || '';
-                    // Extraer ID y Correlativo: LOAN-{id}-{correlativo}-...
                     const match = commerceOrder.match(/LOAN-(\d+)-(\d+)/);
                     
                     if (match) {
@@ -85,7 +84,16 @@ app.post('/payment-success', async (req, res) => {
                         const correlativo = parseInt(match[2]);
                         const totalAmount = parseFloat(statusData.amount);
                         
-                        // Intentamos obtener metadata si existe para la mora
+                        // 🚨 NUEVO: Capturar el método específico (Ej: "Webpay", "Transferencia")
+                        let metodoEspecifico = 'Flow (Genérico)';
+                        
+                        if (statusData.paymentData && statusData.paymentData.media) {
+                            // Flow suele devolver "Webpay", "Transferencia", "Servipag", etc.
+                            // Lo combinamos para que se entienda: "Flow - Webpay"
+                            metodoEspecifico = `Flow - ${statusData.paymentData.media}`;
+                        }
+
+                        // Recuperar mora y fecha de la metadata (igual que antes)
                         let moraAmount = 0;
                         let paymentDate = new Date().toISOString().split('T')[0];
                         try {
@@ -96,16 +104,16 @@ app.post('/payment-success', async (req, res) => {
                             }
                         } catch (e) {}
 
-                        // REGISTRAR EN BD
+                        // REGISTRAR EN BD CON EL NOMBRE DETALLADO
                         await registerPaymentInternal(loanId, {
                             payment_amount: totalAmount,
                             mora_amount: moraAmount,
                             payment_date: paymentDate,
-                            payment_method: 'Flow',
+                            payment_method: metodoEspecifico, // <--- AQUÍ GUARDAMOS EL DETALLE
                             correlativo_boleta: correlativo,
                             transaction_id: statusData.flowOrder || token
                         });
-                        console.log('[LOCALHOST FIX] ✅ Pago guardado exitosamente al retornar.');
+                        console.log(`[LOCALHOST FIX] ✅ Pago guardado: ${metodoEspecifico}`);
                     }
                 }
             } catch (error) {
@@ -121,6 +129,7 @@ app.post('/payment-success', async (req, res) => {
 
     res.sendFile(path.join(__dirname, 'public', 'payment-success.html'));
 });
+
 
 
 // ==========================================================
