@@ -17,7 +17,7 @@ let clients = new Set();
 let currentLoanForDetails = null;
 let currentLoanForQuickPayment = null;
 let calculatedPaymentData = { amount: 0, mora: 0 }; // Guarda el último cálculo flexible
-let currentIzpUrl = null; // 🚨 CAMBIO: Almacena el URL de Izipay generado (antes currentMpUrl)
+let currentIzpUrl = null; // Usaremos esta variable para guardar la URL de Flow (Nombre genérico)
 let currentClientName = null; // Almacena el nombre del cliente para el mensaje compartido
 
 // --- CREDENCIALES (SIMULACIÓN) ---
@@ -45,7 +45,7 @@ function closeModal(modal) {
     }
     if (modal.id === 'deleteConfirmationModal') getDomElement('delete-error-message').style.display = 'none';
     if (modal.id === 'checkoutLinkModal') {
-        // 🚨 CAMBIO: Limpiar la URL de Izipay
+        // 🚨 CAMBIO: Limpiar la URL de Flow
         currentIzpUrl = null;
         currentClientName = null;
         // Reiniciar la vista del módulo de pagos después de cerrar el link de checkout
@@ -465,18 +465,18 @@ async function filterCashRegister() {
 
     const totalAllIngresos = todayMovements.reduce((sum, m) => sum + m.total, 0);
     const totalCashIngresos = todayMovements.filter(m => m.method === 'Efectivo').reduce((sum, m) => sum + m.total, 0);
-    // 🚨 CAMBIO: Incluir "Izipay" junto a "Transferencia" y "Yape/Plin" en el cálculo de transferencias/MP
-    const totalTransferIngresos = todayMovements.filter(m => m.method === 'Transferencia' || m.method === 'Yape/Plin' || m.method === 'Izipay').reduce((sum, m) => sum + m.total, 0);
-    // 🚨 CAMBIO: Total de ingresos por tarjeta/Izipay
-    const totalIzpIngresos = todayMovements.filter(m => m.method === 'Izipay').reduce((sum, m) => sum + m.total, 0);
+    // 🚨 CAMBIO: Incluir "Flow" en el cálculo de transferencias/MP
+    const totalTransferIngresos = todayMovements.filter(m => m.method === 'Transferencia' || m.method === 'Yape/Plin' || m.method === 'Flow').reduce((sum, m) => sum + m.total, 0);
+    // 🚨 CAMBIO: Total de ingresos por tarjeta/Flow
+    const totalFlowIngresos = todayMovements.filter(m => m.method === 'Flow').reduce((sum, m) => sum + m.total, 0);
 
 
     // Mostrar el resumen del día seleccionado
     const summaryContent = `
-        <p><strong>Total de Ingresos (Caja + Transferencias + Izipay):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalAllIngresos.toFixed(2)}</span></p>
+        <p><strong>Total de Ingresos (Caja + Transferencias + Flow):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalAllIngresos.toFixed(2)}</span></p>
         <p><strong>Ingreso Neto en Efectivo (Cuadre):</strong> <span style="font-weight: 700; color: var(--success-color);">S/ ${totalCashIngresos.toFixed(2)}</span></p>
         <p><strong>Ingreso por Transferencia/Yape:</strong> <span style="font-weight: 700; color: var(--primary-color);">S/ ${totalTransferIngresos.toFixed(2)}</span></p>
-        <p><strong>Ingreso por Tarjeta/Izipay:</strong> <span style="font-weight: 700; color: var(--secondary-color);">S/ ${totalIzpIngresos.toFixed(2)}</span></p>
+        <p><strong>Ingreso por Tarjeta/Flow:</strong> <span style="font-weight: 700; color: var(--secondary-color);">S/ ${totalFlowIngresos.toFixed(2)}</span></p>
     `;
     // getDomElement('cashRegisterSummary').innerHTML = summaryContent; // Reubicado abajo
 
@@ -630,9 +630,9 @@ function getMovementsByDateRange(dateFrom, dateTo, methodFilter = null) {
                 const paymentDate = new Date(p.payment_date).getTime();
                 let method = p.payment_method || 'Efectivo';
 
-                // 🚨 CAMBIO CRÍTICO: Reemplazar Mercado Pago por Izipay en la visualización
-                if (method === 'Mercado Pago') {
-                    method = 'Izipay';
+                // 🚨 CAMBIO CRÍTICO: Reemplazar Izipay/Mercado Pago por Flow en la visualización
+                if (method === 'Mercado Pago' || method === 'Izipay') {
+                    method = 'Flow';
                 }
 
                 // 🚨 CRÍTICO: El filtro ahora usa los timestamps calculados (solo ese día)
@@ -1438,27 +1438,34 @@ function openPaymentModal(loan) {
 
 // NUEVA FUNCIÓN: Muestra el modal del enlace de pago
 function showCheckoutLinkModal(izpUrl, totalAmount, paymentMethod, clientName, correlativo) {
-    currentIzpUrl = izpUrl; // 🚨 CAMBIO: Usar variable Izipay
+    currentIzpUrl = izpUrl; // 🚨 CAMBIO: Usar variable Flow URL
     currentClientName = clientName;
     getDomElement('checkoutLinkAmount').textContent = `S/ ${totalAmount.toFixed(2)}`;
     getDomElement('checkoutLinkMethod').textContent = paymentMethod;
     getDomElement('mpLinkOutput').value = izpUrl; // El ID del input HTML sigue siendo 'mpLinkOutput'
 
-    // 🚨 CAMBIO: Mostrar el correlativo en el modal y cambiar la etiqueta
+    // 🚨 CAMBIO: Mostrar el correlativo en el modal y cambiar la etiqueta (Flow)
     const titleEl = getDomElement('checkoutLinkTitle');
-    titleEl.textContent = `🔗 Enlace de Pago Generado (Boleta N° ${correlativo.toString().padStart(8, '0')})`;
-    getDomElement('mpLinkOutput').previousElementSibling.textContent = 'Enlace de Pago (Izipay)';
+    titleEl.textContent = `🔗 Enlace de Pago Flow (Boleta N° ${correlativo.toString().padStart(8, '0')})`;
+    getDomElement('mpLinkOutput').previousElementSibling.textContent = 'Enlace de Pago (Flow)';
 
     // 🚨 CRÍTICO: MODIFICACIÓN DEL MENSAJE PARA EXPLICAR LA SIMULACIÓN
     const instructionsDiv = getDomElement('checkoutLinkModal').querySelector('.alert-success div');
-    instructionsDiv.innerHTML = `
-        <p style="margin: 0;"><strong>¡ATENCIÓN! ESTA ES UNA SIMULACIÓN.</strong></p>
-        <p style="margin: 5px 0 0 0;">
-            El enlace real de Izipay requiere HTTPS/Dominio. Para probar el flujo de pago, copia el enlace 
-            de abajo, ábrelo en una nueva pestaña y **sigue las instrucciones de cURL/Postman** que aparecerán 
-            para simular la confirmación del pago (Webhook). El pago **NO** se registrará hasta que ejecutes la simulación del Webhook.
-        </p>
-    `;
+    // Si la URL es la de simulación (que empieza con la URL del backend), mostramos la advertencia
+    if (izpUrl.includes(API_URL)) {
+        instructionsDiv.innerHTML = `
+            <p style="margin: 0;"><strong>¡ATENCIÓN! ESTA ES UNA SIMULACIÓN (Flow Falló).</strong></p>
+            <p style="margin: 5px 0 0 0;">
+                El servidor no pudo conectar con Flow. Abre el enlace de abajo y **sigue las instrucciones de cURL/Postman** que aparecerán para simular la confirmación del pago. El pago **NO** se registrará hasta que ejecutes el Webhook de simulación.
+            </p>
+        `;
+    } else {
+        // Si la URL es la real (de Flow), mostramos el mensaje normal
+        instructionsDiv.innerHTML = `
+            <p style="margin: 0;"><strong>¡Enlace de Pago Flow Generado!</strong></p>
+            <p style="margin: 5px 0 0 0;">Copia el enlace de abajo y compártelo con el cliente. El pago se registrará automáticamente al ser completado.</p>
+        `;
+    }
 
 
     // Asegurarse de que el input esté enfocado para copiar si es posible
@@ -1500,7 +1507,7 @@ async function shareIzpLink() {
     try {
         await navigator.share({
             title: `Pago Préstamo PrestaPro (S/ ${getDomElement('checkoutLinkAmount').textContent})`,
-            text: `¡Hola ${currentClientName || 'cliente'}! Tu enlace de pago para PrestaPro (vía Izipay) ha sido generado. Paga S/ ${getDomElement('checkoutLinkAmount').textContent} usando este link:`,
+            text: `¡Hola ${currentClientName || 'cliente'}! Tu enlace de pago para PrestaPro (vía Flow) ha sido generado. Paga S/ ${getDomElement('checkoutLinkAmount').textContent} usando este link:`,
             url: currentIzpUrl,
         });
         // Opcional: Mostrar una animación de éxito aquí si la compartición fue exitosa (aunque la API de Share no lo garantiza)
@@ -1538,19 +1545,19 @@ async function handlePaymentSubmit(e) {
         payment_date: paymentDate
     };
 
-    // Identificamos el préstamo y cliente para obtener datos necesarios para Izipay
+    // Identificamos el préstamo y cliente para obtener datos necesarios para Flow
     const loan = loans.find(l => l.id == loanId);
 
-    // Si es Transferencia o Yape/Plin, ahora lo mapeamos a Izipay
+    // Si es Transferencia o Yape/Plin, ahora lo mapeamos a Flow
     if (selectedMethod === 'Transferencia' || selectedMethod === 'Yape/Plin') {
-        // --- INICIO DE FLUJO DE PAGO CON IZIPAY ---
+        // --- INICIO DE FLUJO DE PAGO CON FLOW ---
 
         if (!loan) {
             alert("Error: No se encontró la información del cliente para iniciar el pago.");
             return;
         }
 
-        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollect.toFixed(2)} mediante Izipay para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
+        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollect.toFixed(2)} mediante Flow para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
             return;
         }
 
@@ -1558,8 +1565,8 @@ async function handlePaymentSubmit(e) {
         closeModal(getDomElement('paymentModal'));
 
         try {
-            // 🚨 CAMBIO CRÍTICO: Llamada a la nueva ruta de IZIPAY
-            const response = await fetch(`${API_URL}/api/izipay/create-order`, {
+            // 🚨 CAMBIO CRÍTICO: Llamada a la nueva ruta de FLOW
+            const response = await fetch(`${API_URL}/api/flow/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1581,23 +1588,23 @@ async function handlePaymentSubmit(e) {
                 } catch (e) {
                     errorData = { error: 'Error de formato (Estado: ' + response.status + ' ' + response.statusText + ')', status: response.status };
                 }
-                throw new Error(`(${response.status}) Error de Izipay. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
+                throw new Error(`(${response.status}) Error de Flow. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
             }
 
-            const izpData = await response.json();
-            const izpUrl = izpData.url;
+            const flowData = await response.json();
+            const flowUrl = flowData.url;
 
-            if (izpUrl) {
+            if (flowUrl) {
                 // *** CRÍTICO: Muestra el link en un modal en lugar de redirigir ***
-                // 🚨 CAMBIO: Pasar el correlativo de boleta y URL de Izipay
-                showCheckoutLinkModal(izpUrl, totalToCollect, selectedMethod, `${loan.nombres} ${loan.apellidos}`, izpData.correlativo_boleta || 'N/A');
+                // 🚨 CAMBIO: Pasar el correlativo de boleta y URL de Flow
+                showCheckoutLinkModal(flowUrl, totalToCollect, selectedMethod, `${loan.nombres} ${loan.apellidos}`, flowData.correlativo_boleta || 'N/A');
                 return;
             } else {
-                throw new Error("El backend no proporcionó un URL de pago válido de Izipay.");
+                throw new Error("El backend no proporcionó un URL de pago válido de Flow.");
             }
 
         } catch (error) {
-            alert(`❌ Error al iniciar el pago con Izipay. Detalles: ${error.message}`);
+            alert(`❌ Error al iniciar el pago con Flow. Detalles: ${error.message}`);
             return;
         }
 
@@ -1954,17 +1961,17 @@ async function handleQuickPaymentSubmit() {
 
     const loan = currentLoanForQuickPayment;
 
-    // Si es Transferencia o Yape/Plin, se usa Izipay.
+    // Si es Transferencia o Yape/Plin, ahora lo mapeamos a Flow
     if (selectedMethod === 'Transferencia' || selectedMethod === 'Yape/Plin') {
-        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollectRounded.toFixed(2)} mediante Izipay para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
+        if (!confirm(`Se generará un enlace de pago de S/ ${totalToCollectRounded.toFixed(2)} mediante Flow para que el cliente pague desde su dispositivo. ¿Continuar?`)) {
             return;
         }
 
         getDomElement('quick-payment-summary-section').style.display = 'none';
 
         try {
-            // 🚨 CAMBIO CRÍTICO: Llamada a la nueva ruta de IZIPAY
-            const response = await fetch(`${API_URL}/api/izipay/create-order`, {
+            // 🚨 CAMBIO CRÍTICO: Llamada a la nueva ruta de FLOW
+            const response = await fetch(`${API_URL}/api/flow/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1987,22 +1994,22 @@ async function handleQuickPaymentSubmit() {
                 } catch (e) {
                     errorData = { error: 'Error de formato (Estado: ' + response.status + ' ' + response.statusText + ')', status: response.status };
                 }
-                throw new Error(`(${response.status}) Error de Izipay. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
+                throw new Error(`(${response.status}) Error de Flow. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
             }
 
-            const izpData = await response.json();
-            const izpUrl = izpData.url;
+            const flowData = await response.json();
+            const flowUrl = flowData.url;
 
-            if (izpUrl) {
-                // 🚨 CAMBIO: Pasar la URL y datos de Izipay
-                showCheckoutLinkModal(izpUrl, totalToCollectRounded, selectedMethod, `${loan.nombres} ${loan.apellidos}`, izpData.correlativo_boleta || 'N/A');
+            if (flowUrl) {
+                // 🚨 CAMBIO: Pasar la URL y datos de Flow
+                showCheckoutLinkModal(flowUrl, totalToCollectRounded, selectedMethod, `${loan.nombres} ${loan.apellidos}`, flowData.correlativo_boleta || 'N/A');
                 return;
             } else {
-                throw new Error("El backend no proporcionó un URL de pago válido de Izipay.");
+                throw new Error("El backend no proporcionó un URL de pago válido de Flow.");
             }
 
         } catch (error) {
-            alert(`❌ Error al iniciar el pago con Izipay. Detalles: ${error.message}`);
+            alert(`❌ Error al iniciar el pago con Flow. Detalles: ${error.message}`);
             return;
         }
     }
