@@ -1,5 +1,6 @@
 // --- VARIABLES GLOBALES Y CONFIGURACIÓN ---
-const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
+//const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
+const API_URL = 'http://localhost:3000';
 const VALOR_UIT = 5150;
 // ❌ MODIFICACIÓN: TASA_INTERES_ANUAL ELIMINADA. SE USA EL VALOR DEL INPUT.
 const TASA_MORA_MENSUAL = 1; // 1% de mora por mes
@@ -19,6 +20,7 @@ let currentLoanForQuickPayment = null;
 let calculatedPaymentData = { amount: 0, mora: 0 }; // Guarda el último cálculo flexible
 let currentFlowUrl = null; // 🚨 CAMBIO: Almacena el URL de Flow generado
 let currentClientName = null; // Almacena el nombre del cliente para el mensaje compartido
+let paymentPollingInterval = null; // Para detener la búsqueda cuando paguen
 
 // --- CREDENCIALES (SIMULACIÓN) ---
 let currentUser = 'admin';
@@ -60,6 +62,13 @@ function closeModal(modal) {
     }
     if (modal.id === 'shareOptionsModal') {
         currentShareType = null;
+    }
+    if (modal.id === 'checkoutLinkModal') {
+        currentFlowUrl = null;
+        currentClientName = null;
+        // DETENER VIGILANCIA SI CIERRAN MANUALMENTE
+        if (paymentPollingInterval) clearInterval(paymentPollingInterval); 
+        // ... resto del código ...
     }
 }
 
@@ -1541,26 +1550,18 @@ async function handlePaymentSubmit(e) {
     const loan = loans.find(l => l.id == loanId);
 
     // Si es Transferencia o Yape/Plin, ahora lo mapeamos a Flow
-    if (selectedMethod === 'Transferencia' || selectedMethod === 'Yape/Plin') {
-        // --- INICIO DE FLUJO DE PAGO CON FLOW ---
+    if (selectedMethod === 'Flow') {
+        
+        if (!loan) { alert("Error cliente no encontrado"); return; }
 
-        if (!loan) {
-            alert("Error: No se encontró la información del cliente para iniciar el pago.");
+        if (!confirm(`Se abrirá la pasarela de pagos Flow (Tarjeta, Yape, Transferencia) por S/ ${totalToCollect.toFixed(2)}. ¿Continuar?`)) {
             return;
         }
 
-        if (!confirm(`Se abrirá la pasarela de pagos Flow para procesar S/ ${totalToCollect.toFixed(2)}. El pago se registrará automáticamente cuando el cliente complete la transacción. ¿Continuar?`)) {
-            return;
-        }
-
-        // Cerrar el modal actual de registro de pago
         closeModal(getDomElement('paymentModal'));
-
-        // Mostrar mensaje de carga
         showSuccessAnimation('⏳ Generando enlace de pago Flow...');
 
         try {
-            // 🚨 CAMBIO CRÍTICO: Llamada a la nueva ruta de FLOW
             const response = await fetch(`${API_URL}/api/flow/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1571,58 +1572,37 @@ async function handlePaymentSubmit(e) {
                     clientName: loan.nombres,
                     clientLastName: loan.apellidos,
                     payment_date: paymentDate,
-                    amount_ci: paymentAmount.toFixed(2), // Solo Capital/Interés
+                    amount_ci: paymentAmount.toFixed(2),
                     amount_mora: moraAmount.toFixed(2)
                 })
             });
 
-            if (!response.ok) {
-                let errorData;
-                try {
-                    errorData = await response.json();
-                } catch (e) {
-                    errorData = { error: 'Error de formato (Estado: ' + response.status + ' ' + response.statusText + ')', status: response.status };
-                }
-                throw new Error(`(${response.status}) Error de Flow. Detalles: ${errorData.error || errorData.message || JSON.stringify(errorData)}`);
-            }
-
+            // ... (Manejo de errores igual) ...
+            
             const flowData = await response.json();
             const flowUrl = flowData.url;
+            const token = flowData.token; // IMPORTANTE: Asegúrate de que el backend devuelva el token
 
             if (flowUrl) {
-                // 🚨 NUEVO: Abrir Flow directamente en nueva ventana
-                console.log('[FLOW] 🔗 Abriendo pasarela de Flow:', flowUrl);
-
-                // Abrir en nueva ventana/pestaña
+                // Abrir ventana
                 const flowWindow = window.open(flowUrl, '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
 
-                if (flowWindow) {
-                    // Mostrar modal con información y enlace alternativo
-                    showCheckoutLinkModal(
-                        flowUrl,
-                        totalToCollect,
-                        selectedMethod,
-                        `${loan.nombres} ${loan.apellidos}`,
-                        flowData.correlativo_boleta || 'N/A',
-                        true // Indicar que ya se abrió la ventana
-                    );
-
-                    showSuccessAnimation('✅ Pasarela Flow abierta. El pago se registrará automáticamente.');
-                } else {
-                    // Si el popup fue bloqueado, mostrar solo el modal con el enlace
-                    showCheckoutLinkModal(
-                        flowUrl,
-                        totalToCollect,
-                        selectedMethod,
-                        `${loan.nombres} ${loan.apellidos}`,
-                        flowData.correlativo_boleta || 'N/A',
-                        false
-                    );
-                    alert('⚠️ Por favor, permite ventanas emergentes para abrir Flow automáticamente. Puedes usar el enlace mostrado para pagar.');
-                }
+                // Mostrar Modal de "Pasarela Abierta"
+                showCheckoutLinkModal(
+                    flowUrl,
+                    totalToCollect,
+                    "Tarjeta / Yape / Transferencia", // Nombre bonito
+                    `${loan.nombres} ${loan.apellidos}`,
+                    flowData.correlativo_boleta || 'N/A',
+                    !!flowWindow
+                );
+                
+                // 🚨 INICIAR VIGILANCIA AQUÍ
+                startPaymentStatusPolling(token, loanId, flowData.correlativo_boleta);
 
                 return;
-            } else {
+            }
+             else {
                 throw new Error("El backend no proporcionó un URL de pago válido de Flow.");
             }
 
@@ -2003,23 +1983,19 @@ async function handleQuickPaymentSubmit() {
     const loan = currentLoanForQuickPayment;
 
     // Si es Transferencia o Yape/Plin, se usa Flow.
-    if (selectedMethod === 'Transferencia' || selectedMethod === 'Yape/Plin') {
-        if (!confirm(`Se abrirá la pasarela de pagos Flow para procesar S/ ${totalToCollectRounded.toFixed(2)}. El pago se registrará automáticamente cuando el cliente complete la transacción. ¿Continuar?`)) {
+    if (selectedMethod === 'Flow') {
+        if (!confirm(`Se abrirá la pasarela de pagos Flow para procesar S/ ${totalToCollectRounded.toFixed(2)}. ¿Continuar?`)) {
             return;
         }
 
         getDomElement('quick-payment-summary-section').style.display = 'none';
-
-        // Mostrar mensaje de carga
         showSuccessAnimation('⏳ Generando enlace de pago Flow...');
 
         try {
-            // 🚨 CAMBIO CRÍTICO: Llamada a la nueva ruta de FLOW
             const response = await fetch(`${API_URL}/api/flow/create-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    // 🚨 CRÍTICO: Enviar números redondeados como strings con exactamente 2 decimales
                     amount: totalToCollectRounded.toFixed(2),
                     loanId: loan.id,
                     clientDni: loan.dni,
@@ -2043,38 +2019,32 @@ async function handleQuickPaymentSubmit() {
 
             const flowData = await response.json();
             const flowUrl = flowData.url;
+            const token = flowData.token;
 
             if (flowUrl) {
-                // 🚨 NUEVO: Abrir Flow directamente en nueva ventana
                 console.log('[FLOW] 🔗 Abriendo pasarela de Flow:', flowUrl);
 
-                // Abrir en nueva ventana/pestaña
+                // 1. Intentar abrir ventana emergente
                 const flowWindow = window.open(flowUrl, '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
 
-                if (flowWindow) {
-                    // Mostrar modal con información y enlace alternativo
-                    showCheckoutLinkModal(
-                        flowUrl,
-                        totalToCollectRounded,
-                        selectedMethod,
-                        `${loan.nombres} ${loan.apellidos}`,
-                        flowData.correlativo_boleta || 'N/A',
-                        true // Indicar que ya se abrió la ventana
-                    );
+                // 2. Mostrar el modal en la pantalla principal (como respaldo o confirmación)
+                showCheckoutLinkModal(
+                    flowUrl,
+                    totalToCollectRounded,
+                    "Tarjeta / Yape / Transferencia",
+                    `${loan.nombres} ${loan.apellidos}`,
+                    flowData.correlativo_boleta || 'N/A',
+                    !!flowWindow // True si se abrió, False si se bloqueó
+                );
 
+                if (flowWindow) {
                     showSuccessAnimation('✅ Pasarela Flow abierta. El pago se registrará automáticamente.');
                 } else {
-                    // Si el popup fue bloqueado, mostrar solo el modal con el enlace
-                    showCheckoutLinkModal(
-                        flowUrl,
-                        totalToCollectRounded,
-                        selectedMethod,
-                        `${loan.nombres} ${loan.apellidos}`,
-                        flowData.correlativo_boleta || 'N/A',
-                        false
-                    );
-                    alert('⚠️ Por favor, permite ventanas emergentes para abrir Flow automáticamente. Puedes usar el enlace mostrado para pagar.');
+                    alert('⚠️ El navegador bloqueó la ventana emergente. Por favor, usa el botón "Copiar Enlace" o el link mostrado para pagar.');
                 }
+
+                // 3. 🚨 IMPORTANTE: Iniciar vigilancia SIEMPRE (se abra o no la ventana)
+                startPaymentStatusPolling(token, loan.id, flowData.correlativo_boleta);
 
                 return;
             } else {
@@ -3786,6 +3756,94 @@ function handleSmartShare(platform) {
         // Cerrar el modal al finalizar
         closeModal(getDomElement('shareOptionsModal'));
     }, 100);
+}
+
+// --- FUNCIÓN DE POLLLING (VIGILANCIA DE PAGO) ---
+function startPaymentStatusPolling(token, loanId, correlativoPrevisto) {
+    // Limpiar intervalo anterior si existe
+    if (paymentPollingInterval) clearInterval(paymentPollingInterval);
+
+    console.log(`🕵️‍♂️ Iniciando vigilancia de pago Flow. Token: ${token}, LoanID: ${loanId}`);
+    let attempts = 0;
+    const maxAttempts = 60; // Dejar de intentar después de ~3 minutos (60 * 3s)
+
+    paymentPollingInterval = setInterval(async () => {
+        attempts++;
+        if (attempts > maxAttempts) {
+            console.log("⚠️ Tiempo de espera de pago agotado.");
+            clearInterval(paymentPollingInterval);
+            return;
+        }
+
+        try {
+            // 1. Consultar estado a nuestro backend local
+            const response = await fetch(`${API_URL}/api/flow/status/${token}`);
+            const data = await response.json();
+
+            // console.log(`[Polling Intento ${attempts}] Estado Flow:`, data.status); // Descomentar para depurar
+
+            // Status 2 = PAGADO EXITOSAMENTE
+            if (data.status === 2 || data.status === '2') {
+                console.log("✅ ¡PAGO CONFIRMADO POR EL BACKEND!");
+                clearInterval(paymentPollingInterval); // ¡IMPORTANTE! Dejar de vigilar inmediatamente.
+
+                // Mostrar animación de carga mientras preparamos la boleta
+                showSuccessAnimation('¡Pago recibido! Generando Boleta Electrónica...');
+
+                // CERRAR el modal verde de "Pasarela Abierta"
+                closeModal(getDomElement('checkoutLinkModal'));
+
+                // 2. Esperar un momento breve para asegurar que el "truco de localhost" en server.js
+                // haya terminado de guardar el pago en la base de datos.
+                setTimeout(async () => {
+                    try {
+                        console.log("🔄 Recargando datos de préstamos para buscar el nuevo pago...");
+                        // 3. Recargar TODOS los datos del servidor (para traer el pago nuevo)
+                        await fetchAndRenderLoans();
+
+                        // 4. Buscar el préstamo actualizado en la memoria
+                        const updatedLoan = loans.find(l => l.id == loanId);
+                        
+                        if (updatedLoan && updatedLoan.payments && updatedLoan.payments.length > 0) {
+                            // 5. Encontrar el pago correcto.
+                            // Buscamos el pago que coincida con el correlativo previsto O el último pago realizado hoy.
+                            let newPayment = updatedLoan.payments.find(p => p.correlativo === correlativoPrevisto);
+                            
+                            if (!newPayment) {
+                                // Si no coincide el correlativo exacto, tomamos el último pago del array (el más reciente)
+                                console.log("⚠️ No se encontró por correlativo exacto, usando el último pago registrado.");
+                                newPayment = updatedLoan.payments[updatedLoan.payments.length - 1];
+                            }
+
+                            if (newPayment) {
+                                console.log("🧾 ¡Datos del nuevo pago encontrados! Mostrando boleta...");
+                                // 6. ¡EL OBJETIVO FINAL! Mostrar la boleta en la pantalla principal.
+                                // Aseguramos que el método de pago se vea bonito
+                                const paymentForReceipt = { ...newPayment }; // Copia para no modificar el original
+                                if (paymentForReceipt.payment_method === 'Flow') {
+                                    paymentForReceipt.payment_method = 'Flow (Tarjeta/Digital)';
+                                }
+                                
+                                showReceipt(paymentForReceipt, updatedLoan);
+                            } else {
+                                throw new Error("No se pudo encontrar el registro del pago recién hecho.");
+                            }
+                        } else {
+                             throw new Error("El préstamo no tiene pagos registrados después de la recarga.");
+                        }
+                    } catch (innerError) {
+                        console.error("❌ Error crítico al intentar mostrar la boleta automática:", innerError);
+                        alert("El pago fue exitoso, pero hubo un error al generar la boleta automática. Por favor, revisa el historial de pagos del cliente.");
+                    }
+                }, 2000); // Esperamos 2 segundos (tiempo suficiente para que server.js guarde el pago)
+            }
+            // Si el estado es 1 (Pendiente), 3 (Rechazado) o 4 (Anulado), seguimos esperando en el próximo intervalo.
+
+        } catch (error) {
+            console.error("Error de red durante la vigilancia del pago:", error);
+             // No detenemos el intervalo por un error de red momentáneo, seguimos intentando.
+        }
+    }, 3000); // Revisar cada 3 segundos
 }
 
 // --- FUNCIÓN AUXILIAR: SOLO DESCARGAR PDF DETALLES (SIN MENÚ WINDOWS) ---

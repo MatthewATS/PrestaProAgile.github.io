@@ -227,21 +227,17 @@
 
                                 <div class="form-group" style="margin-top: 30px;">
                                     <h4>Seleccionar Método de Pago</h4>
-                                    <div class="form-row payment-methods-row" style="gap: 15px; grid-template-columns: 1fr 1fr 1fr;">
+                                    <div class="form-row payment-methods-row" style="gap: 15px; grid-template-columns: 1fr 1fr;">
                                         <div class="checkbox-container payment-method-card" data-method="Efectivo" style="padding: 20px;">
                                             <input type="radio" name="quick_payment_method" id="q_method_cash" value="Efectivo" required>
                                             <label for="q_method_cash">💵 Efectivo</label>
                                         </div>
-                                        <div class="checkbox-container payment-method-card" data-method="Transferencia" style="padding: 20px;">
-                                            <input type="radio" name="quick_payment_method" id="q_method_transfer" value="Transferencia" required>
-                                            <label for="q_method_transfer">💳 Transferencia</label>
-                                        </div>
-                                        <div class="checkbox-container payment-method-card" data-method="Yape/Plin" style="padding: 20px;">
-                                            <input type="radio" name="quick_payment_method" id="q_method_yape" value="Yape/Plin" required>
-                                            <label for="q_method_yape">📱 Yape/Plin</label>
+                                        <div class="checkbox-container payment-method-card" data-method="Flow" style="padding: 20px;">
+                                            <input type="radio" name="quick_payment_method" id="q_method_flow" value="Flow" required>
+                                            <label for="q_method_flow">💳 Tarjeta / Yape / Transferencia</label>
                                         </div>
                                     </div>
-                                    <small style="margin-top: 10px;">*Solo los pagos en **Efectivo** se consideran para el cuadre de caja diario. Los pagos con tarjeta/transferencia usarán el flujo de Mercado Pago (link/QR).</small>
+                                    <small style="margin-top: 10px;">*Solo los pagos en **Efectivo** se consideran para el cuadre de caja diario.</small>
                                 </div>
 
                             </div>
@@ -455,21 +451,18 @@
 
             <h3 style="margin-bottom: 10px;">1. Seleccionar Método de Pago</h3>
             <div class="form-group">
-                <div class="form-row" style="gap: 10px; grid-template-columns: 1fr 1fr 1fr;">
+                <div class="form-row" style="gap: 10px; grid-template-columns: 1fr 1fr;">
                     <div class="checkbox-container payment-method-card" data-method="Efectivo" style="flex: 1; border: 1px solid var(--border-color); cursor: pointer; padding: 10px; text-align: center;">
                         <input type="radio" name="payment_method" id="method_cash" value="Efectivo" required>
                         <label for="method_cash" style="color: var(--secondary-color); font-weight: 600;">💵 Efectivo</label>
                     </div>
-                    <div class="checkbox-container payment-method-card" data-method="Transferencia" style="flex: 1; border: 1px solid var(--border-color); cursor: pointer; padding: 10px; text-align: center;">
-                        <input type="radio" name="payment_method" id="method_transfer" value="Transferencia" required>
-                        <label for="method_transfer" style="color: var(--secondary-color); font-weight: 600;">💳 Transferencia</label>
-                    </div>
-                    <div class="checkbox-container payment-method-card" data-method="Yape/Plin" style="flex: 1; border: 1px solid var(--border-color); cursor: pointer; padding: 10px; text-align: center;">
-                        <input type="radio" name="payment_method" id="method_yape" value="Yape/Plin" required>
-                        <label for="method_yape" style="color: var(--secondary-color); font-weight: 600;">📱 Yape/Plin</label>
+                    
+                    <div class="checkbox-container payment-method-card" data-method="Flow" style="flex: 1; border: 1px solid var(--border-color); cursor: pointer; padding: 10px; text-align: center;">
+                        <input type="radio" name="payment_method" id="method_flow" value="Flow" required>
+                        <label for="method_flow" style="color: var(--primary-color); font-weight: 600;">💳 Tarjeta / Yape / Transferencia</label>
                     </div>
                 </div>
-                <small style="margin-top: 10px;">*Los pagos con **Transferencia** o **Yape/Plin** se procesan mediante un link/QR de Mercado Pago.</small>
+                <small style="margin-top: 10px;">*Efectivo: Cuadre de caja inmediato. <br> *Tarjeta/Yape/Transferencia: Procesado vía pasarela Flow (Genera Link/QR).</small>
             </div>
 
             <h3 style="margin-top: 20px; margin-bottom: 10px;">2. Montos a Pagar</h3>

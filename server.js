@@ -12,6 +12,11 @@ const cashClosureRoutes = require('./routes/cashClosureRoutes');
 const flowRoutes = require('./routes/flowRoutes');
 const documentRoutes = require('./routes/documentRoutes');
 
+// IMPORTAR SERVICIOS (Solo una vez)
+// Ajusta la ruta './services/...' si tu carpeta se llama diferente, pero por tu estructura parece ser esa.
+const { getFlowPaymentStatus } = require('./services/flowService'); 
+const { registerPaymentInternal } = require('./services/paymentService');
+
 const app = express();
 const PORT = SERVER_CONFIG.PORT;
 
@@ -21,6 +26,8 @@ const PORT = SERVER_CONFIG.PORT;
 
 app.use(cors());
 app.use(express.json());
+// Habilitar lectura de formularios para el retorno de Flow
+app.use(express.urlencoded({ extended: true }));
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -33,10 +40,10 @@ app.use((req, res, next) => {
 // ==========================================================
 
 app.use('/api/loans', loanRoutes);
-app.use('/api/loans', paymentRoutes); // Payment routes are nested under loans
+app.use('/api/loans', paymentRoutes); 
 app.use('/api/cash-closures', cashClosureRoutes);
 app.use('/api/flow', flowRoutes);
-app.use('/flow-simulator', flowRoutes); // Simulator route for development
+app.use('/flow-simulator', flowRoutes); 
 app.use('/api/documento', documentRoutes);
 
 
@@ -44,73 +51,103 @@ app.use('/api/documento', documentRoutes);
 // STATIC FILES AND FRONTEND
 // ==========================================================
 
-// Serve static files (HTML, CSS, JS)
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Serve front.html as index
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'front.html'));
 });
 
-// Serve payment success page
+// GET: Mostrar página de éxito normal
 app.get('/payment-success', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'payment-success.html'));
+});
+
+// POST: RECIBIR RETORNO DE FLOW Y GUARDAR PAGO (TRUCO LOCALHOST)
+app.post('/payment-success', async (req, res) => {
+    console.log('[FLOW RETURN] 📥 Cliente regresó de Flow (POST)');
+    const token = req.body.token;
+
+    if (token) {
+        // --- TRUCO PARA LOCALHOST: GUARDAR PAGO AQUÍ ---
+        // Como el Webhook no llega a Localhost, lo guardamos al volver el usuario.
+        if (SERVER_CONFIG.BACKEND_URL.includes('localhost')) {
+            try {
+                console.log('[LOCALHOST FIX] 🔧 Intentando registrar pago forzosamente...');
+                const statusData = await getFlowPaymentStatus(token);
+                
+                if (statusData.status === 2) { // Si está PAGADO
+                    const commerceOrder = statusData.commerceOrder || '';
+                    // Extraer ID y Correlativo: LOAN-{id}-{correlativo}-...
+                    const match = commerceOrder.match(/LOAN-(\d+)-(\d+)/);
+                    
+                    if (match) {
+                        const loanId = parseInt(match[1]);
+                        const correlativo = parseInt(match[2]);
+                        const totalAmount = parseFloat(statusData.amount);
+                        
+                        // Intentamos obtener metadata si existe para la mora
+                        let moraAmount = 0;
+                        let paymentDate = new Date().toISOString().split('T')[0];
+                        try {
+                            if (statusData.optional) {
+                                const meta = JSON.parse(statusData.optional);
+                                moraAmount = parseFloat(meta.amount_mora || 0);
+                                paymentDate = meta.payment_date || paymentDate;
+                            }
+                        } catch (e) {}
+
+                        // REGISTRAR EN BD
+                        await registerPaymentInternal(loanId, {
+                            payment_amount: totalAmount,
+                            mora_amount: moraAmount,
+                            payment_date: paymentDate,
+                            payment_method: 'Flow',
+                            correlativo_boleta: correlativo,
+                            transaction_id: statusData.flowOrder || token
+                        });
+                        console.log('[LOCALHOST FIX] ✅ Pago guardado exitosamente al retornar.');
+                    }
+                }
+            } catch (error) {
+                // Si falla (ej: ya estaba registrado), solo lo logueamos y seguimos
+                console.log('[LOCALHOST FIX] ⚠️ Nota: El pago quizás ya existía o falló el registro forzoso:', error.message);
+            }
+        }
+        // ------------------------------------------------
+
+        // Redirigir a la página de éxito (que se cerrará sola)
+        return res.redirect(`/payment-success?token=${token}`);
+    }
+
     res.sendFile(path.join(__dirname, 'public', 'payment-success.html'));
 });
 
 
 // ==========================================================
-// ERROR HANDLING
+// ERROR HANDLING Y STARTUP
 // ==========================================================
 
-// 404 handler for API routes only
 app.use('/api/*', (req, res, next) => {
-    console.log('[404] Ruta de API no encontrada:', req.originalUrl);
-    res.status(404).json({
-        success: false,
-        message: 'Ruta de API no encontrada',
-        endpoint: req.originalUrl
-    });
+    res.status(404).json({ success: false, message: 'Ruta no encontrada' });
 });
 
-// Global error handler
 app.use((err, req, res, next) => {
     console.error('[ERROR]', err);
-    res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor',
-        error: process.env.NODE_ENV === 'development' ? err.message : undefined
-    });
+    res.status(500).json({ success: false, error: err.message });
 });
-
-// ==========================================================
-// SERVER STARTUP
-// ==========================================================
 
 const startServer = async () => {
     try {
-        // Test database connection
         const dbConnected = await testConnection();
+        if (!dbConnected) process.exit(1);
 
-        if (!dbConnected) {
-            console.error('❌ No se pudo conectar a la base de datos.');
-            console.error('Verifica la variable de entorno DATABASE_URL.');
-            process.exit(1);
-        }
-
-        // Start server
         app.listen(PORT, () => {
-            console.log(`\n${'='.repeat(60)}`);
-            console.log(`🚀 Servidor PrestaPro escuchando en el puerto ${PORT}`);
-            console.log(`📡 URL de Backend: ${SERVER_CONFIG.BACKEND_URL}`);
-            console.log(`💳 Flow Payment Gateway: ${FLOW_CONFIG.API_KEY ? '✅ Configurado' : '❌ No configurado'}`);
-            console.log(`🔑 Flow API Key: ${FLOW_CONFIG.API_KEY || 'No configurado'}`);
-            console.log(`🌍 Entorno: ${SERVER_CONFIG.NODE_ENV}`);
-            console.log(`${'='.repeat(60)}\n`);
+            console.log(`\n🚀 Servidor listo en puerto ${PORT}`);
+            console.log(`📡 Backend: ${SERVER_CONFIG.BACKEND_URL}`);
         });
 
     } catch (err) {
-        console.error('❌ Error al iniciar el servidor:', err.message);
-        process.exit(1);
+        console.error('❌ Error fatal:', err.message);
     }
 };
 
