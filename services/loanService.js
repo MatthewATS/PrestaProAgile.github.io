@@ -27,7 +27,8 @@ async function getAllLoans() {
 
         const associatedPayments = payments.filter(p => p.loan_id === loan.id);
 
-        const totalPaidCI = associatedPayments.reduce((sum, p) => sum + (parseFloat(p.payment_amount) - (parseFloat(p.mora_amount) || 0)), 0);
+        // Since payment_amount in DB is the Gross Total (incl. IGV), we must strip IGV to compare with Loan Schedule (Net)
+        const totalPaidCI = associatedPayments.reduce((sum, p) => sum + ((parseFloat(p.payment_amount) - (parseFloat(p.mora_amount) || 0)) / 1.18), 0);
         loan.total_paid = parseFloat(totalPaidCI.toFixed(2));
 
         loan.mora_pendiente = calculateMora(loan, loan.total_paid, associatedPayments);
@@ -77,8 +78,8 @@ async function createLoan(loanData) {
         const { dni, nombres, apellidos, is_pep = false } = client;
         const interes = parseFloat(interes_anual) / 12;
 
-        if (parsedMonto < 100 || parsedMonto > 20000 || isNaN(parsedMonto)) {
-            throw new Error('El monto del préstamo debe ser un número válido entre S/ 100 y S/ 20,000.');
+        if (parsedMonto < 1 || parsedMonto > 200000 || isNaN(parsedMonto)) {
+            throw new Error('El monto del préstamo debe ser un número válido entre S/ 1 y S/ 200,000.');
         }
 
         let [activeLoans] = await connection.query(

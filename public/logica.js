@@ -67,7 +67,7 @@ function closeModal(modal) {
         currentFlowUrl = null;
         currentClientName = null;
         // DETENER VIGILANCIA SI CIERRAN MANUALMENTE
-        if (paymentPollingInterval) clearInterval(paymentPollingInterval); 
+        if (paymentPollingInterval) clearInterval(paymentPollingInterval);
         // ... resto del código ...
     }
 }
@@ -507,55 +507,59 @@ async function filterCashRegister() {
     getDomElement('dailySquareDate').textContent = formattedDateTitle;
 
     const cashRegisterSummary = getDomElement('cashRegisterSummary');
+    const saveBtn = getDomElement('saveDailySquareBtn');
+
+    // Muestra siempre el resumen de totales calculados (editable o no)
+    squareFormContainer.style.display = 'block';
+
+    // Restaurar estilos del resumen
+    cashRegisterSummary.className = 'cash-register-summary';
+    cashRegisterSummary.style.backgroundColor = 'var(--primary-light)';
+    cashRegisterSummary.style.color = 'var(--text-color)';
+    cashRegisterSummary.style.border = '1px solid var(--primary-color)';
+    cashRegisterSummary.innerHTML = summaryContent;
 
     if (checkData.closed) {
-        // Cierre ya realizado: Mostrar resumen estático de cierre.
-        squareFormContainer.style.display = 'none';
+        // Cierre YA realizado, pero permitimos actualizar
         squareStatusMessage.className = 'alert alert-info';
-        squareStatusMessage.innerHTML = `<span>🔒</span> <strong>Cierre de Caja Realizado.</strong> Monto del Sistema: S/ ${checkData.data.system_cash_amount.toFixed(2)}. Diferencia: S/ ${checkData.data.difference.toFixed(2)}. Cerrado el ${new Date(checkData.data.closed_at).toLocaleString('es-PE')}.`;
+        squareStatusMessage.innerHTML = `<span>📝</span> <strong>Cierre ya registrado.</strong> Puedes actualizarlo si registraste más pagos o movimientos.<br>Último cierre: S/ ${checkData.data.system_cash_amount.toFixed(2)} (Sistema) vs S/ ${checkData.data.declared_amount.toFixed(2)} (Declarado). Diferencia: S/ ${checkData.data.difference.toFixed(2)}.`;
         squareStatusMessage.style.display = 'flex';
 
-        // 🚨 CAMBIO CRÍTICO: Sobreescribir el resumen con el mensaje de "CUADRE HECHO"
-        cashRegisterSummary.className = 'cash-register-summary alert-success';
-        cashRegisterSummary.style.backgroundColor = 'var(--success-color)';
-        cashRegisterSummary.style.color = 'var(--bg-primary)';
-        cashRegisterSummary.style.border = '1px solid var(--success-color)';
-        cashRegisterSummary.innerHTML = `
-            <p style="text-align: center; font-size: 18px; font-weight: 700; color: var(--bg-primary);">✅ CUADRE DE CAJA HECHO (${formattedDateTitle})</p>
-            <p style="text-align: center; font-size: 14px; color: var(--bg-primary);">Revisa la sección de 'Historial de Cierres Oficiales' para más detalles.</p>
-        `;
+        // Pre-llenar con el valor declarado ANTERIOR
+        declaredAmountInput.value = checkData.data.declared_amount.toFixed(2);
 
-        // Aplicar clase para bloquear visualmente la tabla
+        // Cambiar texto del botón
+        saveBtn.textContent = '🔄 Actualizar Cierre';
+        saveBtn.classList.remove('button-success');
+        saveBtn.classList.add('button-warning'); // Color naranja o similar si existe, si no usa CSS default
+
+        // NO bloquemos la tabla
         if (cashRegisterTableContainer) {
-            cashRegisterTableContainer.classList.add('locked-cash-register');
+            cashRegisterTableContainer.classList.remove('locked-cash-register');
         }
 
     } else {
-        // Cierre pendiente: Mostrar resumen con los totales calculados.
-        squareFormContainer.style.display = 'block';
+        // Cierre pendiente
         squareStatusMessage.style.display = 'none';
 
-        // 🚨 CAMBIO CRÍTICO: Volver a los estilos por defecto y mostrar el resumen de totales
-        cashRegisterSummary.className = 'cash-register-summary'; // Volver a la clase normal
-        cashRegisterSummary.style.backgroundColor = 'var(--primary-light)';
-        cashRegisterSummary.style.color = 'var(--text-color)';
-        cashRegisterSummary.style.border = '1px solid var(--primary-color)';
-        cashRegisterSummary.innerHTML = summaryContent; // Reutilizar el contenido de totales
-
-
+        // Pre-llenar con el calculado actual
         declaredAmountInput.value = totalCashIngresos.toFixed(2);
-        getDomElement('squareValidationMessage').style.display = 'none';
-        getDomElement('saveDailySquareBtn').disabled = false;
 
-        // Remover clase si no está cerrado
+        saveBtn.textContent = '💾 Guardar Cierre del Día';
+        saveBtn.classList.remove('button-warning');
+        saveBtn.classList.add('button-success');
+
         if (cashRegisterTableContainer) {
             cashRegisterTableContainer.classList.remove('locked-cash-register');
         }
     }
 
+    getDomElement('squareValidationMessage').style.display = 'none';
+    saveBtn.disabled = false;
 
-    // 🚨 CRÍTICO: Renderizar la tabla de movimientos detallada del día seleccionado
-    renderCashRegisterTable(todayMovements, checkData.closed);
+    // 🚨 CRÍTICO: Renderizar la tabla de movimientos detallada del día seleccionado (siempre visible)
+    // Pasamos false a isClosed para que no bloquee la renderización interna
+    renderCashRegisterTable(todayMovements, false);
 
     // 🔹 IMPORTANTE: El historial de cierres se renderiza aparte y sin filtro
     await renderClosureHistory();
@@ -968,7 +972,7 @@ function initLoanFormLogic() {
             <div class="form-row">
                 <div class="form-group">
                     <label for="monto">Monto del Préstamo (S/)</label>
-                    <input type="number" id="monto" required step="0.01" min="1" placeholder="5000">
+                    <input type="number" id="monto" required step="0.01" min="1" placeholder="Mínimo S/ 1">
                 </div>
                 <div class="form-group">
                     <label for="fecha">Fecha de Desembolso</label>
@@ -976,7 +980,7 @@ function initLoanFormLogic() {
                 </div>
                 <div class="form-group">
                     <label for="plazo">Plazo (meses)</label>
-                    <input type="number" id="plazo" required min="1" max="60" step="1" placeholder="12" inputmode="numeric">
+                    <input type="number" id="plazo" required min="1" max="60" step="1" placeholder="Ej. 12" inputmode="numeric">
                 </div>
             </div>
             <div class="form-group">
@@ -986,7 +990,7 @@ function initLoanFormLogic() {
             </div>
             
             <div id="monthly-payment-preview" class="summary-info" style="display: none; padding: 10px; font-size: 14px; margin-top: 5px;">
-                <strong>Cuota Mensual Estimada (Amortizado):</strong> <span id="estimated-monthly-payment">S/ 0.00</span>
+                <strong>Cuota Mensual Estimada (Amortizado + IGV):</strong> <span id="estimated-monthly-payment" style="font-size: 1.1em; color: var(--primary-color);">S/ 0.00</span>
             </div>
 
             <div class="form-group">
@@ -1190,16 +1194,29 @@ function initLoanFormLogic() {
         const monto = parseFloat(montoInput.value) || 0;
         const interesAnual = parseFloat(interesAnualInput.value) || 0;
         const plazo = parseInt(plazoInput.value) || 0;
+        const IGV_RATE = 0.18; // 18% IGV
+
+        // Limpiar validaciones manuales antiguas si las hubiera
+        montoInput.setCustomValidity('');
 
         // Solo calcular si todos los campos requeridos tienen valores válidos y es Amortizado
         if (monto > 0 && interesAnual > 0 && plazo > 0 && tipoCalculoSelect.value === 'Amortizado') {
             const monthlyInterestRate = (interesAnual / 12) / 100; // Tasa mensual en decimal
 
             // Fórmula de cuota fija (Amortizado)
-            const monthlyPayment = (monto * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -plazo));
+            let monthlyPaymentSubtotal = 0;
+            if (monthlyInterestRate > 0) {
+                monthlyPaymentSubtotal = (monto * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -plazo));
+            } else {
+                monthlyPaymentSubtotal = monto / plazo;
+            }
 
-            if (isFinite(monthlyPayment) && monthlyPayment > 0) {
-                estimatedMonthlyPayment.textContent = `S/ ${monthlyPayment.toFixed(2)}`;
+            // IGV REMOVED FROM LOAN PREVIEW - Calculated only at Payment
+            // const igvPart = monthlyPaymentSubtotal * IGV_RATE;
+            // const monthlyPaymentTotal = monthlyPaymentSubtotal + igvPart;
+
+            if (isFinite(monthlyPaymentSubtotal) && monthlyPaymentSubtotal > 0) {
+                estimatedMonthlyPayment.textContent = `S/ ${monthlyPaymentSubtotal.toFixed(2)}`;
                 monthlyPaymentPreview.style.display = 'block';
                 return;
             }
@@ -1258,10 +1275,12 @@ function initLoanFormLogic() {
         const interesAnual = parseFloat(interesAnualInput.value) || 0; // Usar el nuevo input
         const interesMensual = interesAnual / 12; // Tasa mensual en %
         const meses = parseInt(mesesSoloInteresInput.value) || 0;
+        const IGV_RATE = 0.18;
 
         if (monto > 0 && interesMensual > 0 && meses > 0) {
-            const pagoSoloInteres = monto * (interesMensual / 100);
-            infoEl.textContent = `Durante ${meses} mes(es), pagará S/ ${pagoSoloInteres.toFixed(2)} (solo interés).`;
+            const pagoSoloInteresSubtotal = monto * (interesMensual / 100);
+            const pagoSoloInteresTotal = pagoSoloInteresSubtotal * (1 + IGV_RATE);
+            infoEl.textContent = `Durante ${meses} mes(es), pagará S/ ${pagoSoloInteresTotal.toFixed(2)} (solo interés).`;
         } else { infoEl.textContent = ''; }
     }
 
@@ -1353,6 +1372,30 @@ function initPaymentListeners() {
 
     getDomElement('paymentForm').addEventListener('submit', handlePaymentSubmit);
 
+    // 🚨 UPDATE: BREAKDOWN LISTENER
+    const updateBreakdown = () => {
+        const amount = parseFloat(getDomElement('payment_amount').value) || 0;
+        const mora = parseFloat(getDomElement('mora_amount').value) || 0;
+
+        // Formula: El Input es el TOTAL (incl IGV)
+        // Base = Total / 1.18
+        // IGV = Total - Base
+
+        // CORRECCIÓN: 'amount' del input es [Subtotal + IGV]. Mora es Mora.
+        // El 'Subtotal' puro (amortizacion) es amount / 1.18.
+        const base = amount / 1.18;
+        const igv = amount - base;
+        const finalTotal = amount + mora;
+
+        getDomElement('breakdown-subtotal').textContent = `S/ ${base.toFixed(2)}`;
+        getDomElement('breakdown-igv').textContent = `S/ ${igv.toFixed(2)}`;
+        getDomElement('breakdown-total').textContent = `S/ ${finalTotal.toFixed(2)}`;
+    };
+
+    getDomElement('payment_amount').addEventListener('input', updateBreakdown);
+    getDomElement('mora_amount').addEventListener('input', updateBreakdown);
+
+
     // *****************************************************************
     // FIX CRÍTICO: DELEGACIÓN DE EVENTOS PARA EL BOTÓN "VER RECIBO"
     // *****************************************************************
@@ -1412,10 +1455,16 @@ function openPaymentModal(loan) {
     // 2. Llenar campos
     paymentDateInput.value = getTodayDateISO(); // Usa la función auxiliar
 
-    paymentAmountInput.value = remainingCapitalInterest.toFixed(2);
-    paymentAmountInput.min = remainingCapitalInterest > 0 ? '1.00' : '0.00';
-    paymentAmountInput.max = remainingCapitalInterest.toFixed(2);
-    paymentAmountHint.textContent = `Monto máximo a pagar (Capital/Interés): S/ ${remainingCapitalInterest.toFixed(2)}`;
+    // 🚨 MODIFICADO: Aplicar IGV al subtotal pendiente
+    const subtotal = remainingCapitalInterest;
+    const totalWithIGV = subtotal * 1.18;
+
+    paymentAmountInput.value = totalWithIGV.toFixed(2);
+    paymentAmountInput.min = totalWithIGV > 0 ? '1.00' : '0.00';
+    paymentAmountInput.max = totalWithIGV.toFixed(2);
+    // Nota: El backend validará contra el Subtotal, pero aquí guiamos con el precio total
+
+    paymentAmountHint.textContent = `Monto a pagar (Subtotal S/ ${subtotal.toFixed(2)} + 18% IGV)`;
 
     moraAmountInput.value = moraInfo.totalMora.toFixed(2);
     moraAmountInput.readOnly = moraInfo.totalMora > 0;
@@ -1444,6 +1493,9 @@ function openPaymentModal(loan) {
     });
 
     openModal(getDomElement('paymentModal'));
+
+    // 5. Trigger breakdown update
+    getDomElement('payment_amount').dispatchEvent(new Event('input'));
 }
 
 // NUEVA FUNCIÓN: Muestra el modal del enlace de pago
@@ -1562,7 +1614,7 @@ async function handlePaymentSubmit(e) {
 
     // Si es Transferencia o Yape/Plin, ahora lo mapeamos a Flow
     if (selectedMethod === 'Flow') {
-        
+
         if (!loan) { alert("Error cliente no encontrado"); return; }
 
         // Flow siempre usa el monto exacto (sin redondeo de efectivo)
@@ -1590,7 +1642,7 @@ async function handlePaymentSubmit(e) {
             });
 
             // ... (Manejo de errores igual) ...
-            
+
             const flowData = await response.json();
             const flowUrl = flowData.url;
             const token = flowData.token; // IMPORTANTE: Asegúrate de que el backend devuelva el token
@@ -1608,13 +1660,13 @@ async function handlePaymentSubmit(e) {
                     flowData.correlativo_boleta || 'N/A',
                     !!flowWindow
                 );
-                
+
                 // 🚨 INICIAR VIGILANCIA AQUÍ
                 startPaymentStatusPolling(token, loanId, flowData.correlativo_boleta);
 
                 return;
             }
-             else {
+            else {
                 throw new Error("El backend no proporcionó un URL de pago válido de Flow.");
             }
 
@@ -1810,6 +1862,7 @@ function togglePaymentOptionDetail() {
     });
 
     getDomElement('summary-capital-interest').textContent = 'S/ 0.00';
+    getDomElement('summary-igv-amount').textContent = 'S/ 0.00'; // NEW
     getDomElement('summary-mora').textContent = 'S/ 0.00';
     getDomElement('summary-total').textContent = 'S/ 0.00';
     getDomElement('payment_description').textContent = 'Seleccione una opción de pago y presione "Calcular Monto Total".';
@@ -1926,23 +1979,27 @@ function calculateFlexiblePayment(loan) {
         }
     }
 
-    const moraToCharge = (amountToPayCapitalInterest > 0) ? moraInfo.totalMora : 0;
-
-    calculatedPaymentData = {
-        amount: amountToPayCapitalInterest,
-        mora: moraToCharge
-    };
-
-    const totalToCollect = calculatedPaymentData.amount + calculatedPaymentData.mora;
+    // 🚨 CÁLCULO DE IGV: Se aplica el 18% sobre el capital/interés
+    const igvAmount = amountToPayCapitalInterest * 0.18;
+    const totalToCollect = amountToPayCapitalInterest + igvAmount + moraInfo.totalMora;
     const selectedMethod = document.querySelector('input[name="quick_payment_method"]:checked')?.value;
 
-    let finalTotalToCollect = totalToCollect;
-    let roundingDifference = 0;
+    getDomElement('summary-capital-interest').textContent = `S/ ${amountToPayCapitalInterest.toFixed(2)}`;
+    getDomElement('summary-igv-amount').textContent = `S/ ${igvAmount.toFixed(2)}`;
+    getDomElement('summary-mora').textContent = `S/ ${moraInfo.totalMora.toFixed(2)}`;
 
-    // 🚨 MODIFICACIÓN: Redondeo a favor del cliente si es Efectivo
+    calculatedPaymentData = { amount: totalToCollect, mora: moraInfo.totalMora }; // Store Total (incl IGV) in global logic
+
+    getDomElement('payment_description').textContent = paymentDescriptionText;
+
+    // REDONDEO para EFECTIVO (Visualización)
+    let finalTotalToCollect = totalToCollect;
+
     if (selectedMethod === 'Efectivo') {
         finalTotalToCollect = Math.floor(totalToCollect * 10) / 10;
-        roundingDifference = totalToCollect - finalTotalToCollect;
+        getDomElement('summary-total').innerHTML = `S/ ${finalTotalToCollect.toFixed(2)} <small style="font-size: 11px; color: var(--success-color);">(Redondeado de ${totalToCollect.toFixed(2)})</small>`;
+    } else {
+        getDomElement('summary-total').textContent = `S/ ${totalToCollect.toFixed(2)}`;
     }
 
     let isPaymentAllowed = true;
@@ -1953,18 +2010,6 @@ function calculateFlexiblePayment(loan) {
         isPaymentAllowed = false;
         paymentDescriptionText = `❌ Monto (S/ ${totalToCollect.toFixed(2)}) excede el límite de Yape/Plin (S/ ${MP_LIMIT_YAPE.toFixed(2)}). Seleccione otro método.`;
     }
-
-    getDomElement('summary-capital-interest').textContent = `S/ ${calculatedPaymentData.amount.toFixed(2)}`;
-    getDomElement('summary-mora').textContent = `S/ ${calculatedPaymentData.mora.toFixed(2)}`;
-
-    // Mostrar total redondeado si aplica
-    if (roundingDifference > 0) {
-        getDomElement('summary-total').innerHTML = `S/ ${finalTotalToCollect.toFixed(2)} <span style="font-size: 0.8em; color: var(--success-color);">(Redondeado de ${totalToCollect.toFixed(2)})</span>`;
-    } else {
-        getDomElement('summary-total').textContent = `S/ ${finalTotalToCollect.toFixed(2)}`;
-    }
-
-    getDomElement('payment_description').textContent = paymentDescriptionText;
 
     // Habilitar el botón solo si hay un monto mayor a cero, se seleccionó un método Y no hay restricción.
     if (totalToCollect > 0 && selectedMethod && isPaymentAllowed) {
@@ -2136,100 +2181,73 @@ async function handleQuickPaymentSubmit() {
 
 // --- FUNCIONES DE MORA Y CÁLCULO ---
 function calculateMora(loan) {
-    console.log('🔍 [FRONTEND MORA] Calculating for loan:', loan.id, 'Total paid:', loan.total_paid, 'Payments:', loan.payments?.length || 0);
+    // console.log('🔍 [FRONTEND MORA] Calculating for loan:', loan.id);
     if (loan.status === 'Pagado') return { totalMora: 0, mesesAtrasados: 0, amountOverdue: 0 };
 
     const { schedule } = calculateSchedule(loan);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    console.log('📅 [FRONTEND] Today:', today.toISOString().split('T')[0]);
 
     let totalPaid = loan.total_paid || 0; // Total pagado (Capital/Interés)
-    console.log('💰 [FRONTEND] Total paid:', totalPaid, 'Total due:', loan.total_due);
 
     // If loan is paid or no overdue amount, no mora
     if (totalPaid >= loan.total_due) {
-        console.log('❌ [FRONTEND] No mora: Loan is paid');
         return { totalMora: 0, mesesAtrasados: 0, amountOverdue: 0 };
     }
 
-    // Find the first overdue installment
-    let firstOverdueDate = null;
+    let totalMora = 0;
+    let runningPaid = totalPaid;
+    let overdueInstallmentCount = 0;
     let totalAmountOverdue = 0;
 
     for (const item of schedule) {
-        const dueDate = item.fechaObj ? new Date(item.fechaObj) : new Date(item.fecha);
+        const dueDate = item.fechaObj ? new Date(item.fechaObj) : new Date(item.fecha); // fechaObj should be Date object from calculateSchedule
+        // Ensure accurate date comparison
+        if (!item.fechaObj) {
+            // fallback if fechaObj is missing (though it should be there from calculateSchedule)
+            const parts = item.fecha.split('/'); // Assuming DD/MM/YYYY or similar if string
+            // But valid JS date string is expected. calculateSchedule uses toLocaleDateString usually.
+            // Actually calculateSchedule lines 2255/2279/2298 add fechaObj.
+        }
+
         dueDate.setHours(0, 0, 0, 0);
 
-        if (dueDate <= today) {
-            const cumulativeExpected = schedule.slice(0, item.cuota).reduce((sum, s) => sum + parseFloat(s.monto), 0);
+        // Calculate how much of this installment is paid
+        const amount = parseFloat(item.monto);
+        const paidForThis = Math.min(amount, runningPaid);
+        const unpaidAmount = amount - paidForThis;
+        runningPaid -= paidForThis; // Deduct used payment from the running total
 
-            if (totalPaid < cumulativeExpected) {
-                firstOverdueDate = dueDate;
-                totalAmountOverdue = cumulativeExpected - totalPaid;
-                console.log('📍 [FRONTEND] First overdue:', dueDate.toISOString().split('T')[0], 'Expected:', cumulativeExpected);
-                break;
-            }
+        // If there is an unpaid amount and the due date has passed
+        if (unpaidAmount > 0.05 && dueDate < today) { // > 0.05 tolerance for rounding
+            const diffTime = Math.abs(today - dueDate);
+            const daysLate = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            // Formula: Mora = Capital Vencido * (0.01 / 30) * Días de Atraso
+            const rate = (TASA_MORA_MENSUAL / 100) / 30;
+            const moraForInstallment = unpaidAmount * rate * daysLate;
+
+            totalMora += moraForInstallment;
+            overdueInstallmentCount++;
+            totalAmountOverdue += unpaidAmount;
+
+            console.log(`💸 [FRONTEND MORA] Cuota ${item.cuota} Vencida: Capital: ${unpaidAmount.toFixed(2)}, Days Late: ${daysLate}, Mora: ${moraForInstallment.toFixed(2)}`);
         }
     }
 
-    // If no overdue installments, no mora
-    if (!firstOverdueDate) {
-        console.log('❌ [FRONTEND] No overdue installments found');
-        return { totalMora: 0, mesesAtrasados: 0, amountOverdue: 0 };
-    }
-
-    // Calculate mora month by month from first overdue date to today
-    let totalMora = 0;
-
-    // Start from the NEXT month after the due date
-    let currentDate = new Date(firstOverdueDate);
-    currentDate.setHours(0, 0, 0, 0);
-    currentDate.setMonth(currentDate.getMonth() + 1); // Move to next month after due date
-    currentDate.setDate(1); // Set to first day of the month
-
-    // Create a set of months that had payments (format: "YYYY-MM")
-    const monthsWithPayments = new Set();
+    // Calculate total mora previously paid
+    let totalMoraPaid = 0;
     if (loan.payments && Array.isArray(loan.payments)) {
-        loan.payments.forEach(payment => {
-            const paymentDate = new Date(payment.payment_date);
-            const monthKey = `${paymentDate.getFullYear()}-${String(paymentDate.getMonth() + 1).padStart(2, '0')}`;
-            monthsWithPayments.add(monthKey);
-        });
+        totalMoraPaid = loan.payments.reduce((sum, p) => sum + parseFloat(p.mora_amount || 0), 0);
     }
 
-    // Iterate through each month from month after due date to current month
-    const todayMonth = new Date(today);
-    todayMonth.setDate(1); // Set to first day of current month
-
-    let monthsWithMora = 0;
-    while (currentDate <= todayMonth) {
-        const monthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-
-        // If this month had NO payment, charge mora
-        if (!monthsWithPayments.has(monthKey)) {
-            // Calculate outstanding balance at this point
-            const outstandingBalance = loan.total_due - totalPaid;
-
-            // Charge 1% of outstanding balance for this month
-            const moraForMonth = outstandingBalance * (TASA_MORA_MENSUAL / 100);
-            totalMora += moraForMonth;
-            monthsWithMora++;
-            console.log(`💸 [FRONTEND] Month ${monthKey}: +S/ ${moraForMonth.toFixed(2)} (Balance: ${outstandingBalance.toFixed(2)})`);
-        } else {
-            console.log(`✅ [FRONTEND] Month ${monthKey}: Has payment, no mora`);
-        }
-
-        // Move to next month
-        currentDate.setMonth(currentDate.getMonth() + 1);
-    }
-    console.log('✅ [FRONTEND] Total mora:', totalMora.toFixed(2));
-
+    const netMora = totalMora - totalMoraPaid;
+    console.log('✅ [FRONTEND] Gross Mora:', totalMora.toFixed(2), 'Paid Mora:', totalMoraPaid.toFixed(2), 'Net Due:', netMora.toFixed(2));
 
     return {
-        totalMora: totalMora > 0 ? parseFloat(totalMora.toFixed(2)) : 0,
-        mesesAtrasados: monthsWithMora,
-        amountOverdue: totalAmountOverdue
+        totalMora: netMora > 0 ? parseFloat(netMora.toFixed(2)) : 0,
+        mesesAtrasados: overdueInstallmentCount, // Returning count of overdue installments instead of "months"
+        amountOverdue: parseFloat(totalAmountOverdue.toFixed(2))
     };
 }
 
@@ -2241,10 +2259,14 @@ function calculateSchedule(loan) {
     const schedule = [];
     let payments = {};
     const startDate = new Date(loan.fecha);
+    const IGV_RATE = 0.18; // 18% IGV
 
     if (loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
-        const interestOnlyPayment = principal * monthlyInterestRate;
-        payments.interestOnlyPayment = interestOnlyPayment;
+        // --- CALCULO HIBRIDO ---
+        const subtotalInterestOnly = principal * monthlyInterestRate;
+        const interestOnlyWithTax = subtotalInterestOnly * (1 + IGV_RATE); // Apply IGV
+
+        payments.interestOnlyPayment = interestOnlyWithTax; // Store final value with tax
 
         for (let i = 1; i <= loan.meses_solo_interes; i++) {
             const paymentDate = new Date(startDate);
@@ -2253,7 +2275,7 @@ function calculateSchedule(loan) {
                 cuota: i,
                 fecha: paymentDate.toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }),
                 fechaObj: new Date(paymentDate), // Add Date object for calculations
-                monto: interestOnlyPayment.toFixed(2)
+                monto: interestOnlyWithTax.toFixed(2)
             });
         }
 
@@ -2261,13 +2283,15 @@ function calculateSchedule(loan) {
 
         // Si el plazo restante es 0 o negativo, el total due es solo el interés.
         if (remainingTerm <= 0) {
-            const totalDue = interestOnlyPayment * loan.plazo;
+            const totalDue = interestOnlyWithTax * loan.plazo;
             return { payments, schedule, totalDue: parseFloat(totalDue.toFixed(2)) };
         }
 
-        // Si hay plazo restante, calcular amortizado
-        const amortizedPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -remainingTerm));
-        payments.amortizedPayment = amortizedPayment;
+        // Si hay plazo restante, calcular amortizado (Subtotal)
+        const subtotalAmortized = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -remainingTerm));
+        const amortizedWithTax = subtotalAmortized * (1 + IGV_RATE); // Apply IGV
+
+        payments.amortizedPayment = amortizedWithTax;
 
         for (let i = 1; i <= remainingTerm; i++) {
             const paymentDate = new Date(startDate);
@@ -2276,17 +2300,26 @@ function calculateSchedule(loan) {
                 cuota: loan.meses_solo_interes + i,
                 fecha: paymentDate.toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }),
                 fechaObj: new Date(paymentDate), // Add Date object for calculations
-                monto: amortizedPayment.toFixed(2)
+                monto: amortizedWithTax.toFixed(2)
             });
         }
 
-        const totalDue = (interestOnlyPayment * loan.meses_solo_interes) + (amortizedPayment * remainingTerm);
+        const totalDue = (interestOnlyWithTax * loan.meses_solo_interes) + (amortizedWithTax * remainingTerm);
         return { payments, schedule, totalDue: parseFloat(totalDue.toFixed(2)) };
 
     } else {
-        // Cálculo Amortizado estándar
-        const monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
-        payments.amortizedPayment = monthlyPayment;
+        // --- CÁLCULO ESTÁNDAR ---
+        let monthlyPaymentSubtotal = 0;
+
+        if (monthlyInterestRate > 0 && loan.plazo > 0) {
+            monthlyPaymentSubtotal = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
+        } else if (principal > 0 && loan.plazo > 0) {
+            monthlyPaymentSubtotal = principal / loan.plazo;
+        }
+
+        const monthlyPaymentWithTax = monthlyPaymentSubtotal * (1 + IGV_RATE);
+
+        payments.amortizedPayment = monthlyPaymentWithTax;
 
         for (let i = 1; i <= loan.plazo; i++) {
             const paymentDate = new Date(startDate);
@@ -2295,11 +2328,11 @@ function calculateSchedule(loan) {
                 cuota: i,
                 fecha: paymentDate.toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }),
                 fechaObj: new Date(paymentDate), // Add Date object for calculations
-                monto: monthlyPayment.toFixed(2)
+                monto: monthlyPaymentWithTax.toFixed(2)
             });
         }
 
-        const totalDue = monthlyPayment * loan.plazo;
+        const totalDue = monthlyPaymentWithTax * loan.plazo;
         return { payments, schedule, totalDue: parseFloat(totalDue.toFixed(2)) };
     }
 }
@@ -2482,9 +2515,9 @@ function showReceipt(payment, loan) {
     // 1. OBTENER FECHA DE PAGO (EMISIÓN)
     // Usamos split para asegurar que la fecha se lea correctamente sin errores de zona horaria
     if (typeof paymentTimeCache === 'undefined' || !paymentTimeCache) {
-    window.paymentTimeCache = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true });
+        window.paymentTimeCache = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true });
     }
-    const horaSimulada = paymentTimeCache; 
+    const horaSimulada = paymentTimeCache;
 
 
     // Lógica de fecha (se mantiene igual, usando el día de la DB)
@@ -2880,15 +2913,24 @@ function downloadReceipt() {
     doc.setFontSize(10);
     doc.setTextColor(...primaryColor);
     doc.setFont(undefined, 'bold');
+    // 🚨 UPDATE: Mostrar desglose de IGV
+    const subtotalVal = capitalInteresPagado / 1.18;
+    const igvVal = capitalInteresPagado - subtotalVal;
+
     doc.text("📄 DETALLE DE LA OPERACIÓN", 16, yPos + 5.5);
 
     yPos += 12;
 
     const tableData = [
         [
-            `AMORTIZACIÓN PRÉSTAMO N° ${loan.id}\nCapital e Intereses - Cuota programada`,
-            `S/ ${valorVenta.toFixed(2)}`,
-            `S/ ${capitalInteresPagado.toFixed(2)}`
+            `AMORTIZACIÓN PRÉSTAMO N° ${loan.id}\nCapital e Intereses (Subtotal)`,
+            `S/ ${valorVenta.toFixed(2)}`, // Esto es referencial
+            `S/ ${subtotalVal.toFixed(2)}`
+        ],
+        [
+            `I.G.V. (18%)`,
+            `-`,
+            `S/ ${igvVal.toFixed(2)}`
         ]
     ];
 
@@ -3897,12 +3939,12 @@ function startPaymentStatusPolling(token, loanId, correlativoPrevisto) {
 
                         // 4. Buscar el préstamo actualizado en la memoria
                         const updatedLoan = loans.find(l => l.id == loanId);
-                        
+
                         if (updatedLoan && updatedLoan.payments && updatedLoan.payments.length > 0) {
                             // 5. Encontrar el pago correcto.
                             // Buscamos el pago que coincida con el correlativo previsto O el último pago realizado hoy.
                             let newPayment = updatedLoan.payments.find(p => p.correlativo === correlativoPrevisto);
-                            
+
                             if (!newPayment) {
                                 // Si no coincide el correlativo exacto, tomamos el último pago del array (el más reciente)
                                 console.log("⚠️ No se encontró por correlativo exacto, usando el último pago registrado.");
@@ -3917,13 +3959,13 @@ function startPaymentStatusPolling(token, loanId, correlativoPrevisto) {
                                 if (paymentForReceipt.payment_method === 'Flow') {
                                     paymentForReceipt.payment_method = 'Flow (Tarjeta/Digital)';
                                 }
-                                
+
                                 showReceipt(paymentForReceipt, updatedLoan);
                             } else {
                                 throw new Error("No se pudo encontrar el registro del pago recién hecho.");
                             }
                         } else {
-                             throw new Error("El préstamo no tiene pagos registrados después de la recarga.");
+                            throw new Error("El préstamo no tiene pagos registrados después de la recarga.");
                         }
                     } catch (innerError) {
                         console.error("❌ Error crítico al intentar mostrar la boleta automática:", innerError);
@@ -3935,7 +3977,7 @@ function startPaymentStatusPolling(token, loanId, correlativoPrevisto) {
 
         } catch (error) {
             console.error("Error de red durante la vigilancia del pago:", error);
-             // No detenemos el intervalo por un error de red momentáneo, seguimos intentando.
+            // No detenemos el intervalo por un error de red momentáneo, seguimos intentando.
         }
     }, 3000); // Revisar cada 3 segundos
 }
@@ -4279,4 +4321,202 @@ function imprimirHistorialCierres() {
 // 🔹 EXPONER FUNCIONES GLOBALMENTE
 window.exportarHistorialCierresPDF = exportarHistorialCierresPDF;
 window.imprimirHistorialCierres = imprimirHistorialCierres;
+
+// --- FUNCIONES PARA HISTORIAL DE CIERRES (FALTANTES) ---
+
+async function loadClosureHistory() {
+    try {
+        const response = await fetch(`${API_URL}/api/cash-closures/history`);
+        if (!response.ok) throw new Error('Error al cargar historial');
+        return await response.json();
+    } catch (error) {
+        console.error("Error loading closure history:", error);
+        return [];
+    }
+}
+
+async function renderClosureHistory() {
+    const tbody = getDomElement('closureHistoryTableBody');
+    if (!tbody) return;
+
+    try {
+        const closures = await loadClosureHistory();
+
+        if (closures.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #9CA3AF;">No hay cierres registrados aún.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = closures.map(closure => {
+            const fecha = new Date(closure.closure_date).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+            const horaCierre = new Date(closure.closed_at).toLocaleString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true });
+            const systemAmount = parseFloat(closure.system_cash_amount);
+            const declaredAmount = parseFloat(closure.declared_amount);
+            const difference = parseFloat(closure.difference);
+
+            const diffClass = Math.abs(difference) > 0.01 ? 'danger' : 'success'; // Helper class or inline style
+            const diffStyle = Math.abs(difference) > 0.01 ? 'color: var(--danger-color); font-weight:bold;' : 'color: var(--success-color);';
+            const diffIcon = Math.abs(difference) > 0.01 ? '⚠️' : '✅';
+
+            return `
+                <tr>
+                    <td style="text-align: center;">${fecha}</td>
+                    <td style="text-align: center;">${horaCierre}</td>
+                    <td style="text-align: right;">S/ ${systemAmount.toFixed(2)}</td>
+                    <td style="text-align: right;">S/ ${declaredAmount.toFixed(2)}</td>
+                    <td style="text-align: right; ${diffStyle}">${diffIcon} S/ ${difference.toFixed(2)}</td>
+                    <td style="text-align: center;">${closure.closed_by || 'Admin'}</td>
+                </tr>
+            `;
+        }).join('');
+
+    } catch (e) {
+        console.error("Error rendering closure history:", e);
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--danger-color);">Error al cargar historial.</td></tr>';
+    }
+}
+
+
+// --- NUEVAS FUNCIONES PARA EL BALANCE DE DINERO FÍSICO ---
+
+async function updateMoneyBalanceUI() {
+    const today = getDomElement('cashRegisterDateFrom').value || getTodayDateISO();
+
+    try {
+        // Fetch specific day closure data which includes opening balance and movements
+        const checkResponse = await fetch(`${API_URL}/api/cash-closures/${today}`);
+        const checkData = await checkResponse.json();
+        const data = checkData.data || {};
+
+        const openingBalance = parseFloat(data.opening_balance || 0);
+        const addedMoney = parseFloat(data.added_money || 0);
+        const withdrawnMoney = parseFloat(data.withdrawn_money || 0);
+
+        // Calculate cash payments for today locally (from loaded loans)
+        const allMovements = getMovementsByDateRange(today, today, null);
+        const cashIncome = allMovements.filter(m => m.method === 'Efectivo').reduce((sum, m) => sum + m.total, 0);
+
+        const currentPhysicalBalance = openingBalance + addedMoney + cashIncome - withdrawnMoney;
+
+        const balanceEl = getDomElement('physicalCashBalance');
+        if (balanceEl) {
+            balanceEl.textContent = `S/ ${currentPhysicalBalance.toFixed(2)}`;
+            if (currentPhysicalBalance < 0) balanceEl.style.color = 'var(--danger-color)';
+            else balanceEl.style.color = 'var(--success-color)';
+        }
+    } catch (e) {
+        console.error("Error updating money balance UI:", e);
+    }
+}
+
+window.openMoneyMovementModal = function (type) {
+    const modal = getDomElement('moneyMovementModal');
+    const title = getDomElement('moneyMovementTitle');
+    const typeInput = getDomElement('movementType');
+
+    if (type === 'add') {
+        title.textContent = '💰 Ingresar Dinero a Caja';
+        typeInput.value = 'add';
+    } else {
+        title.textContent = '💸 Retirar Dinero de Caja';
+        typeInput.value = 'withdraw';
+    }
+    openModal(modal);
+}
+
+function initCashCalculator() {
+    const amountTenderedInput = getDomElement('amount_tendered');
+    const paymentAmountInput = getDomElement('payment_amount');
+    const moraAmountInput = getDomElement('mora_amount');
+    const changeOutput = getDomElement('change_amount');
+    const cashMethodRadio = getDomElement('method_cash');
+    const flowMethodRadio = getDomElement('method_flow');
+    const calculatorSection = getDomElement('cash-calculator-section');
+
+    function updateVisibility() {
+        if (cashMethodRadio && cashMethodRadio.checked) {
+            if (calculatorSection) calculatorSection.style.display = 'block';
+        } else {
+            if (calculatorSection) calculatorSection.style.display = 'none';
+        }
+    }
+
+    function calculateChange() {
+        if (!amountTenderedInput || !paymentAmountInput) return;
+        const tendered = parseFloat(amountTenderedInput.value) || 0;
+        const capital = parseFloat(paymentAmountInput.value) || 0;
+        const mora = parseFloat(moraAmountInput?.value) || 0;
+        const totalToPay = capital + mora;
+
+        if (tendered > 0) {
+            const change = tendered - totalToPay;
+            if (changeOutput) {
+                changeOutput.value = change.toFixed(2);
+                if (change < 0) changeOutput.style.color = 'var(--danger-color)';
+                else changeOutput.style.color = 'var(--success-color)';
+            }
+        } else {
+            if (changeOutput) changeOutput.value = '';
+        }
+    }
+
+    if (cashMethodRadio) cashMethodRadio.addEventListener('change', updateVisibility);
+    if (flowMethodRadio) flowMethodRadio.addEventListener('change', updateVisibility);
+    if (amountTenderedInput) amountTenderedInput.addEventListener('input', calculateChange);
+    if (paymentAmountInput) paymentAmountInput.addEventListener('input', calculateChange);
+}
+
+// Inicialización diferida para nuevos eventos
+document.addEventListener('DOMContentLoaded', () => {
+    // Movement Form
+    const movementForm = getDomElement('moneyMovementForm');
+    if (movementForm) {
+        movementForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const type = getDomElement('movementType').value;
+            const amount = parseFloat(getDomElement('movementAmount').value);
+            const reason = getDomElement('movementReason').value;
+            const date = getDomElement('cashRegisterDateFrom').value || getTodayDateISO();
+
+            try {
+                const res = await fetch(`${API_URL}/api/cash-closures/movement`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date, type, amount, reason })
+                });
+
+                if (res.ok) {
+                    showSuccessAnimation('Movimiento Registrado');
+                    closeModal(getDomElement('moneyMovementModal'));
+                    updateMoneyBalanceUI();
+                    filterCashRegister(); // Reload day data
+                } else {
+                    alert('Error al registrar movimiento');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Error de conexión');
+            }
+        });
+    }
+
+    getDomElement('closeMoneyMovementModalBtn')?.addEventListener('click', () => closeModal(getDomElement('moneyMovementModal')));
+
+    // Init Calculator
+    initCashCalculator();
+
+    // Hook listeners
+    const btn = getDomElement('filterCashRegisterBtn');
+    if (btn) {
+        btn.addEventListener('click', () => setTimeout(updateMoneyBalanceUI, 500));
+    }
+    const cards = document.querySelectorAll('.module-card');
+    cards.forEach(card => {
+        if (card.getAttribute('data-target') === 'module-caja') {
+            card.addEventListener('click', () => setTimeout(updateMoneyBalanceUI, 500));
+        }
+    });
+});
+
+
 

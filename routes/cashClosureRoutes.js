@@ -50,4 +50,24 @@ router.get('/:date', async (req, res) => {
     }
 });
 
+/**
+ * POST /api/cash-closures/movement
+ * Register a manual cash movement (add/withdraw)
+ */
+router.post('/movement', async (req, res) => {
+    try {
+        const { date, type, amount, reason } = req.body;
+        // Import dynamically or assume it's passed in the require above. 
+        // Better to update line 3 require.
+        // For minimal diff, I will rely on updating line 3 in a separate edit or assume the user wants me to fix it.
+        // Actually, I can just call the service function if I import it.
+        const { registerCashMovement } = require('../services/cashClosureService');
+        await registerCashMovement(date, type, amount, reason);
+        res.json({ success: true, message: 'Movimiento registrado correctamente.' });
+    } catch (err) {
+        console.error("ERROR en POST /api/cash-closures/movement:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

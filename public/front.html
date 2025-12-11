@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,639 +13,779 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
+
 <body>
 
-<div class="login-container" id="loginContainer">
-    <div class="login-card">
-        <div class="login-header">
-            <h1 style="display: flex; align-items: center; justify-content: center; gap: 10px;">
-                <img src="assets/logo-verde.png" alt="Logo" style="height: 45px; width: auto;">
-                PrestaPro </h1>
-            <p>Bienvenido. Ingresa para continuar.</p>
+    <div class="login-container" id="loginContainer">
+        <div class="login-card">
+            <div class="login-header">
+                <h1 style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+                    <img src="assets/logo-verde.png" alt="Logo" style="height: 45px; width: auto;">
+                    PrestaPro
+                </h1>
+                <p>Bienvenido. Ingresa para continuar.</p>
+            </div>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">Usuario</label>
+                    <input type="text" id="username" placeholder="Tu nombre de usuario" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Contraseña</label>
+                    <input type="password" id="password" placeholder="Tu contraseña" required>
+                </div>
+                <div id="error-message" class="error-message"></div>
+                <button type="submit" class="submit-button">Iniciar Sesión</button>
+                <div class="login-footer">
+                    <a href="#" id="changePasswordLink">¿Olvidaste tu contraseña?</a>
+                </div>
+            </form>
         </div>
-        <form id="loginForm">
-            <div class="form-group">
-                <label for="username">Usuario</label>
-                <input type="text" id="username" placeholder="Tu nombre de usuario" required>
-            </div>
-            <div class="form-group">
-                <label for="password">Contraseña</label>
-                <input type="password" id="password" placeholder="Tu contraseña" required>
-            </div>
-            <div id="error-message" class="error-message"></div>
-            <button type="submit" class="submit-button">Iniciar Sesión</button>
-            <div class="login-footer">
-                <a href="#" id="changePasswordLink">¿Olvidaste tu contraseña?</a>
-            </div>
-        </form>
     </div>
-</div>
 
-<div id="appContainer" style="display: none;">
-    <header class="main-header">
-        <h1 id="appTitle">
-            <img src="assets/logo-verde.png" alt="Logo PrestaPro" class="header-logo">
-            PrestaPro
-        </h1>
+    <div id="appContainer" style="display: none;">
+        <header class="main-header">
+            <h1 id="appTitle">
+                <img src="assets/logo-verde.png" alt="Logo PrestaPro" class="header-logo">
+                PrestaPro
+            </h1>
 
-        <div class="header-user-controls">
-            <span id="moraAlertIndicator" class="mora-indicator" style="display: none;">⚠️</span>
-            <span id="currentDateTime" class="datetime-display"></span>
-            <span id="headerUserName" class="user-name-display">Admin</span>
+            <div class="header-user-controls">
+                <span id="moraAlertIndicator" class="mora-indicator" style="display: none;">⚠️</span>
+                <span id="currentDateTime" class="datetime-display"></span>
+                <span id="headerUserName" class="user-name-display">Admin</span>
 
-            <div class="settings-dropdown">
-                <button class="button button-secondary" id="settingsBtn">⚙️ Configuración</button>
-                <div class="dropdown-content" id="settingsDropdown">
-                    <div class="dropdown-section">
-                        <h4>🎨 Tema</h4>
-                        <div class="theme-options">
-                            <button class="theme-btn" onclick="setTheme('light')" title="Claro">☀️</button>
-                            <button class="theme-btn" onclick="setTheme('dark')" title="Oscuro">zkr</button>
-                            <button class="theme-btn" onclick="setTheme('system')" title="Sistema">💻</button>
+                <div class="settings-dropdown">
+                    <button class="button button-secondary" id="settingsBtn">⚙️ Configuración</button>
+                    <div class="dropdown-content" id="settingsDropdown">
+                        <div class="dropdown-section">
+                            <h4>🎨 Tema</h4>
+                            <div class="theme-options">
+                                <button class="theme-btn" onclick="setTheme('light')" title="Claro">☀️</button>
+                                <button class="theme-btn" onclick="setTheme('dark')" title="Oscuro">zkr</button>
+                                <button class="theme-btn" onclick="setTheme('system')" title="Sistema">💻</button>
+                            </div>
                         </div>
-                    </div>
-                    <div class="dropdown-section">
-                        <h4>⚙️ Opciones</h4>
-                        <a href="#" id="menuChangePassword">Cambiar Contraseña</a>
-                        <a href="#" id="menuReceiptConfig">Configurar Recibos</a>
-                    </div>
-                </div>
-
-            </div>
-
-            <button class="button button-secondary" id="logoutBtn">Cerrar Sesión</button>
-
-        </div>
-    </header>
-
-    <div id="navigation-bar" style="display: none;">
-        <button class="button button-primary" id="backToMenuBtn">⬅ Retroceder</button>
-    </div>
-
-    <main class="container">
-
-        <div id="module-menu" class="module-view active">
-            <h2>Selecciona una Función</h2>
-            <div class="module-grid">
-                <div class="module-card" data-target="module-prestamos">
-                    <h3>📝 Préstamos y Clientes</h3>
-                    <p>Gestiona el historial, añade nuevos préstamos y revisa el progreso de pago.</p>
-                    <button class="button button-primary button-full-width">Acceder al Módulo</button>
-                </div>
-                <div class="module-card" data-target="module-pagos">
-                    <h3>💳 Registrar Pagos</h3>
-                    <p>Busca clientes por DNI, calcula mora y registra abonos rápidamente.</p>
-                    <button class="button button-success button-full-width">Acceder al Módulo</button>
-                </div>
-                <div class="module-card" data-target="module-caja">
-                    <h3>📊 Cuadre de Caja</h3>
-                    <p>Realiza el cuadre diario obligatorio y revisa el flujo de caja histórico.</p>
-                    <button class="button button-warning button-full-width">Acceder al Módulo</button>
-                </div>
-            </div>
-        </div>
-
-        <div id="module-prestamos" class="module-view">
-            <div class="dashboard">
-                <div class="stat-card">
-                    <h3>💵 Monto Total Prestado</h3>
-                    <div class="value" id="totalLoaned">S/ 0.00</div>
-                </div>
-                <div class="stat-card">
-                    <h3>📋 Préstamos Activos</h3>
-                    <div class="value" id="activeLoans">0</div>
-                </div>
-                <div class="stat-card">
-                    <h3>👥 Clientes Totales</h3>
-                    <div class="value" id="totalClients">0</div>
-                </div>
-                <div class="stat-card">
-                    <h3>💰 Total Cobrado Hoy</h3>
-                    <div class="value" id="collectedToday">S/ 0.00</div>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-header">
-                    <h2>📚 Historial de Préstamos</h2>
-                    <button class="button button-primary" id="addLoanBtn">+ Nuevo Préstamo</button>
-                </div>
-                <div class="card-body">
-                    <div class="table-container">
-                        <table id="historyTable" class="main-table">
-                            <thead>
-                            <tr>
-                                <th>Cliente</th>
-                                <th>Monto</th>
-                                <th>Progreso Pago</th>
-                                <th>Estado</th>
-                                <th>Mora</th>
-                                <th>Acciones</th>
-                            </tr>
-                            </thead>
-                            <tbody id="historyTableBody"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div id="module-pagos" class="module-view">
-            <div class="card">
-                <div class="card-header">
-                    <h2>💳 Registro Rápido de Pago</h2>
-                </div>
-                <div class="modal-body">
-
-                    <div id="quick-payment-search-section" style="margin-bottom: 25px;">
-                        <h3 class="step-header">1. Identificar Préstamo por Documento</h3>
-                        <div class="form-row">
-                            <div class="form-group" style="max-width: 150px;">
-                                <label for="search-doc-type-pago">Tipo Doc.</label>
-                                <select id="search-doc-type-pago" required>
-                                    <option value="DNI">DNI</option>
-                                    <option value="RUC">RUC</option>
-                                </select>
-                            </div>
-                            <div class="form-group" style="flex-grow: 1;">
-                                <label for="search-dni-pago">N° de Documento</label>
-                                <input type="text" id="search-dni-pago" placeholder="Ingresa 8 u 11 dígitos y presiona Enter" maxlength="11" inputmode="numeric">
-                                <small id="search-dni-status" style="margin-top: 5px; display: block;"></small>
-                            </div>
+                        <div class="dropdown-section">
+                            <h4>⚙️ Opciones</h4>
+                            <a href="#" id="menuChangePassword">Cambiar Contraseña</a>
+                            <a href="#" id="menuReceiptConfig">Configurar Recibos</a>
                         </div>
                     </div>
 
-                    <div id="quick-payment-result-section" style="display: none;">
-                        <h3 class="step-header">2. Seleccionar Préstamo Activo</h3>
-                        <div class="table-container" style="margin-top: 10px;">
-                            <table class="main-table">
-                                <thead><tr><th>Cliente</th><th>Monto Original</th><th>Deuda Pendiente</th><th>Acción</th></tr></thead>
-                                <tbody id="quickPaymentTableBody"></tbody>
+                </div>
+
+                <button class="button button-secondary" id="logoutBtn">Cerrar Sesión</button>
+
+            </div>
+        </header>
+
+        <div id="navigation-bar" style="display: none;">
+            <button class="button button-primary" id="backToMenuBtn">⬅ Retroceder</button>
+        </div>
+
+        <main class="container">
+
+            <div id="module-menu" class="module-view active">
+                <h2>Selecciona una Función</h2>
+                <div class="module-grid">
+                    <div class="module-card" data-target="module-prestamos">
+                        <h3>📝 Préstamos y Clientes</h3>
+                        <p>Gestiona el historial, añade nuevos préstamos y revisa el progreso de pago.</p>
+                        <button class="button button-primary button-full-width">Acceder al Módulo</button>
+                    </div>
+                    <div class="module-card" data-target="module-pagos">
+                        <h3>💳 Registrar Pagos</h3>
+                        <p>Busca clientes por DNI, calcula mora y registra abonos rápidamente.</p>
+                        <button class="button button-success button-full-width">Acceder al Módulo</button>
+                    </div>
+                    <div class="module-card" data-target="module-caja">
+                        <h3>📊 Cuadre de Caja</h3>
+                        <p>Realiza el cuadre diario obligatorio y revisa el flujo de caja histórico.</p>
+                        <button class="button button-warning button-full-width">Acceder al Módulo</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="module-prestamos" class="module-view">
+                <div class="dashboard">
+                    <div class="stat-card">
+                        <h3>💵 Monto Total Prestado</h3>
+                        <div class="value" id="totalLoaned">S/ 0.00</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>📋 Préstamos Activos</h3>
+                        <div class="value" id="activeLoans">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>👥 Clientes Totales</h3>
+                        <div class="value" id="totalClients">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>💰 Total Cobrado Hoy</h3>
+                        <div class="value" id="collectedToday">S/ 0.00</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📚 Historial de Préstamos</h2>
+                        <button class="button button-primary" id="addLoanBtn">+ Nuevo Préstamo</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-container">
+                            <table id="historyTable" class="main-table">
+                                <thead>
+                                    <tr>
+                                        <th>Cliente</th>
+                                        <th>Monto</th>
+                                        <th>Progreso Pago</th>
+                                        <th>Estado</th>
+                                        <th>Mora</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="historyTableBody"></tbody>
                             </table>
                         </div>
                     </div>
-
-                    <div id="quick-payment-summary-section" style="display: none;">
-                        <h3 class="step-header">3. Configurar y Confirmar Pago</h3>
-
-                        <div class="payment-checkout-grid">
-
-                            <div class="checkout-actions">
-
-                                <div id="mora-alert-summary" class="alert alert-warning" style="display:none; margin-bottom: 15px; font-size: 13px;">
-                                    <span>⚠️</span> <div>El préstamo tiene cuotas vencidas. ¡La mora se aplicará al total a cobrar!</div>
-                                </div>
-
-                                <h4>Seleccionar Cuotas y Monto</h4>
-
-                                <div class="checkout-installments">
-                                    <div class="form-group">
-                                        <label>Tipo de Abono</label>
-                                        <select id="payment_selection_type" class="payment-selection-type-select">
-                                            <option value="single">Pagar 1 Cuota Pendiente</option>
-                                            <option value="multiple">Pagar Múltiples Cuotas</option>
-                                        </select>
-                                    </div>
-
-                                    <div id="single-payment-info" class="payment-option-detail">
-                                        <p>Cuota a vencer o más antigua: <strong id="next_installment_date">N/A</strong></p>
-                                        <p>Monto requerido: <strong id="next_installment_amount" style="color: var(--primary-color);">S/ 0.00</strong></p>
-                                    </div>
-
-                                    <div id="multiple-payment-info" class="payment-option-detail" style="display: none;">
-                                        <div class="form-group">
-                                            <label for="num_installments_to_pay">N° de Cuotas a Pagar (Máx: <span id="max_installments_available">0</span>)</label>
-                                            <input type="number" id="num_installments_to_pay" min="1" value="1" max="1" placeholder="Ej: 3">
-                                        </div>
-                                    </div>
-
-                                    <div class="form-group" style="margin-top: 15px;">
-                                        <label for="quick_payment_date">Fecha de Registro</label>
-                                        <input type="text" id="quick_payment_date" required readonly>
-                                    </div>
-
-                                </div>
-
-                                <div class="form-group" style="margin-top: 30px;">
-                                    <h4>Seleccionar Método de Pago</h4>
-                                    <div class="form-row payment-methods-row" style="gap: 15px; grid-template-columns: 1fr 1fr;">
-                                        <div class="checkbox-container payment-method-card" data-method="Efectivo" style="padding: 20px;">
-                                            <input type="radio" name="quick_payment_method" id="q_method_cash" value="Efectivo" required>
-                                            <label for="q_method_cash">💵 Efectivo</label>
-                                        </div>
-                                        <div class="checkbox-container payment-method-card" data-method="Flow" style="padding: 20px;">
-                                            <input type="radio" name="quick_payment_method" id="q_method_flow" value="Flow" required>
-                                            <label for="q_method_flow">💳 Tarjeta / Yape / Transferencia</label>
-                                        </div>
-                                    </div>
-                                    <small style="margin-top: 10px;">*Solo los pagos en **Efectivo** se consideran para el cuadre de caja diario.</small>
-                                </div>
-
-                            </div>
-
-                            <div class="checkout-summary">
-                                <h4>Resumen de la Transacción</h4>
-                                <div class="summary-item"><span>Capital / Interés</span><span id="summary-capital-interest">S/ 0.00</span></div>
-                                <div class="summary-item"><span>Mora Aplicada</span><span id="summary-mora" class="danger">S/ 0.00</span></div>
-                                <div class="summary-separator"></div>
-                                <div class="summary-item summary-total"><span>MONTO A COBRAR</span><span id="summary-total" class="receipt-value">S/ 0.00</span></div>
-
-                                <p style="margin-top: 20px; font-size: 13px; color: var(--text-color);">
-                                    <span id="payment_description">Seleccione un tipo de abono y presione "Confirmar y Procesar Pago" una vez calculado el monto.</span>
-                                </p>
-
-                                <button class="submit-button" id="confirmQuickPaymentBtn" disabled style="margin-top: 30px;">✅ Confirmar y Procesar Pago</button>
-                            </div>
-
-                        </div>
-                    </div>
                 </div>
             </div>
-        </div>
 
-        <div id="module-caja" class="module-view">
-            <div class="card">
-                <div class="card-header">
-                    <h2>📊 Control de Cuadre de Caja</h2>
-                </div>
-                <div class="modal-body">
-                    <div class="cash-register-controls">
-                        <div class="form-group">
-                            <label for="cashRegisterDateFrom">Fecha del Cuadre</label>
-                            <input type="date" id="cashRegisterDateFrom">
-                        </div>
-                        <div class="form-group" style="display: none;">
-                            <label for="cashRegisterDateTo">Fecha Hasta</label>
-                            <input type="date" id="cashRegisterDateTo" readonly>
-                        </div>
-                        <div class="form-group" style="display: flex; align-items: flex-end;">
-                            <button class="button button-primary" id="filterCashRegisterBtn" style="width: 100%;">🔍 Ver Cuadre</button>
-                        </div>
+            <div id="module-pagos" class="module-view">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>💳 Registro Rápido de Pago</h2>
                     </div>
+                    <div class="modal-body">
 
-                    <div id="cashRegisterSummary" class="cash-register-summary">
-                        <p><strong>Total de Ingresos del Día:</strong> S/ 0.00</p>
-                        <p><strong>Ingreso Neto en Efectivo (Cuadre):</strong> S/ 0.00</p>
-                        <p><strong>Ingreso por Transferencia/Yape:</strong> S/ 0.00</p>
-                        <p><strong>Ingreso por Otros MP:</strong> S/ 0.00</p>
-                    </div>
-
-                    <div id="dailySquareSection">
-                        <h3 style="margin-bottom: 15px; color: var(--secondary-color);">Cierre de Caja Diario (<span id="dailySquareDate">Fecha</span>)</h3>
-                        <div id="squareStatusMessage" class="alert" style="display: none;"></div>
-                        <div id="squareFormContainer">
+                        <div id="quick-payment-search-section" style="margin-bottom: 25px;">
+                            <h3 class="step-header">1. Identificar Préstamo por Documento</h3>
                             <div class="form-row">
-                                <div class="form-group">
-                                    <label for="declaredAmount">Monto Total Contado (Efectivo)</label>
-                                    <input type="number" id="declaredAmount" step="0.01" min="0" placeholder="Monto total contado en efectivo hoy" required>
+                                <div class="form-group" style="max-width: 150px;">
+                                    <label for="search-doc-type-pago">Tipo Doc.</label>
+                                    <select id="search-doc-type-pago" required>
+                                        <option value="DNI">DNI</option>
+                                        <option value="RUC">RUC</option>
+                                    </select>
                                 </div>
-                                <div class="form-group" style="display: flex; align-items: flex-end;">
-                                    <button class="button button-success" id="saveDailySquareBtn" style="width: 100%;">✅ Realizar Cierre de Caja</button>
+                                <div class="form-group" style="flex-grow: 1;">
+                                    <label for="search-dni-pago">N° de Documento</label>
+                                    <input type="text" id="search-dni-pago"
+                                        placeholder="Ingresa 8 u 11 dígitos y presiona Enter" maxlength="11"
+                                        inputmode="numeric">
+                                    <small id="search-dni-status" style="margin-top: 5px; display: block;"></small>
                                 </div>
                             </div>
-                            <div id="squareValidationMessage" class="alert" style="display: none;"></div>
+                        </div>
+
+                        <div id="quick-payment-result-section" style="display: none;">
+                            <h3 class="step-header">2. Seleccionar Préstamo Activo</h3>
+                            <div class="table-container" style="margin-top: 10px;">
+                                <table class="main-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Cliente</th>
+                                            <th>Monto Original</th>
+                                            <th>Deuda Pendiente</th>
+                                            <th>Acción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="quickPaymentTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div id="quick-payment-summary-section" style="display: none;">
+                            <h3 class="step-header">3. Configurar y Confirmar Pago</h3>
+
+                            <div class="payment-checkout-grid">
+
+                                <div class="checkout-actions">
+
+                                    <div id="mora-alert-summary" class="alert alert-warning"
+                                        style="display:none; margin-bottom: 15px; font-size: 13px;">
+                                        <span>⚠️</span>
+                                        <div>El préstamo tiene cuotas vencidas. ¡La mora se aplicará al total a cobrar!
+                                        </div>
+                                    </div>
+
+                                    <h4>Seleccionar Cuotas y Monto</h4>
+
+                                    <div class="checkout-installments">
+                                        <div class="form-group">
+                                            <label>Tipo de Abono</label>
+                                            <select id="payment_selection_type" class="payment-selection-type-select">
+                                                <option value="single">Pagar 1 Cuota Pendiente</option>
+                                                <option value="multiple">Pagar Múltiples Cuotas</option>
+                                            </select>
+                                        </div>
+
+                                        <div id="single-payment-info" class="payment-option-detail">
+                                            <p>Cuota a vencer o más antigua: <strong
+                                                    id="next_installment_date">N/A</strong></p>
+                                            <p>Monto requerido: <strong id="next_installment_amount"
+                                                    style="color: var(--primary-color);">S/ 0.00</strong></p>
+                                        </div>
+
+                                        <div id="multiple-payment-info" class="payment-option-detail"
+                                            style="display: none;">
+                                            <div class="form-group">
+                                                <label for="num_installments_to_pay">N° de Cuotas a Pagar (Máx: <span
+                                                        id="max_installments_available">0</span>)</label>
+                                                <input type="number" id="num_installments_to_pay" min="1" value="1"
+                                                    max="1" placeholder="Ej: 3">
+                                            </div>
+                                        </div>
+
+                                        <div class="form-group" style="margin-top: 15px;">
+                                            <label for="quick_payment_date">Fecha de Registro</label>
+                                            <input type="text" id="quick_payment_date" required readonly>
+                                        </div>
+
+                                    </div>
+
+                                    <div class="form-group" style="margin-top: 30px;">
+                                        <h4>Seleccionar Método de Pago</h4>
+                                        <div class="form-row payment-methods-row"
+                                            style="gap: 15px; grid-template-columns: 1fr 1fr;">
+                                            <div class="checkbox-container payment-method-card" data-method="Efectivo"
+                                                style="padding: 20px;">
+                                                <input type="radio" name="quick_payment_method" id="q_method_cash"
+                                                    value="Efectivo" required>
+                                                <label for="q_method_cash">💵 Efectivo</label>
+                                            </div>
+                                            <div class="checkbox-container payment-method-card" data-method="Flow"
+                                                style="padding: 20px;">
+                                                <input type="radio" name="quick_payment_method" id="q_method_flow"
+                                                    value="Flow" required>
+                                                <label for="q_method_flow">💳 Tarjeta / Yape / Transferencia</label>
+                                            </div>
+                                        </div>
+                                        <small style="margin-top: 10px;">*Solo los pagos en **Efectivo** se consideran
+                                            para el cuadre de caja diario.</small>
+                                    </div>
+
+                                </div>
+
+                                <div class="checkout-summary">
+                                    <h4>Resumen de la Transacción</h4>
+                                    <div class="summary-item"><span>Capital / Interés (Subtotal)</span><span
+                                            id="summary-capital-interest">S/ 0.00</span></div>
+                                    <div class="summary-item"><span>IGV (18%)</span><span id="summary-igv-amount"
+                                            style="color: var(--text-color);">S/ 0.00</span></div>
+                                    <div class="summary-item"><span>Mora Aplicada</span><span id="summary-mora"
+                                            class="danger">S/ 0.00</span></div>
+                                    <div class="summary-separator"></div>
+                                    <div class="summary-item summary-total"><span>MONTO A COBRAR</span><span
+                                            id="summary-total" class="receipt-value">S/ 0.00</span></div>
+
+                                    <p style="margin-top: 20px; font-size: 13px; color: var(--text-color);">
+                                        <span id="payment_description">Seleccione un tipo de abono y presione "Confirmar
+                                            y Procesar Pago" una vez calculado el monto.</span>
+                                    </p>
+
+                                    <button class="submit-button" id="confirmQuickPaymentBtn" disabled
+                                        style="margin-top: 30px;">✅ Confirmar y Procesar Pago</button>
+                                </div>
+
+                            </div>
                         </div>
                     </div>
-
-                    <h3 style="margin-top: 30px; margin-bottom: 15px; color: var(--secondary-color);">💰 Resumen de Movimientos del Día</h3>
-                    <div class="table-container">
-                        <table id="cashRegisterTable" class="main-table">
-                            <thead>
-                            <tr>
-                                <th>Cliente</th>
-                                <th>Método</th>
-                                <th>Capital/Interés</th>
-                                <th>Mora</th>
-                                <th>Total Ingreso</th>
-                            </tr>
-                            </thead>
-                            <tbody id="cashRegisterTableBody"></tbody>
-                        </table>
-                    </div>
-
-                    <h3 style="margin-top: 30px; margin-bottom: 15px; color: var(--secondary-color);">📜 Historial de Cierres Oficiales</h3>
-                    <div class="table-container">
-                        <table id="closureHistoryTable" class="main-table">
-                            <thead>
-                            <tr>
-                                <th>Fecha Cierre</th>
-                                <th>Hora Cierre</th>
-                                <th>Sistema (Efectivo)</th>
-                                <th>Declarado (Efectivo)</th>
-                                <th>Diferencia</th>
-                                <th>Cerrado Por</th>
-                            </tr>
-                            </thead>
-                            <tbody id="closureHistoryTableBody">
-                            </tbody>
-                        </table>
-                    </div>
-
-                </div>
-                <div class="modal-footer">
-                    <button class="button button-secondary" onclick="exportarHistorialCierresPDF()">📥 Exportar Historial</button>
-                    <button class="button button-primary" onclick="imprimirHistorialCierres()">🖨️ Imprimir Historial</button>
                 </div>
             </div>
-        </div>
-    </main>
-</div>
 
-<div id="receiptConfigModal" class="modal">
-    <div class="modal-content" style="max-width: 500px;">
-        <div class="modal-header">
-            <h2>⚙️ Configuración de Recibos</h2>
-            <button class="close-button" id="closeReceiptConfigModalBtn">&times;</button>
-        </div>
-        <div class="modal-body">
-            <form id="receiptConfigForm">
-                <div class="form-group">
-                    <label for="configRuc">R.U.C. Empresa</label>
-                    <input type="text" id="configRuc" maxlength="11" required>
+            <div id="module-caja" class="module-view">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📊 Control de Cuadre de Caja</h2>
+                    </div>
+                    <div class="modal-body">
+                        <div class="cash-balance-card"
+                            style="background-color: var(--card-bg); border-radius: 12px; padding: 20px; text-align: center; border: 1px solid var(--border-color); margin-bottom: 30px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                            <h3
+                                style="color: var(--secondary-color); font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">
+                                Saldo de Dinero en Físico</h3>
+                            <div class="balance-value" id="physicalCashBalance"
+                                style="font-size: 36px; font-weight: 800; color: var(--success-color); margin: 10px 0;">
+                                S/ 0.00</div>
+                            <div class="balance-actions"
+                                style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
+                                <button class="button button-success" onclick="openMoneyMovementModal('add')">➕ Ingresar
+                                    Dinero</button>
+                                <button class="button button-danger" onclick="openMoneyMovementModal('withdraw')">➖
+                                    Retirar Dinero</button>
+                            </div>
+                        </div>
+
+                        <div class="cash-register-controls">
+                            <div class="form-group">
+                                <label for="cashRegisterDateFrom">Fecha del Cuadre</label>
+                                <input type="date" id="cashRegisterDateFrom">
+                            </div>
+                            <div class="form-group" style="display: none;">
+                                <label for="cashRegisterDateTo">Fecha Hasta</label>
+                                <input type="date" id="cashRegisterDateTo" readonly>
+                            </div>
+                            <div class="form-group" style="display: flex; align-items: flex-end;">
+                                <button class="button button-primary" id="filterCashRegisterBtn" style="width: 100%;">🔍
+                                    Ver Cuadre</button>
+                            </div>
+                        </div>
+
+                        <div id="cashRegisterSummary" class="cash-register-summary">
+                            <p><strong>Total de Ingresos del Día:</strong> S/ 0.00</p>
+                            <p><strong>Ingreso Neto en Efectivo (Cuadre):</strong> S/ 0.00</p>
+                            <p><strong>Ingreso por Transferencia/Yape:</strong> S/ 0.00</p>
+                            <p><strong>Ingreso por Otros MP:</strong> S/ 0.00</p>
+                        </div>
+
+                        <div id="dailySquareSection">
+                            <h3 style="margin-bottom: 15px; color: var(--secondary-color);">Cierre de Caja Diario (<span
+                                    id="dailySquareDate">Fecha</span>)</h3>
+                            <div id="squareStatusMessage" class="alert" style="display: none;"></div>
+                            <div id="squareFormContainer">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="declaredAmount">Monto Total Contado (Efectivo)</label>
+                                        <input type="number" id="declaredAmount" step="0.01" min="0"
+                                            placeholder="Monto total contado en efectivo hoy" required>
+                                    </div>
+                                    <div class="form-group" style="display: flex; align-items: flex-end;">
+                                        <button class="button button-success" id="saveDailySquareBtn"
+                                            style="width: 100%;">✅ Realizar Cierre de Caja</button>
+                                    </div>
+                                </div>
+                                <div id="squareValidationMessage" class="alert" style="display: none;"></div>
+                            </div>
+                        </div>
+
+                        <h3 style="margin-top: 30px; margin-bottom: 15px; color: var(--secondary-color);">💰 Resumen de
+                            Movimientos del Día</h3>
+                        <div class="table-container">
+                            <table id="cashRegisterTable" class="main-table">
+                                <thead>
+                                    <tr>
+                                        <th>Cliente</th>
+                                        <th>Método</th>
+                                        <th>Capital/Interés</th>
+                                        <th>Mora</th>
+                                        <th>Total Ingreso</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cashRegisterTableBody"></tbody>
+                            </table>
+                        </div>
+
+                        <h3 style="margin-top: 30px; margin-bottom: 15px; color: var(--secondary-color);">📜 Historial
+                            de Cierres Oficiales</h3>
+                        <div class="table-container">
+                            <table id="closureHistoryTable" class="main-table">
+                                <thead>
+                                    <tr>
+                                        <th>Fecha Cierre</th>
+                                        <th>Hora Cierre</th>
+                                        <th>Sistema (Efectivo)</th>
+                                        <th>Declarado (Efectivo)</th>
+                                        <th>Diferencia</th>
+                                        <th>Cerrado Por</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="closureHistoryTableBody">
+                                </tbody>
+                            </table>
+                        </div>
+
+                    </div>
+                    <div class="modal-footer">
+                        <button class="button button-secondary" onclick="exportarHistorialCierresPDF()">📥 Exportar
+                            Historial</button>
+                        <button class="button button-primary" onclick="imprimirHistorialCierres()">🖨️ Imprimir
+                            Historial</button>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="configRazonSocial">Razón Social</label>
-                    <input type="text" id="configRazonSocial" required>
-                </div>
-                <div class="form-group">
-                    <label for="configDireccion">Dirección Completa</label>
-                    <input type="text" id="configDireccion" required>
-                </div>
-                <div id="receipt-config-message" class="alert" style="display: none;"></div>
-                <button type="submit" class="submit-button">💾 Guardar Configuración</button>
-            </form>
-        </div>
+            </div>
+        </main>
     </div>
-</div>
 
-<div id="loanModal" class="modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h2>📝 Registrar Nuevo Préstamo</h2>
-            <button class="close-button" id="closeModalBtn">&times;</button>
-        </div>
-        <div class="modal-body">
-            <form id="loanForm"></form>
-        </div>
-    </div>
-</div>
-
-<div id="detailsModal" class="modal">
-    <div class="modal-content large">
-        <div class="printable">
+    <div id="receiptConfigModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
             <div class="modal-header">
-                <h2>🗓️ Cronograma y Detalles</h2>
-                <button class="close-button" id="closeDetailsModalBtn">&times;</button>
+                <h2>⚙️ Configuración de Recibos</h2>
+                <button class="close-button" id="closeReceiptConfigModalBtn">&times;</button>
             </div>
             <div class="modal-body">
-                <div id="scheduleSummary" class="summary-info"></div>
-                <div id="moraInfo" class="alert alert-warning" style="display: none;"></div>
-                <div id="declaracionJuradaSection" style="display: none; margin-bottom: 25px; border: 1px solid var(--border-color); padding: 20px; border-radius: 8px;"></div>
-
-                <h3 style="margin-bottom: 15px; color: var(--secondary-color);">📅 Cronograma de Cuotas</h3>
-                <div class="table-container">
-                    <table id="scheduleTable" class="main-table">
-                        <thead>
-                        <tr>
-                            <th>Cuota</th>
-                            <th>Fecha de Vencimiento</th>
-                            <th>Monto</th>
-                        </tr>
-                        </thead>
-                        <tbody id="scheduleTableBody"></tbody>
-                    </table>
-                </div>
-
-                <h3 style="margin-top: 30px; margin-bottom: 15px; color: var(--secondary-color);">💳 Historial de Pagos Realizados</h3>
-                <div class="table-container">
-                    <table id="paymentHistoryTable" class="main-table">
-                        <thead>
-                        <tr>
-                            <th>N°</th>
-                            <th>Fecha de Pago</th>
-                            <th>Monto Pagado</th>
-                            <th>Mora Pagada</th>
-                            <th>Método</th>
-                            <th>Comprobante</th>
-                        </tr>
-                        </thead>
-                        <tbody id="paymentHistoryBody"></tbody>
-                    </table>
-                </div>
+                <form id="receiptConfigForm">
+                    <div class="form-group">
+                        <label for="configRuc">R.U.C. Empresa</label>
+                        <input type="text" id="configRuc" maxlength="11" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="configRazonSocial">Razón Social</label>
+                        <input type="text" id="configRazonSocial" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="configDireccion">Dirección Completa</label>
+                        <input type="text" id="configDireccion" required>
+                    </div>
+                    <div id="receipt-config-message" class="alert" style="display: none;"></div>
+                    <button type="submit" class="submit-button">💾 Guardar Configuración</button>
+                </form>
             </div>
         </div>
-        <div class="modal-footer">
-            <button class="button button-secondary" id="shareBtn">🔗 Compartir</button>
-            <button class="button button-primary" id="printScheduleBtn">🖨️ Imprimir</button>
-        </div>
     </div>
-</div>
 
-<div id="paymentModal" class="modal">
-    <div class="modal-content" style="max-width: 500px;">
-        <div class="modal-header">
-            <h2 id="paymentModalTitle">💳 Registrar Pago</h2>
-            <button class="close-button" id="closePaymentModalBtn">&times;</button>
-        </div>
-        <div class="modal-body">
-            <div id="paymentMoraInfo" class="alert alert-warning" style="display: none;"></div>
-
-            <h3 style="margin-bottom: 10px;">1. Seleccionar Método de Pago</h3>
-            <div class="form-group">
-                <div class="form-row" style="gap: 10px; grid-template-columns: 1fr 1fr;">
-                    <div class="checkbox-container payment-method-card" data-method="Efectivo" style="flex: 1; border: 1px solid var(--border-color); cursor: pointer; padding: 10px; text-align: center;">
-                        <input type="radio" name="payment_method" id="method_cash" value="Efectivo" required>
-                        <label for="method_cash" style="color: var(--secondary-color); font-weight: 600;">💵 Efectivo</label>
-                    </div>
-                    
-                    <div class="checkbox-container payment-method-card" data-method="Flow" style="flex: 1; border: 1px solid var(--border-color); cursor: pointer; padding: 10px; text-align: center;">
-                        <input type="radio" name="payment_method" id="method_flow" value="Flow" required>
-                        <label for="method_flow" style="color: var(--primary-color); font-weight: 600;">💳 Tarjeta / Yape / Transferencia</label>
-                    </div>
-                </div>
-                <small style="margin-top: 10px;">*Efectivo: Cuadre de caja inmediato. <br> *Tarjeta/Yape/Transferencia: Procesado vía pasarela Flow (Genera Link/QR).</small>
+    <div id="loanModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📝 Registrar Nuevo Préstamo</h2>
+                <button class="close-button" id="closeModalBtn">&times;</button>
             </div>
-
-            <h3 style="margin-top: 20px; margin-bottom: 10px;">2. Montos a Pagar</h3>
-            <form id="paymentForm">
-                <input type="hidden" id="paymentLoanId">
-
-                <div class="form-group">
-                    <label for="payment_amount">Monto a Pagar (Capital/Interés S/)</label>
-                    <input type="number" id="payment_amount" required step="0.01" min="0.01">
-                    <small id="payment_amount_hint"></small>
-                </div>
-
-                <div class="form-group">
-                    <label for="mora_amount">Mora a Pagar (S/)</label>
-                    <input type="number" id="mora_amount" step="0.01" min="0" value="0">
-                    <small>Se llena automáticamente si hay mora pendiente.</small>
-                </div>
-
-                <div class="form-group">
-                    <label for="payment_date">Fecha de Pago</label>
-                    <input type="date" id="payment_date" required>
-                </div>
-
-                <button type="submit" class="submit-button">Confirmar Pago</button>
-            </form>
+            <div class="modal-body">
+                <form id="loanForm"></form>
+            </div>
         </div>
     </div>
-</div>
 
-<div id="receiptModal" class="modal">
-    <div class="modal-content" style="max-width: 650px;">
-        <div class="modal-header">
-            <h2>🧾 Comprobante de Pago</h2>
-            <button class="close-button" id="closeReceiptModalBtn">&times;</button>
-        </div>
-        <div class="modal-body">
-            <div id="receiptContent" class="receipt-container"></div>
-        </div>
-        <div class="modal-footer">
-            <button class="button button-secondary" id="shareReceiptBtn">🔗 Compartir Comprobante</button>
-            <button class="button button-primary" id="printReceiptBtn">🖨️ Imprimir</button>
+    <div id="detailsModal" class="modal">
+        <div class="modal-content large">
+            <div class="printable">
+                <div class="modal-header">
+                    <h2>🗓️ Cronograma y Detalles</h2>
+                    <button class="close-button" id="closeDetailsModalBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div id="scheduleSummary" class="summary-info"></div>
+                    <div id="moraInfo" class="alert alert-warning" style="display: none;"></div>
+                    <div id="declaracionJuradaSection"
+                        style="display: none; margin-bottom: 25px; border: 1px solid var(--border-color); padding: 20px; border-radius: 8px;">
+                    </div>
+
+                    <h3 style="margin-bottom: 15px; color: var(--secondary-color);">📅 Cronograma de Cuotas</h3>
+                    <div class="table-container">
+                        <table id="scheduleTable" class="main-table">
+                            <thead>
+                                <tr>
+                                    <th>Cuota</th>
+                                    <th>Fecha de Vencimiento</th>
+                                    <th>Monto</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scheduleTableBody"></tbody>
+                        </table>
+                    </div>
+
+                    <h3 style="margin-top: 30px; margin-bottom: 15px; color: var(--secondary-color);">💳 Historial de
+                        Pagos Realizados</h3>
+                    <div class="table-container">
+                        <table id="paymentHistoryTable" class="main-table">
+                            <thead>
+                                <tr>
+                                    <th>N°</th>
+                                    <th>Fecha de Pago</th>
+                                    <th>Monto Pagado</th>
+                                    <th>Mora Pagada</th>
+                                    <th>Método</th>
+                                    <th>Comprobante</th>
+                                </tr>
+                            </thead>
+                            <tbody id="paymentHistoryBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="button button-secondary" id="shareBtn">🔗 Compartir</button>
+                <button class="button button-primary" id="printScheduleBtn">🖨️ Imprimir</button>
+            </div>
         </div>
     </div>
-</div>
 
-<div id="deleteConfirmationModal" class="modal">
-    <div class="modal-content" style="max-width: 480px;">
-        <div class="modal-header">
-            <h2 id="deleteModalTitle">⚠️ Confirmar Eliminación</h2>
-            <button class="close-button" id="closeDeleteModalBtn">&times;</button>
+    <div id="paymentModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 id="paymentModalTitle">💳 Registrar Pago</h2>
+                <button class="close-button" id="closePaymentModalBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="paymentMoraInfo" class="alert alert-warning" style="display: none;"></div>
+
+                <h3 style="margin-bottom: 10px;">1. Seleccionar Método de Pago</h3>
+                <div class="form-group">
+                    <div class="form-row" style="gap: 10px; grid-template-columns: 1fr 1fr;">
+                        <div class="checkbox-container payment-method-card" data-method="Efectivo"
+                            style="flex: 1; border: 1px solid var(--border-color); cursor: pointer; padding: 10px; text-align: center;">
+                            <input type="radio" name="payment_method" id="method_cash" value="Efectivo" required>
+                            <label for="method_cash" style="color: var(--secondary-color); font-weight: 600;">💵
+                                Efectivo</label>
+                        </div>
+
+                        <div class="checkbox-container payment-method-card" data-method="Flow"
+                            style="flex: 1; border: 1px solid var(--border-color); cursor: pointer; padding: 10px; text-align: center;">
+                            <input type="radio" name="payment_method" id="method_flow" value="Flow" required>
+                            <label for="method_flow" style="color: var(--primary-color); font-weight: 600;">💳 Tarjeta /
+                                Yape / Transferencia</label>
+                        </div>
+                    </div>
+                    <small style="margin-top: 10px;">*Efectivo: Cuadre de caja inmediato. <br>
+                        *Tarjeta/Yape/Transferencia: Procesado vía pasarela Flow (Genera Link/QR).</small>
+                </div>
+
+                <h3 style="margin-top: 20px; margin-bottom: 10px;">2. Montos a Pagar</h3>
+                <form id="paymentForm">
+                    <input type="hidden" id="paymentLoanId">
+
+                    <div class="form-group">
+                        <label for="payment_amount">Monto a Pagar (Capital/Interés S/)</label>
+                        <input type="number" id="payment_amount" required step="0.01" min="0.01">
+                        <small id="payment_amount_hint"></small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="mora_amount">Mora a Pagar (S/)</label>
+                        <input type="number" id="mora_amount" step="0.01" min="0" value="0">
+                        <small>Se llena automáticamente si hay mora pendiente.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="payment_date">Fecha de Pago</label>
+                        <input type="date" id="payment_date" required>
+                    </div>
+
+                    <div id="cash-calculator-section"
+                        style="background-color: var(--primary-light); padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none;">
+                        <h4 style="margin-top: 0; color: var(--primary-color);">🧮 Calculadora de Vuelto</h4>
+                        <div class="form-row" style="gap: 10px;">
+                            <div class="form-group">
+                                <label for="amount_tendered">Pagó con (S/)</label>
+                                <input type="number" id="amount_tendered" step="0.01" min="0" placeholder="0.00">
+                            </div>
+                            <div class="form-group">
+                                <label for="change_amount">Vuelto (S/)</label>
+                                <input type="text" id="change_amount" readonly
+                                    style="font-weight: bold; color: var(--success-color); background-color: var(--input-bg);">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="payment-breakdown"
+                        style="background-color: #f9fafb; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--border-color);">
+                        <h4
+                            style="margin-top: 0; color: var(--secondary-color); font-size: 14px; text-transform: uppercase;">
+                            📑 Desglose del Pago</h4>
+                        <div
+                            style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px;">
+                            <span>Subtotal (Base):</span>
+                            <span id="breakdown-subtotal">S/ 0.00</span>
+                        </div>
+                        <div
+                            style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px;">
+                            <span>IGV (18%):</span>
+                            <span id="breakdown-igv">S/ 0.00</span>
+                        </div>
+                        <div
+                            style="display: flex; justify-content: space-between; border-top: 1px solid #ccc; padding-top: 10px; font-weight: bold; font-size: 16px; color: var(--primary-color);">
+                            <span>Total a Pagar:</span>
+                            <span id="breakdown-total">S/ 0.00</span>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="submit-button">Confirmar Pago</button>
+                </form>
+            </div>
         </div>
-        <div class="modal-body">
-            <form id="deleteConfirmationForm">
-                <input type="hidden" id="deleteLoanId">
-                <div class="alert alert-danger">
-                    <span>⚠️</span>
+    </div>
+
+    <div id="receiptModal" class="modal">
+        <div class="modal-content" style="max-width: 650px;">
+            <div class="modal-header">
+                <h2>🧾 Comprobante de Pago</h2>
+                <button class="close-button" id="closeReceiptModalBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="receiptContent" class="receipt-container"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="button button-secondary" id="shareReceiptBtn">🔗 Compartir Comprobante</button>
+                <button class="button button-primary" id="printReceiptBtn">🖨️ Imprimir</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="deleteConfirmationModal" class="modal">
+        <div class="modal-content" style="max-width: 480px;">
+            <div class="modal-header">
+                <h2 id="deleteModalTitle">⚠️ Confirmar Eliminación</h2>
+                <button class="close-button" id="closeDeleteModalBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="deleteConfirmationForm">
+                    <input type="hidden" id="deleteLoanId">
+                    <div class="alert alert-danger">
+                        <span>⚠️</span>
+                        <div>
+                            <p style="margin: 0;"><strong>Esta acción es permanente y no se puede deshacer.</strong></p>
+                            <p style="margin: 8px 0 0 0;">Se eliminará el préstamo y todo su historial de pagos.</p>
+                        </div>
+                    </div>
+                    <p>Para confirmar, por favor escribe la palabra <strong
+                            style="color: var(--danger-color);">ELIMINAR</strong> en el campo de abajo.</p>
+                    <div class="form-group">
+                        <label for="delete_confirmation_text">Confirmación</label>
+                        <input type="text" id="delete_confirmation_text" required autocomplete="off"
+                            placeholder="ELIMINAR">
+                        <small id="delete-error-message" style="color: var(--danger-color); display: none;">El texto no
+                            coincide.</small>
+                    </div>
+                    <button type="submit" class="submit-button-danger">Eliminar Préstamo Permanentemente</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="changePasswordModal" class="modal">
+        <div class="modal-content" style="max-width: 480px;">
+            <div class="modal-header">
+                <h2>🔐 Cambiar Contraseña</h2>
+                <button class="close-button" id="closeChangePasswordModalBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="changePasswordForm">
+                    <p
+                        style="background-color: var(--primary-light); padding: 12px; border-radius: 8px; font-size: 14px; margin-bottom: 20px; color: var(--text-color);">
+                        ℹ️ Esto es una simulación. La contraseña se reiniciará al actualizar la página.
+                    </p>
+                    <div class="form-group">
+                        <label for="current_password">Contraseña Actual</label>
+                        <input type="password" id="current_password" required
+                            placeholder="Ingresa tu contraseña actual">
+                    </div>
+                    <div class="form-group">
+                        <label for="new_password">Nueva Contraseña</label>
+                        <input type="password" id="new_password" required placeholder="Mínimo 6 caracteres">
+                    </div>
+                    <div class="form-group">
+                        <label for="confirm_new_password">Confirmar Nueva Contraseña</label>
+                        <input type="password" id="confirm_new_password" required
+                            placeholder="Repite la nueva contraseña">
+                    </div>
+                    <div id="change-password-error" class="error-message"></div>
+                    <button type="submit" class="submit-button">Actualizar Contraseña</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="checkoutLinkModal" class="modal">
+        <div class="modal-content" style="max-width: 550px;">
+            <div class="modal-header">
+                <h2 id="checkoutLinkTitle">🔗 Enlace de Pago Generado</h2>
+                <button class="close-button" id="closeCheckoutLinkModalBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-success">
+                    <span>✅</span>
                     <div>
-                        <p style="margin: 0;"><strong>Esta acción es permanente y no se puede deshacer.</strong></p>
-                        <p style="margin: 8px 0 0 0;">Se eliminará el préstamo y todo su historial de pagos.</p>
+                        <p style="margin: 0;"><strong>Instrucciones:</strong></p>
+                        <p style="margin: 5px 0 0 0;">Copia el enlace de abajo y compártelo con el cliente por WhatsApp,
+                            correo o el medio de tu preferencia. El pago se registrará automáticamente al ser
+                            completado.</p>
                     </div>
                 </div>
-                <p>Para confirmar, por favor escribe la palabra <strong style="color: var(--danger-color);">ELIMINAR</strong> en el campo de abajo.</p>
+
+                <h3 style="margin-top: 10px; margin-bottom: 5px;">Monto Total: <span id="checkoutLinkAmount"
+                        style="color: var(--success-color);"></span></h3>
+                <p style="font-size: 14px; margin-bottom: 15px;">Método: <strong id="checkoutLinkMethod"></strong></p>
+
                 <div class="form-group">
-                    <label for="delete_confirmation_text">Confirmación</label>
-                    <input type="text" id="delete_confirmation_text" required autocomplete="off" placeholder="ELIMINAR">
-                    <small id="delete-error-message" style="color: var(--danger-color); display: none;">El texto no coincide.</small>
+                    <label for="mpLinkOutput">Enlace de Pago (Mercado Pago)</label>
+                    <input type="text" id="mpLinkOutput" readonly
+                        style="cursor: text; font-size: 13px; background-color: var(--input-bg);">
                 </div>
-                <button type="submit" class="submit-button-danger">Eliminar Préstamo Permanentemente</button>
-            </form>
+
+                <div class="modal-footer" style="justify-content: space-between; padding: 0;">
+                    <button class="button button-secondary" id="shareMpLinkBtn" style="width: 48%;">🔗 Compartir
+                        Enlace</button>
+                    <button class="button button-primary" id="copyLinkBtn" style="width: 48%;">📋 Copiar Enlace</button>
+                </div>
+            </div>
         </div>
     </div>
-</div>
 
-<div id="changePasswordModal" class="modal">
-    <div class="modal-content" style="max-width: 480px;">
-        <div class="modal-header">
-            <h2>🔐 Cambiar Contraseña</h2>
-            <button class="close-button" id="closeChangePasswordModalBtn">&times;</button>
+    <div id="successAnimation" class="animation-container" style="display: none;">
+        <div class="animation-content">
+            <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none" />
+                <path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
+            </svg>
+            <p id="successText">¡Préstamo Registrado!</p>
         </div>
-        <div class="modal-body">
-            <form id="changePasswordForm">
-                <p style="background-color: var(--primary-light); padding: 12px; border-radius: 8px; font-size: 14px; margin-bottom: 20px; color: var(--text-color);">
-                    ℹ️ Esto es una simulación. La contraseña se reiniciará al actualizar la página.
+    </div>
+
+
+    <div id="shareOptionsModal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2>📤 Compartir Documento</h2>
+                <button class="close-button" id="closeShareOptionsModalBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 13px; color: var(--secondary-color); margin-bottom: 20px;">
+                    Elige un medio para enviar el documento. <br>
+                    <small style="color: #9CA3AF;">(Para Gmail/WhatsApp Web, el PDF se descargará para que lo
+                        adjuntes).</small>
                 </p>
-                <div class="form-group">
-                    <label for="current_password">Contraseña Actual</label>
-                    <input type="password" id="current_password" required placeholder="Ingresa tu contraseña actual">
-                </div>
-                <div class="form-group">
-                    <label for="new_password">Nueva Contraseña</label>
-                    <input type="password" id="new_password" required placeholder="Mínimo 6 caracteres">
-                </div>
-                <div class="form-group">
-                    <label for="confirm_new_password">Confirmar Nueva Contraseña</label>
-                    <input type="password" id="confirm_new_password" required placeholder="Repite la nueva contraseña">
-                </div>
-                <div id="change-password-error" class="error-message"></div>
-                <button type="submit" class="submit-button">Actualizar Contraseña</button>
-            </form>
-        </div>
-    </div>
-</div>
 
-<div id="checkoutLinkModal" class="modal">
-    <div class="modal-content" style="max-width: 550px;">
-        <div class="modal-header">
-            <h2 id="checkoutLinkTitle">🔗 Enlace de Pago Generado</h2>
-            <button class="close-button" id="closeCheckoutLinkModalBtn">&times;</button>
-        </div>
-        <div class="modal-body">
-            <div class="alert alert-success">
-                <span>✅</span>
-                <div>
-                    <p style="margin: 0;"><strong>Instrucciones:</strong></p>
-                    <p style="margin: 5px 0 0 0;">Copia el enlace de abajo y compártelo con el cliente por WhatsApp, correo o el medio de tu preferencia. El pago se registrará automáticamente al ser completado.</p>
+                <div class="share-grid">
+                    <button class="share-option-btn gmail" onclick="handleSmartShare('gmail')">
+                        <span class="icon">📧</span>
+                        <span class="text">Gmail</span>
+                    </button>
+
+                    <button class="share-option-btn whatsapp" onclick="handleSmartShare('whatsapp')">
+                        <span class="icon">💚</span>
+                        <span class="text">WhatsApp</span>
+                    </button>
+
+                    <button class="share-option-btn copy" onclick="handleSmartShare('copy')">
+                        <span class="icon">📋</span>
+                        <span class="text">Copiar Texto</span>
+                    </button>
+
+                    <button class="share-option-btn native" onclick="handleSmartShare('native')">
+                        <span class="icon">💻</span>
+                        <span class="text">Otros / Windows</span>
+                    </button>
                 </div>
-            </div>
-
-            <h3 style="margin-top: 10px; margin-bottom: 5px;">Monto Total: <span id="checkoutLinkAmount" style="color: var(--success-color);"></span></h3>
-            <p style="font-size: 14px; margin-bottom: 15px;">Método: <strong id="checkoutLinkMethod"></strong></p>
-
-            <div class="form-group">
-                <label for="mpLinkOutput">Enlace de Pago (Mercado Pago)</label>
-                <input type="text" id="mpLinkOutput" readonly style="cursor: text; font-size: 13px; background-color: var(--input-bg);">
-            </div>
-
-            <div class="modal-footer" style="justify-content: space-between; padding: 0;">
-                <button class="button button-secondary" id="shareMpLinkBtn" style="width: 48%;">🔗 Compartir Enlace</button>
-                <button class="button button-primary" id="copyLinkBtn" style="width: 48%;">📋 Copiar Enlace</button>
             </div>
         </div>
     </div>
-</div>
 
-<div id="successAnimation" class="animation-container" style="display: none;">
-    <div class="animation-content">
-        <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
-            <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none"/>
-            <path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
-        </svg>
-        <p id="successText">¡Préstamo Registrado!</p>
-    </div>
-</div>
-
-
-<div id="shareOptionsModal" class="modal">
-    <div class="modal-content" style="max-width: 400px;">
-        <div class="modal-header">
-            <h2>📤 Compartir Documento</h2>
-            <button class="close-button" id="closeShareOptionsModalBtn">&times;</button>
-        </div>
-        <div class="modal-body">
-            <p style="font-size: 13px; color: var(--secondary-color); margin-bottom: 20px;">
-                Elige un medio para enviar el documento. <br>
-                <small style="color: #9CA3AF;">(Para Gmail/WhatsApp Web, el PDF se descargará para que lo adjuntes).</small>
-            </p>
-
-            <div class="share-grid">
-                <button class="share-option-btn gmail" onclick="handleSmartShare('gmail')">
-                    <span class="icon">📧</span>
-                    <span class="text">Gmail</span>
-                </button>
-
-                <button class="share-option-btn whatsapp" onclick="handleSmartShare('whatsapp')">
-                    <span class="icon">💚</span>
-                    <span class="text">WhatsApp</span>
-                </button>
-
-                <button class="share-option-btn copy" onclick="handleSmartShare('copy')">
-                    <span class="icon">📋</span>
-                    <span class="text">Copiar Texto</span>
-                </button>
-
-                <button class="share-option-btn native" onclick="handleSmartShare('native')">
-                    <span class="icon">💻</span>
-                    <span class="text">Otros / Windows</span>
-                </button>
+    <div id="moneyMovementModal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2 id="moneyMovementTitle">💰 Movimiento de Dinero</h2>
+                <button class="close-button" id="closeMoneyMovementModalBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="moneyMovementForm">
+                    <input type="hidden" id="movementType">
+                    <div class="form-group">
+                        <label for="movementAmount">Monto (S/)</label>
+                        <input type="number" id="movementAmount" required step="0.01" min="0.01" placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                        <label for="movementReason">Motivo / Descripción</label>
+                        <input type="text" id="movementReason" required
+                            placeholder="Ej: Saldo Inicial, Gasto de limpieza...">
+                    </div>
+                    <button type="submit" class="submit-button" id="submitMovementBtn">Registrar Movimiento</button>
+                </form>
             </div>
         </div>
     </div>
-</div>
 
-<script src="logica.js"></script>
+    <script src="logica.js"></script>
 </body>
+
 </html>

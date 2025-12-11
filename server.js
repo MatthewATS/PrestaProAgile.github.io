@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
-const { testConnection } = require('./config/database');
+const { testConnection, checkSchema } = require('./config/database');
 const { SERVER_CONFIG, FLOW_CONFIG } = require('./config/constants');
 
 // Import routes
@@ -14,7 +14,7 @@ const documentRoutes = require('./routes/documentRoutes');
 
 // IMPORTAR SERVICIOS (Solo una vez)
 // Ajusta la ruta './services/...' si tu carpeta se llama diferente, pero por tu estructura parece ser esa.
-const { getFlowPaymentStatus } = require('./services/flowService'); 
+const { getFlowPaymentStatus } = require('./services/flowService');
 const { registerPaymentInternal } = require('./services/paymentService');
 
 const app = express();
@@ -40,10 +40,10 @@ app.use((req, res, next) => {
 // ==========================================================
 
 app.use('/api/loans', loanRoutes);
-app.use('/api/loans', paymentRoutes); 
+app.use('/api/loans', paymentRoutes);
 app.use('/api/cash-closures', cashClosureRoutes);
 app.use('/api/flow', flowRoutes);
-app.use('/flow-simulator', flowRoutes); 
+app.use('/flow-simulator', flowRoutes);
 app.use('/api/documento', documentRoutes);
 
 
@@ -74,19 +74,19 @@ app.post('/payment-success', async (req, res) => {
             try {
                 console.log('[LOCALHOST FIX] 🔧 Intentando registrar pago forzosamente...');
                 const statusData = await getFlowPaymentStatus(token);
-                
-                if (statusData.status === 2) { 
+
+                if (statusData.status === 2) {
                     const commerceOrder = statusData.commerceOrder || '';
                     const match = commerceOrder.match(/LOAN-(\d+)-(\d+)/);
-                    
+
                     if (match) {
                         const loanId = parseInt(match[1]);
                         const correlativo = parseInt(match[2]);
                         const totalAmount = parseFloat(statusData.amount);
-                        
+
                         // 🚨 NUEVO: Capturar el método específico (Ej: "Webpay", "Transferencia")
                         let metodoEspecifico = 'Flow (Genérico)';
-                        
+
                         if (statusData.paymentData && statusData.paymentData.media) {
                             // Flow suele devolver "Webpay", "Transferencia", "Servipag", etc.
                             // Lo combinamos para que se entienda: "Flow - Webpay"
@@ -102,7 +102,7 @@ app.post('/payment-success', async (req, res) => {
                                 moraAmount = parseFloat(meta.amount_mora || 0);
                                 paymentDate = meta.payment_date || paymentDate;
                             }
-                        } catch (e) {}
+                        } catch (e) { }
 
                         // REGISTRAR EN BD CON EL NOMBRE DETALLADO
                         await registerPaymentInternal(loanId, {
@@ -149,6 +149,8 @@ const startServer = async () => {
     try {
         const dbConnected = await testConnection();
         if (!dbConnected) process.exit(1);
+
+        await checkSchema();
 
         app.listen(PORT, () => {
             console.log(`\n🚀 Servidor listo en puerto ${PORT}`);
