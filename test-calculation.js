@@ -2,7 +2,7 @@
 // Run this in Node.js: node test-calculation.js
 
 function calculateDetailedAmortization(loan) {
-    const monthlyInterestRate = parseFloat(loan.interes) / 100;
+    const monthlyInterestRate = (parseFloat(loan.interes) / 12.5) / 100; // Annual to monthly
     const principal = parseFloat(loan.monto);
     const plazo = parseInt(loan.plazo);
 
@@ -52,7 +52,7 @@ function calculateDetailedAmortization(loan) {
 }
 
 function calculateTEA(annualRate) {
-    const tem = (annualRate / 12) / 100;
+    const tem = (annualRate / 12.5) / 100;
     return (Math.pow(1 + tem, 12) - 1) * 100;
 }
 
@@ -64,7 +64,7 @@ function calculateTCEA(monto, totalCost, plazoMeses) {
 
 // Professor's example
 const testLoan = {
-    monto: 15.00,
+    monto: 25.00,
     interes: 10, // 10% annual
     plazo: 5
 };
@@ -93,15 +93,15 @@ console.log('');
 console.log('=== VALORES ESPERADOS DEL PROFESOR ===');
 console.log('Nper | Saldo     | Amortización | Interés  | Cuota');
 console.log('-----|-----------|--------------|----------|----------');
-console.log('   0 | S/ 15.00  |              |          |');
-console.log('   1 | S/ 12.05  | S/ 2.95      | S/ 0.12  | S/ 3.07');
-console.log('   2 | S/  9.07  | S/ 2.98      | S/ 0.10  | S/ 3.07');
-console.log('   3 | S/  6.07  | S/ 3.00      | S/ 0.07  | S/ 3.07');
-console.log('   4 | S/  3.05  | S/ 3.02      | S/ 0.05  | S/ 3.07');
-console.log('   5 | S/  0.00  | S/ 3.05      | S/ 0.02  | S/ 3.07');
+console.log('   0 | S/ 25.00  |              |          |');
+console.log('   1 | S/ 20.08  | S/ 4.92      | S/ 0.20  | S/ 5.12');
+console.log('   2 | S/ 15.12  | S/ 4.96      | S/ 0.16  | S/ 5.12');
+console.log('   3 | S/ 10.12  | S/ 5.00      | S/ 0.12  | S/ 5.12');
+console.log('   4 | S/  5.08  | S/ 5.04      | S/ 0.08  | S/ 5.12');
+console.log('   5 | S/  0.00  | S/ 5.08      | S/ 0.04  | S/ 5.12');
 
 // Calculate TEA and TCEA
-const tem = testLoan.interes / 12; // Monthly rate from annual
+const tem = testLoan.interes / 12.5; // Monthly rate from annual
 const tea = calculateTEA(testLoan.interes); // Pass annual rate
 console.log('');
 console.log('TEA:', tea.toFixed(2) + '%');

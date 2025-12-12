@@ -1,0 +1,17 @@
+﻿Found rate: 0.800000%
+Produces Cuota: 5.1206
+
+=== AMORTIZATION WITH FOUND RATE ===
+Cuota: 5.12
+P1: Amort=4.92 Int=0.20 Saldo=20.08
+P2: Amort=4.96 Int=0.16 Saldo=15.12
+P3: Amort=5.00 Int=0.12 Saldo=10.12
+P4: Amort=5.04 Int=0.08 Saldo=5.08
+P5: Amort=5.08 Int=0.04 Saldo=-0.00
+
+=== PROFESSOR EXPECTS ===
+Cuota: 5.12
+P1: Amort=4.92 Int=0.20 Saldo=20.08
+
+If this is monthly rate, annual rate would be: 9.6000%
+If this is from 10% annual, divisor would be: 12.5000

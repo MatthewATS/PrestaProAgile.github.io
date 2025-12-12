@@ -1,0 +1,25 @@
+﻿=== TEST WITH CURRENT FORMULA (interes as monthly %) ===
+Monthly Rate: 10.0000%
+Cuota: 6.59
+P1: Amort=4.09 Int=2.50 Saldo=20.91
+P2: Amort=4.50 Int=2.09 Saldo=16.40
+P3: Amort=4.95 Int=1.64 Saldo=11.45
+P4: Amort=5.45 Int=1.14 Saldo=6.00
+P5: Amort=6.00 Int=0.60 Saldo=0.00
+
+=== TEST WITH ANNUAL RATE / 12 ===
+Monthly Rate: 0.8333%
+Cuota: 5.13
+P1: Amort=4.92 Int=0.21 Saldo=20.08
+P2: Amort=4.96 Int=0.17 Saldo=15.12
+P3: Amort=5.00 Int=0.13 Saldo=10.12
+P4: Amort=5.04 Int=0.08 Saldo=5.08
+P5: Amort=5.08 Int=0.04 Saldo=-0.00
+
+=== PROFESSOR EXPECTS ===
+Cuota: 5.12
+P1: Amort=4.92 Int=0.20 Saldo=20.08
+P2: Amort=4.96 Int=0.16 Saldo=15.12
+P3: Amort=5.00 Int=0.12 Saldo=10.12
+P4: Amort=5.04 Int=0.08 Saldo=5.08
+P5: Amort=5.08 Int=0.04 Saldo=0.00

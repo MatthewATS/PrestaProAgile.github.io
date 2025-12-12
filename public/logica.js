@@ -990,7 +990,7 @@ function initLoanFormLogic() {
             </div>
             
             <div id="monthly-payment-preview" class="summary-info" style="display: none; padding: 10px; font-size: 14px; margin-top: 5px;">
-                <strong>Cuota Mensual Estimada (Amortizado + IGV):</strong> <span id="estimated-monthly-payment" style="font-size: 1.1em; color: var(--primary-color);">S/ 0.00</span>
+                <strong>Cuota Mensual Estimada (Amortizado):</strong> <span id="estimated-monthly-payment" style="font-size: 1.1em; color: var(--primary-color);">S/ 0.00</span>
             </div>
 
             <div class="form-group">
@@ -2263,10 +2263,10 @@ function calculateSchedule(loan) {
 
     if (loan.tipo_calculo === 'Hibrido' && loan.meses_solo_interes > 0) {
         // --- CALCULO HIBRIDO ---
-        const subtotalInterestOnly = principal * monthlyInterestRate;
-        const interestOnlyWithTax = subtotalInterestOnly * (1 + IGV_RATE); // Apply IGV
+        // 🚨 IGV REMOVED: Only base amount (capital + interest), no tax
+        const interestOnlyPayment = principal * monthlyInterestRate;
 
-        payments.interestOnlyPayment = interestOnlyWithTax; // Store final value with tax
+        payments.interestOnlyPayment = interestOnlyPayment; // Store base value without tax
 
         for (let i = 1; i <= loan.meses_solo_interes; i++) {
             const paymentDate = new Date(startDate);
@@ -2275,7 +2275,7 @@ function calculateSchedule(loan) {
                 cuota: i,
                 fecha: paymentDate.toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }),
                 fechaObj: new Date(paymentDate), // Add Date object for calculations
-                monto: interestOnlyWithTax.toFixed(2)
+                monto: interestOnlyPayment.toFixed(2)
             });
         }
 
@@ -2287,11 +2287,11 @@ function calculateSchedule(loan) {
             return { payments, schedule, totalDue: parseFloat(totalDue.toFixed(2)) };
         }
 
-        // Si hay plazo restante, calcular amortizado (Subtotal)
-        const subtotalAmortized = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -remainingTerm));
-        const amortizedWithTax = subtotalAmortized * (1 + IGV_RATE); // Apply IGV
+        // Si hay plazo restante, calcular amortizado
+        // 🚨 IGV REMOVED: Only base amount (capital + interest), no tax
+        const amortizedPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -remainingTerm));
 
-        payments.amortizedPayment = amortizedWithTax;
+        payments.amortizedPayment = amortizedPayment;
 
         for (let i = 1; i <= remainingTerm; i++) {
             const paymentDate = new Date(startDate);
@@ -2300,26 +2300,25 @@ function calculateSchedule(loan) {
                 cuota: loan.meses_solo_interes + i,
                 fecha: paymentDate.toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }),
                 fechaObj: new Date(paymentDate), // Add Date object for calculations
-                monto: amortizedWithTax.toFixed(2)
+                monto: amortizedPayment.toFixed(2)
             });
         }
 
-        const totalDue = (interestOnlyWithTax * loan.meses_solo_interes) + (amortizedWithTax * remainingTerm);
+        const totalDue = (interestOnlyPayment * loan.meses_solo_interes) + (amortizedPayment * remainingTerm);
         return { payments, schedule, totalDue: parseFloat(totalDue.toFixed(2)) };
 
     } else {
         // --- CÁLCULO ESTÁNDAR ---
-        let monthlyPaymentSubtotal = 0;
+        // 🚨 IGV REMOVED: Only base amount (capital + interest), no tax
+        let monthlyPayment = 0;
 
         if (monthlyInterestRate > 0 && loan.plazo > 0) {
-            monthlyPaymentSubtotal = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
+            monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loan.plazo));
         } else if (principal > 0 && loan.plazo > 0) {
-            monthlyPaymentSubtotal = principal / loan.plazo;
+            monthlyPayment = principal / loan.plazo;
         }
 
-        const monthlyPaymentWithTax = monthlyPaymentSubtotal * (1 + IGV_RATE);
-
-        payments.amortizedPayment = monthlyPaymentWithTax;
+        payments.amortizedPayment = monthlyPayment;
 
         for (let i = 1; i <= loan.plazo; i++) {
             const paymentDate = new Date(startDate);
@@ -2328,11 +2327,11 @@ function calculateSchedule(loan) {
                 cuota: i,
                 fecha: paymentDate.toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }),
                 fechaObj: new Date(paymentDate), // Add Date object for calculations
-                monto: monthlyPaymentWithTax.toFixed(2)
+                monto: monthlyPayment.toFixed(2)
             });
         }
 
-        const totalDue = monthlyPaymentWithTax * loan.plazo;
+        const totalDue = monthlyPayment * loan.plazo;
         return { payments, schedule, totalDue: parseFloat(totalDue.toFixed(2)) };
     }
 }

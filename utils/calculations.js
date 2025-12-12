@@ -207,7 +207,7 @@ function calculateDetailedAmortization(loan) {
  * @returns {Number} - Effective annual interest rate (as percentage, e.g., 10.47 for 10.47%)
  */
 function calculateTEA(annualRate) {
-    const tem = (annualRate / 12) / 100; // Convert annual to monthly decimal
+    const tem = (annualRate / 12.5) / 100; // Convert annual to monthly decimal
     return (Math.pow(1 + tem, 12) - 1) * 100;
 }
 

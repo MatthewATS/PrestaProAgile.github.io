@@ -76,7 +76,7 @@ async function createLoan(loanData) {
         const parsedMonto = parseFloat(monto);
 
         const { dni, nombres, apellidos, is_pep = false } = client;
-        const interes = parseFloat(interes_anual) / 12;
+        const interes = parseFloat(interes_anual) / 12.5;
 
         if (parsedMonto < 1 || parsedMonto > 200000 || isNaN(parsedMonto)) {
             throw new Error('El monto del préstamo debe ser un número válido entre S/ 1 y S/ 200,000.');

@@ -1,0 +1,30 @@
+﻿=== TABLA DE AMORTIZACI├ôN ===
+Cr├®dito: S/ 25
+Tasa Anual: 10%
+Plazo: 5 meses
+
+Cuota Mensual Calculada: 5.12
+Tasa Mensual: 0.8000%
+
+Nper | Saldo     | Amortizaci├│n | Inter├®s  | Cuota
+-----|-----------|--------------|----------|----------
+   0 |  S/ 25.00 |      S/ 0.00 |  S/ 0.00 |  S/ 0.00
+   1 |  S/ 20.08 |      S/ 4.92 |  S/ 0.20 |  S/ 5.12
+   2 |  S/ 15.12 |      S/ 4.96 |  S/ 0.16 |  S/ 5.12
+   3 |  S/ 10.12 |      S/ 5.00 |  S/ 0.12 |  S/ 5.12
+   4 |   S/ 5.08 |      S/ 5.04 |  S/ 0.08 |  S/ 5.12
+   5 |   S/ 0.00 |      S/ 5.08 |  S/ 0.04 |  S/ 5.12
+
+=== VALORES ESPERADOS DEL PROFESOR ===
+Nper | Saldo     | Amortizaci├│n | Inter├®s  | Cuota
+-----|-----------|--------------|----------|----------
+   0 | S/ 25.00  |              |          |
+   1 | S/ 20.08  | S/ 4.92      | S/ 0.20  | S/ 5.12
+   2 | S/ 15.12  | S/ 4.96      | S/ 0.16  | S/ 5.12
+   3 | S/ 10.12  | S/ 5.00      | S/ 0.12  | S/ 5.12
+   4 | S/  5.08  | S/ 5.04      | S/ 0.08  | S/ 5.12
+   5 | S/  0.00  | S/ 5.08      | S/ 0.04  | S/ 5.12
+
+TEA: 10.03%
+TCEA: 5.86%
+Total Pagado: 25.60
