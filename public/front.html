@@ -52,10 +52,6 @@
 
             <div class="header-user-controls">
                 <span id="moraAlertIndicator" class="mora-indicator" style="display: none;">⚠️</span>
-                <span id="cashRegisterStatusIndicator" class="cash-status-indicator"
-                    style="display: none; margin-right: 15px; padding: 5px 12px; border-radius: 6px; font-weight: 600; font-size: 13px;">
-                    <span id="cashStatusIcon">❌</span> <span id="cashStatusText">Caja: Cerrada</span>
-                </span>
                 <span id="currentDateTime" class="datetime-display"></span>
                 <span id="headerUserName" class="user-name-display">Admin</span>
 
@@ -305,6 +301,35 @@
                         <h2>📊 Control de Cuadre de Caja</h2>
                     </div>
                     <div class="modal-body">
+                        <!-- Panel de Estado y Control de Caja -->
+                        <div id="cashRegisterStatusPanel" class="cash-status-panel"
+                            style="background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%); border-radius: 12px; padding: 25px; margin-bottom: 30px; color: white; box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.2);">
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                                <div>
+                                    <h3 style="margin: 0; font-size: 18px; font-weight: 700;">Estado de Caja</h3>
+                                    <p id="cashStatusText" style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;">
+                                        Verificando...</p>
+                                </div>
+                                <div id="cashStatusIndicator"
+                                    style="width: 60px; height: 60px; border-radius: 50%; background-color: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 32px;">
+                                    ⏳
+                                </div>
+                            </div>
+
+                            <div id="cashControlButtons"
+                                style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                <button class="button button-success" id="openCashRegisterBtn"
+                                    style="display: none; background-color: rgba(255,255,255,0.95); color: var(--success-color); border: none; font-weight: 600;">
+                                    🔓 Abrir Caja
+                                </button>
+                                <button class="button button-danger" id="closeCashRegisterBtn"
+                                    style="display: none; background-color: rgba(255,255,255,0.95); color: var(--danger-color); border: none; font-weight: 600;">
+                                    🔒 Cerrar Caja
+                                </button>
+                            </div>
+                        </div>
+
                         <div class="cash-balance-card"
                             style="background-color: var(--card-bg); border-radius: 12px; padding: 20px; text-align: center; border: 1px solid var(--border-color); margin-bottom: 30px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
                             <h3
@@ -559,14 +584,6 @@
                     <div id="cash-calculator-section"
                         style="background-color: var(--primary-light); padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none;">
                         <h4 style="margin-top: 0; color: var(--primary-color);">🧮 Calculadora de Vuelto</h4>
-                        <div id="insufficient-funds-warning" class="alert alert-warning"
-                            style="display: none; margin-bottom: 15px;">
-                            <span>⚠️</span>
-                            <div>
-                                <strong>Saldo insuficiente en caja para dar cambio.</strong><br>
-                                <span id="insufficient-funds-details"></span>
-                            </div>
-                        </div>
                         <div class="form-row" style="gap: 10px;">
                             <div class="form-group">
                                 <label for="amount_tendered">Pagó con (S/)</label>
