@@ -2337,6 +2337,98 @@ function calculateSchedule(loan) {
     }
 }
 
+/**
+ * Calculate detailed amortization table with balance, principal, and interest breakdown
+ * @param {Object} loan - Loan object with monto, interes, plazo, fecha
+ * @returns {Array} - Array of amortization rows with { nper, saldo, amortizacion, interes, cuota, fecha }
+ */
+function calculateDetailedAmortization(loan) {
+    const monthlyInterestRate = parseFloat(loan.interes) / 100; // Convert percentage to decimal
+    const principal = parseFloat(loan.monto);
+    const plazo = parseInt(loan.plazo);
+    const startDate = new Date(loan.fecha);
+
+    const amortizationTable = [];
+
+    // Calculate monthly payment using amortization formula
+    let monthlyPayment = 0;
+    if (monthlyInterestRate > 0 && plazo > 0) {
+        monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -plazo));
+    } else if (principal > 0 && plazo > 0) {
+        monthlyPayment = principal / plazo;
+    }
+
+    // Row 0: Initial balance
+    amortizationTable.push({
+        nper: 0,
+        saldo: parseFloat(principal.toFixed(2)),
+        amortizacion: 0,
+        interes: 0,
+        cuota: 0,
+        fecha: null
+    });
+
+    let remainingBalance = principal;
+
+    // Calculate each period
+    for (let i = 1; i <= plazo; i++) {
+        // Interest for this period = remaining balance * monthly rate
+        const interestPayment = remainingBalance * monthlyInterestRate;
+
+        // Principal payment = total payment - interest
+        const principalPayment = monthlyPayment - interestPayment;
+
+        // New balance = previous balance - principal payment
+        remainingBalance = remainingBalance - principalPayment;
+
+        // Handle rounding for last payment
+        if (i === plazo && Math.abs(remainingBalance) < 0.01) {
+            remainingBalance = 0;
+        }
+
+        // Calculate payment date
+        const paymentDate = new Date(startDate);
+        paymentDate.setUTCMonth(paymentDate.getUTCMonth() + i);
+
+        amortizationTable.push({
+            nper: i,
+            saldo: parseFloat(remainingBalance.toFixed(2)),
+            amortizacion: parseFloat(principalPayment.toFixed(2)),
+            interes: parseFloat(interestPayment.toFixed(2)),
+            cuota: parseFloat(monthlyPayment.toFixed(2)),
+            fecha: paymentDate.toLocaleDateString('es-PE', { year: 'numeric', month: '2-digit', day: '2-digit' })
+        });
+    }
+
+    return amortizationTable;
+}
+
+/**
+ * Calculate TEA (Tasa Efectiva Anual) from annual rate
+ * @param {Number} annualRate - Annual interest rate (as percentage)
+ * @returns {Number} - Effective annual interest rate (as percentage)
+ */
+function calculateTEA(annualRate) {
+    const tem = (annualRate / 12) / 100;
+    return (Math.pow(1 + tem, 12) - 1) * 100;
+}
+
+/**
+ * Calculate TCEA (Tasa de Costo Efectivo Anual)
+ * @param {Number} monto - Original loan amount
+ * @param {Number} totalCost - Total cost including all fees and interest
+ * @param {Number} plazoMeses - Loan term in months
+ * @returns {Number} - TCEA as percentage
+ */
+function calculateTCEA(monto, totalCost, plazoMeses) {
+    if (plazoMeses <= 0 || monto <= 0) return 0;
+
+
+    const tcea = (Math.pow(totalCost / monto, 12 / plazoMeses) - 1) * 100;
+
+    return parseFloat(tcea.toFixed(2));
+}
+
 
 function getTodayDateISO() {
     const now = new Date();

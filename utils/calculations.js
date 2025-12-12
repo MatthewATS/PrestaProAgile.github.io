@@ -135,32 +135,105 @@ function calculateMora(loan, totalPaid, payments = []) {
 
 
 /**
- * Calculate TEA (Tasa Efectiva Anual) from TEM
- * Formula: TEA = (1 + TEM)^12 - 1
- * @param {Number} tem - Monthly interest rate (as decimal, e.g., 0.00833 for 0.833%)
- * @returns {Number} - Annual interest rate (as percentage, e.g., 10.00 for 10%)
+ * Calculate detailed amortization table with balance, principal, and interest breakdown
+ * @param {Object} loan - Loan object with monto, interes, plazo, fecha
+ * @returns {Array} - Array of amortization rows with { nper, saldo, amortizacion, interes, cuota, fecha }
  */
-function calculateTEA(tem) {
+function calculateDetailedAmortization(loan) {
+    const monthlyInterestRate = parseFloat(loan.interes) / 100; // Convert percentage to decimal
+    const principal = parseFloat(loan.monto);
+    const plazo = parseInt(loan.plazo);
+    const startDate = new Date(loan.fecha + 'T12:00:00');
+
+    const amortizationTable = [];
+
+    // Calculate monthly payment using amortization formula
+    let monthlyPayment = 0;
+    if (monthlyInterestRate > 0 && plazo > 0) {
+        monthlyPayment = (principal * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -plazo));
+    } else if (principal > 0 && plazo > 0) {
+        monthlyPayment = principal / plazo;
+    }
+
+    // Row 0: Initial balance
+    amortizationTable.push({
+        nper: 0,
+        saldo: parseFloat(principal.toFixed(2)),
+        amortizacion: 0,
+        interes: 0,
+        cuota: 0,
+        fecha: null
+    });
+
+    let remainingBalance = principal;
+
+    // Calculate each period
+    for (let i = 1; i <= plazo; i++) {
+        // Interest for this period = remaining balance * monthly rate
+        const interestPayment = remainingBalance * monthlyInterestRate;
+
+        // Principal payment = total payment - interest
+        const principalPayment = monthlyPayment - interestPayment;
+
+        // New balance = previous balance - principal payment
+        remainingBalance = remainingBalance - principalPayment;
+
+        // Handle rounding for last payment
+        if (i === plazo && Math.abs(remainingBalance) < 0.01) {
+            remainingBalance = 0;
+        }
+
+        // Calculate payment date
+        const paymentDate = new Date(startDate);
+        paymentDate.setUTCMonth(paymentDate.getUTCMonth() + i);
+
+        amortizationTable.push({
+            nper: i,
+            saldo: parseFloat(remainingBalance.toFixed(2)),
+            amortizacion: parseFloat(principalPayment.toFixed(2)),
+            interes: parseFloat(interestPayment.toFixed(2)),
+            cuota: parseFloat(monthlyPayment.toFixed(2)),
+            fecha: paymentDate.toISOString().split('T')[0]
+        });
+    }
+
+    return amortizationTable;
+}
+
+/**
+ * Calculate TEA (Tasa Efectiva Anual) from annual rate
+ * Formula: TEA = (1 + TEM)^12 - 1
+ * @param {Number} annualRate - Annual interest rate (as percentage, e.g., 10 for 10%)
+ * @returns {Number} - Effective annual interest rate (as percentage, e.g., 10.47 for 10.47%)
+ */
+function calculateTEA(annualRate) {
+    const tem = (annualRate / 12) / 100; // Convert annual to monthly decimal
     return (Math.pow(1 + tem, 12) - 1) * 100;
 }
 
 /**
  * Calculate TCEA (Tasa de Costo Efectivo Anual)
- * Formula: TCEA = (Costo Total / Monto Prestado)^(1/n) - 1
+ * Formula: TCEA = ((Total Paid / Monto)^(12/n) - 1) * 100
  * @param {Number} monto - Original loan amount
- * @param {Number} totalCost - Total cost including all fees and interest
+ * @param {Number} totalCost - Total amount paid (all installments)
  * @param {Number} plazoMeses - Loan term in months
  * @returns {Number} - TCEA as percentage
  */
 function calculateTCEA(monto, totalCost, plazoMeses) {
-    const n = plazoMeses / 12; // Convert months to years
-    if (n <= 0 || monto <= 0) return 0;
-    return (Math.pow(totalCost / monto, 1 / n) - 1) * 100;
+    if (plazoMeses <= 0 || monto <= 0) return 0;
+
+    // TCEA = ((Total Paid / Principal)^(12/n) - 1) * 100
+    const tcea = (Math.pow(totalCost / monto, 12 / plazoMeses) - 1) * 100;
+
+
+
+    return parseFloat(tcea.toFixed(2));
 }
 
 module.exports = {
     calculateSchedule,
     calculateMora,
+    calculateDetailedAmortization,
     calculateTEA,
     calculateTCEA
 };
