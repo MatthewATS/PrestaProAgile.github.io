@@ -109,9 +109,10 @@ async function registerCashMovement(date, type, amount, reason) {
 
         if (existing.length === 0) {
             // Create row
-            let insertQuery = `INSERT INTO cash_closures (closure_date, opening_balance, added_money, withdrawn_money) VALUES (?, 0, 0, 0)`;
-            if (type === 'add') insertQuery = `INSERT INTO cash_closures (closure_date, opening_balance, added_money, withdrawn_money) VALUES (?, 0, ?, 0)`;
-            if (type === 'withdraw') insertQuery = `INSERT INTO cash_closures (closure_date, opening_balance, added_money, withdrawn_money) VALUES (?, 0, 0, ?)`;
+            // Create row with all fields initialized
+            let insertQuery = `INSERT INTO cash_closures (closure_date, opening_balance, added_money, withdrawn_money, declared_amount, system_cash_amount, difference) VALUES (?, 0, 0, 0, 0, 0, 0)`;
+            if (type === 'add') insertQuery = `INSERT INTO cash_closures (closure_date, opening_balance, added_money, withdrawn_money, declared_amount, system_cash_amount, difference) VALUES (?, 0, ?, 0, 0, 0, 0)`;
+            if (type === 'withdraw') insertQuery = `INSERT INTO cash_closures (closure_date, opening_balance, added_money, withdrawn_money, declared_amount, system_cash_amount, difference) VALUES (?, 0, 0, ?, 0, 0, 0)`;
 
             await connection.query(insertQuery, [date, amount]);
         } else {
@@ -133,9 +134,168 @@ async function registerCashMovement(date, type, amount, reason) {
     }
 }
 
+/**
+ * Open cash register with initial balance
+ * @param {String} date - Date in YYYY-MM-DD format
+ * @param {Number} openingBalance - Initial balance
+ */
+async function openCashRegister(date, openingBalance) {
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        // Check if there's already an open register
+        const [openRegisters] = await connection.query(
+            'SELECT id FROM cash_closures WHERE is_open = 1 OR is_open = TRUE'
+        );
+
+        if (openRegisters.length > 0) {
+            throw new Error('Ya existe una caja abierta. Debe cerrarla antes de abrir una nueva.');
+        }
+
+        // Check if register exists for this date
+        const [existing] = await connection.query(
+            'SELECT id FROM cash_closures WHERE closure_date = ?',
+            [date]
+        );
+
+        if (existing.length > 0) {
+            // Update existing register
+            await connection.query(
+                `UPDATE cash_closures 
+                 SET is_open = 1, opening_balance = ?, closed_at = NULL, declared_amount = 0, 
+                     system_cash_amount = 0, difference = 0
+                 WHERE closure_date = ?`,
+                [openingBalance, date]
+            );
+        } else {
+            // Create new register - use explicit column names
+            await connection.query(
+                `INSERT INTO cash_closures 
+                 (closure_date, opening_balance, is_open, added_money, withdrawn_money, declared_amount, system_cash_amount, difference) 
+                 VALUES (?, ?, 1, 0, 0, 0, 0, 0)`,
+                [date, openingBalance]
+            );
+        }
+
+        await connection.commit();
+    } catch (err) {
+        await connection.rollback();
+        console.error('Error en openCashRegister:', err);
+        throw err;
+    } finally {
+        connection.release();
+    }
+}
+
+/**
+ * Close cash register
+ * @param {String} date - Date in YYYY-MM-DD format
+ */
+async function closeCashRegister(date) {
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const [existing] = await connection.query(
+            'SELECT id, is_open FROM cash_closures WHERE closure_date = ?',
+            [date]
+        );
+
+        if (existing.length === 0) {
+            throw new Error('No existe un registro de caja para esta fecha.');
+        }
+
+        if (!existing[0].is_open || existing[0].is_open === 0) {
+            throw new Error('La caja ya está cerrada.');
+        }
+
+        await connection.query(
+            'UPDATE cash_closures SET is_open = 0 WHERE closure_date = ?',
+            [date]
+        );
+
+        await connection.commit();
+    } catch (err) {
+        await connection.rollback();
+        console.error('Error en closeCashRegister:', err);
+        throw err;
+    } finally {
+        connection.release();
+    }
+}
+
+/**
+ * Get current cash register status
+ * @returns {Object} - Status object with isOpen and current date
+ */
+async function getCashRegisterStatus() {
+    const [rows] = await pool.query(
+        `SELECT closure_date, is_open, opening_balance, added_money, withdrawn_money 
+         FROM cash_closures 
+         WHERE is_open = 1 OR is_open = TRUE
+         LIMIT 1`
+    );
+
+    if (rows.length > 0) {
+        return {
+            isOpen: true,
+            date: rows[0].closure_date,
+            openingBalance: parseFloat(rows[0].opening_balance || 0),
+            addedMoney: parseFloat(rows[0].added_money || 0),
+            withdrawnMoney: parseFloat(rows[0].withdrawn_money || 0)
+        };
+    }
+
+    return { isOpen: false };
+}
+
+/**
+ * Get available cash balance for a specific date
+ * @param {String} date - Date in YYYY-MM-DD format
+ * @returns {Number} - Available cash balance
+ */
+async function getAvailableCashBalance(date) {
+    const connection = await pool.getConnection();
+    try {
+        // Get cash register data
+        const [cashData] = await connection.query(
+            `SELECT opening_balance, added_money, withdrawn_money 
+             FROM cash_closures 
+             WHERE closure_date = ?`,
+            [date]
+        );
+
+        const openingBalance = cashData.length > 0 ? parseFloat(cashData[0].opening_balance || 0) : 0;
+        const addedMoney = cashData.length > 0 ? parseFloat(cashData[0].added_money || 0) : 0;
+        const withdrawnMoney = cashData.length > 0 ? parseFloat(cashData[0].withdrawn_money || 0) : 0;
+
+        // Get cash payments for the day
+        const [payments] = await connection.query(
+            `SELECT SUM(payment_amount) as total_cash 
+             FROM payments 
+             WHERE DATE(payment_date) = ? AND payment_method = 'Efectivo'`,
+            [date]
+        );
+
+        const cashIncome = payments.length > 0 ? parseFloat(payments[0].total_cash || 0) : 0;
+
+        // Calculate available balance
+        const availableBalance = openingBalance + addedMoney + cashIncome - withdrawnMoney;
+
+        return availableBalance;
+    } finally {
+        connection.release();
+    }
+}
+
 module.exports = {
     createCashClosure,
     getCashClosureHistory,
     getCashClosureByDate,
-    registerCashMovement
+    registerCashMovement,
+    openCashRegister,
+    closeCashRegister,
+    getCashRegisterStatus,
+    getAvailableCashBalance
 };

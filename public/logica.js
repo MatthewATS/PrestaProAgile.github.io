@@ -1,5 +1,8 @@
 // --- VARIABLES GLOBALES Y CONFIGURACIÓN ---
-const API_URL = 'https://prestaproagilegithubio-production-be75.up.railway.app';
+// Detectar automáticamente si estamos en entorno local
+const isLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const API_URL = isLocalhost ? 'http://localhost:3000' : 'https://prestaproagilegithubio-production-be75.up.railway.app';
+window.API_URL = API_URL; // Expose globally for cash-control.js
 
 const VALOR_UIT = 5150;
 // ❌ MODIFICACIÓN: TASA_INTERES_ANUAL ELIMINADA. SE USA EL VALOR DEL INPUT.
@@ -521,12 +524,16 @@ async function filterCashRegister() {
 
     if (checkData.closed) {
         // Cierre YA realizado, pero permitimos actualizar
+        const systemAmount = parseFloat(checkData.data.system_cash_amount) || 0;
+        const declaredAmount = parseFloat(checkData.data.declared_amount) || 0;
+        const difference = parseFloat(checkData.data.difference) || 0;
+
         squareStatusMessage.className = 'alert alert-info';
-        squareStatusMessage.innerHTML = `<span>📝</span> <strong>Cierre ya registrado.</strong> Puedes actualizarlo si registraste más pagos o movimientos.<br>Último cierre: S/ ${checkData.data.system_cash_amount.toFixed(2)} (Sistema) vs S/ ${checkData.data.declared_amount.toFixed(2)} (Declarado). Diferencia: S/ ${checkData.data.difference.toFixed(2)}.`;
+        squareStatusMessage.innerHTML = `<span>📝</span> <strong>Cierre ya registrado.</strong> Puedes actualizarlo si registraste más pagos o movimientos.<br>Último cierre: S/ ${systemAmount.toFixed(2)} (Sistema) vs S/ ${declaredAmount.toFixed(2)} (Declarado). Diferencia: S/ ${difference.toFixed(2)}.`;
         squareStatusMessage.style.display = 'flex';
 
         // Pre-llenar con el valor declarado ANTERIOR
-        declaredAmountInput.value = checkData.data.declared_amount.toFixed(2);
+        declaredAmountInput.value = declaredAmount.toFixed(2);
 
         // Cambiar texto del botón
         saveBtn.textContent = '🔄 Actualizar Cierre';
@@ -1574,6 +1581,32 @@ async function shareMpLink() {
 }
 
 
+// --- VALIDACIÓN DE SALDO EN CAJA ---
+/**
+ * Validate cash balance before processing cash payment
+ */
+async function validateCashBalance(changeAmount) {
+    if (changeAmount <= 0) return true; // No change needed
+
+    try {
+        const date = getTodayDateISO();
+        const response = await fetch(`${API_URL}/api/cash-closures/balance/${date}`);
+        const data = await response.json();
+
+        const availableBalance = data.balance || 0;
+
+        if (changeAmount > availableBalance) {
+            alert(`⚠️ SALDO INSUFICIENTE EN CAJA\n\nCambio requerido: S/ ${changeAmount.toFixed(2)}\nSaldo disponible: S/ ${availableBalance.toFixed(2)}\n\nNo hay suficiente efectivo en caja para dar el cambio.`);
+            return false;
+        }
+
+        return true;
+    } catch (error) {
+        console.error("Error validating cash balance:", error);
+        return true; // Allow payment if validation fails
+    }
+}
+
 async function handlePaymentSubmit(e) {
     e.preventDefault();
 
@@ -1679,6 +1712,19 @@ async function handlePaymentSubmit(e) {
 
     // Si es Efectivo: Registro directo en DB
     if (selectedMethod === 'Efectivo') {
+        // Validar saldo disponible para dar cambio
+        const amountTendered = parseFloat(getDomElement('amount_tendered').value) || 0;
+        if (amountTendered > 0) {
+            const changeNeeded = amountTendered - finalTotalToCollect;
+            if (changeNeeded > 0) {
+                // Validate if there's enough cash in register
+                const hasEnoughCash = await validateCashBalance(changeNeeded);
+                if (!hasEnoughCash) {
+                    return; // Stop payment if insufficient cash
+                }
+            }
+        }
+
         try {
             const response = await fetch(`${API_URL}/api/loans/${loanId}/payments`, {
                 method: 'POST',
